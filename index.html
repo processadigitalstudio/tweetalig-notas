@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tweetalig — Portal de notas</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<main class="pantalla-login">
+  <div class="tarjeta-login">
+    <div class="marca">
+      <span class="marca-eyebrow">Tweetalig Centro de Idiomas</span>
+      <h1>Portal de notas</h1>
+    </div>
+
+    <form id="form-login" class="form-login">
+      <label for="correo">Correo</label>
+      <input type="email" id="correo" name="correo" required autocomplete="username" placeholder="nombre@tweetalig.com">
+
+      <label for="clave">Contraseña</label>
+      <input type="password" id="clave" name="clave" required autocomplete="current-password" placeholder="••••••••">
+
+      <p id="mensaje-error" class="mensaje-error" role="alert"></p>
+
+      <button type="submit" id="boton-entrar" class="boton-primario">Entrar</button>
+    </form>
+  </div>
+</main>
+
+<script type="module" src="js/login.js"></script>
+</body>
+</html>
