@@ -33,7 +33,7 @@
     </p>
 
     <table class="tabla-simple">
-      <thead><tr><th>Nivel</th><th>Grupo</th><th>Profesor</th><th>Día</th><th>Hora</th><th>Sede</th></tr></thead>
+      <thead><tr><th>Nivel</th><th>Grupo</th><th>Profesor</th><th>Día</th><th>Hora</th><th>Sede</th><th>Programa</th></tr></thead>
       <tbody id="lista-clases"></tbody>
     </table>
 
@@ -71,6 +71,9 @@
       <label for="ciudad">Sede</label>
       <select id="ciudad"></select>
 
+      <label for="programa">Programa</label>
+      <select id="programa"></select>
+
       <button id="boton-guardar" class="boton-primario">Crear clase</button>
       <p class="aviso" id="aviso"></p>
     </div>
@@ -82,7 +85,7 @@
   import { db } from "../js/firebase-config.js";
   import { collection, addDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-  await requireAuth(["master", "coordinador", "secretaria"]);
+  const { rol, perfil } = await requireAuth(["master", "coordinador", "secretaria"]);
 
   async function cargarSedes() {
     const select = document.getElementById("ciudad");
@@ -117,6 +120,36 @@
     });
   }
 
+  // Coordinadora/secretaria con sede asignada solo ven los programas que
+  // aplican a su sede (o los que están marcados para "todas las sedes").
+  async function cargarProgramas() {
+    const select = document.getElementById("programa");
+    select.innerHTML = "";
+    const snap = await getDocs(collection(db, "programas"));
+    if (snap.empty) {
+      select.innerHTML = "<option value=''>Crea un programa primero</option>";
+      return;
+    }
+
+    const miSede = perfil?.ciudadId;
+    const restringirPorSede = (rol === "coordinador" || rol === "secretaria") && miSede;
+
+    let alguno = false;
+    snap.forEach((d) => {
+      const p = d.data();
+      const sedesPermitidas = p.sedes || [];
+      const aplicaAquiTambien = sedesPermitidas.length === 0 || !restringirPorSede || sedesPermitidas.includes(miSede);
+      if (!aplicaAquiTambien) return;
+      alguno = true;
+      const opt = document.createElement("option");
+      opt.value = d.id;
+      opt.textContent = p.nombre;
+      select.appendChild(opt);
+    });
+
+    if (!alguno) select.innerHTML = "<option value=''>No hay programas disponibles para tu sede</option>";
+  }
+
   async function cargarClases() {
     const cuerpo = document.getElementById("lista-clases");
     cuerpo.innerHTML = "";
@@ -124,7 +157,7 @@
     snap.forEach((d) => {
       const c = d.data();
       const fila = document.createElement("tr");
-      fila.innerHTML = `<td>${c.nivel}</td><td>${c.grupo}</td><td>${c.docenteNombre || "—"}</td><td>${c.dia}</td><td>${c.hora}</td><td>${c.ciudadNombre || "—"}</td>`;
+      fila.innerHTML = `<td>${c.nivel}</td><td>${c.grupo}</td><td>${c.docenteNombre || "—"}</td><td>${c.dia}</td><td>${c.hora}</td><td>${c.ciudadNombre || "—"}</td><td>${c.programaNombre || "—"}</td>`;
       cuerpo.appendChild(fila);
     });
   }
@@ -136,11 +169,12 @@
     const hora = document.getElementById("hora").value;
     const selectDocente = document.getElementById("docente");
     const selectCiudad = document.getElementById("ciudad");
+    const selectPrograma = document.getElementById("programa");
     const aviso = document.getElementById("aviso");
 
-    if (!nivel || !grupo || !hora || !selectDocente.value || !selectCiudad.value) {
+    if (!nivel || !grupo || !hora || !selectDocente.value || !selectCiudad.value || !selectPrograma.value) {
       aviso.style.color = "var(--error)";
-      aviso.textContent = "Completa todos los campos.";
+      aviso.textContent = "Completa todos los campos, incluyendo el programa.";
       return;
     }
 
@@ -150,6 +184,8 @@
       docenteNombre: selectDocente.options[selectDocente.selectedIndex].textContent,
       ciudadId: selectCiudad.value,
       ciudadNombre: selectCiudad.options[selectCiudad.selectedIndex].textContent,
+      programaId: selectPrograma.value,
+      programaNombre: selectPrograma.options[selectPrograma.selectedIndex].textContent,
       estudiantes: []
     });
 
@@ -163,6 +199,7 @@
 
   await cargarSedes();
   await cargarProfesores();
+  await cargarProgramas();
   await cargarClases();
 </script>
 </body>

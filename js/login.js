@@ -1,19 +1,40 @@
 // login.js — inicio de sesión con Google Workspace de Tweetalig
-// Usa signInWithRedirect en vez de signInWithPopup: más confiable, porque
-// no depende de que el navegador permita ventanas emergentes ni cookies
-// de terceros (eso era lo que cerraba la ventana de golpe).
+// Usamos signInWithPopup: ahora que el sitio vive en el dominio de Firebase
+// (web.app), esto evita la protección de Chrome contra "bounce tracking"
+// que bloqueaba el signInWithRedirect (borraba el estado a mitad de camino
+// en la cadena de redirecciones Google → firebaseapp.com → nuestro sitio).
 
 import { auth, db, proveedorGoogle, DOMINIO_PERMITIDO } from "./firebase-config.js";
-import {
-  signInWithRedirect,
-  getRedirectResult,
-  onAuthStateChanged,
-  signOut
-} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+import { signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const mensajeError = document.getElementById("mensaje-error");
 const botonGoogle = document.getElementById("boton-google");
+
+onAuthStateChanged(auth, (usuario) => {
+  if (usuario) {
+    validarYRedirigir(usuario);
+  }
+});
+
+botonGoogle.addEventListener("click", async () => {
+  mensajeError.textContent = "";
+  botonGoogle.disabled = true;
+  botonGoogle.textContent = "Conectando...";
+
+  try {
+    const resultado = await signInWithPopup(auth, proveedorGoogle);
+    await validarYRedirigir(resultado.user);
+  } catch (error) {
+    console.error("Error de login:", error);
+    if (error.code === "auth/popup-closed-by-user") {
+      restaurarBoton();
+      return;
+    }
+    mensajeError.textContent = `No se pudo iniciar sesión (${error.code || error.message}).`;
+    restaurarBoton();
+  }
+});
 
 async function validarYRedirigir(usuario) {
   const correo = usuario.email.toLowerCase();
@@ -36,33 +57,6 @@ async function validarYRedirigir(usuario) {
 
   window.location.href = "pages/dashboard.html";
 }
-
-// Al cargar la página: revisa si venimos de vuelta de un redirect a Google
-getRedirectResult(auth)
-  .then((resultado) => {
-    if (resultado && resultado.user) {
-      validarYRedirigir(resultado.user);
-    }
-  })
-  .catch((error) => {
-    console.error("Error de login:", error);
-    mensajeError.textContent = `No se pudo iniciar sesión (${error.code || error.message}). Intenta de nuevo.`;
-    restaurarBoton();
-  });
-
-// Si ya hay sesión activa (por persistencia), saltar directo al dashboard
-onAuthStateChanged(auth, (usuario) => {
-  if (usuario) {
-    validarYRedirigir(usuario);
-  }
-});
-
-botonGoogle.addEventListener("click", () => {
-  mensajeError.textContent = "";
-  botonGoogle.disabled = true;
-  botonGoogle.textContent = "Conectando...";
-  signInWithRedirect(auth, proveedorGoogle);
-});
 
 function restaurarBoton() {
   botonGoogle.disabled = false;

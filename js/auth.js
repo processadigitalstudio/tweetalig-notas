@@ -26,6 +26,52 @@ function idPerfil(correo) {
   return correo.trim().toLowerCase();
 }
 
+// Qué ve cada rol en el menú lateral — se pinta automáticamente en CUALQUIER
+// página que llame a requireAuth(), no hace falta repetirlo en cada archivo.
+const MENU_POR_ROL = {
+  master: [
+    ["Sedes", "ciudades.html"],
+    ["Profesores", "profesores.html"],
+    ["Clases", "clases.html"],
+    ["Estudiantes", "estudiantes.html"],
+    ["Programas", "programas.html"],
+    ["Accesos y usuarios", "usuarios.html"]
+  ],
+  coordinador: [
+    ["Profesores", "profesores.html"],
+    ["Clases", "clases.html"],
+    ["Estudiantes", "estudiantes.html"]
+  ],
+  secretaria: [
+    ["Profesores", "profesores.html"],
+    ["Clases", "clases.html"],
+    ["Estudiantes", "estudiantes.html"]
+  ],
+  profesor: [
+    ["Notas", "notas.html"],
+    ["Asistencia", "asistencia.html"]
+  ]
+};
+
+function pintarMenu(rol) {
+  const menuEl = document.getElementById("menu-rol");
+  if (!menuEl) return;
+  menuEl.innerHTML = "";
+
+  // Enlace fijo al inicio, para que siempre haya forma de "volver"
+  const inicio = document.createElement("a");
+  inicio.href = "dashboard.html";
+  inicio.textContent = "Inicio";
+  menuEl.appendChild(inicio);
+
+  (MENU_POR_ROL[rol] || []).forEach(([etiqueta, href]) => {
+    const a = document.createElement("a");
+    a.href = href;
+    a.textContent = etiqueta;
+    menuEl.appendChild(a);
+  });
+}
+
 // Llamar al inicio de cualquier página protegida.
 // rolesPermitidos: array opcional, ej. ["master"] para páginas solo-MASTER.
 async function requireAuth(rolesPermitidos = null) {
@@ -53,6 +99,16 @@ async function requireAuth(rolesPermitidos = null) {
     alert("No tienes permiso para ver esta página.");
     window.location.href = "dashboard.html";
     return null;
+  }
+
+  pintarMenu(rol);
+
+  const linkSalir = document.getElementById("link-salir");
+  if (linkSalir) {
+    linkSalir.addEventListener("click", (e) => {
+      e.preventDefault();
+      cerrarSesion();
+    });
   }
 
   return { usuario, rol, perfil };
