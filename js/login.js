@@ -44,8 +44,9 @@ getRedirectResult(auth)
       validarYRedirigir(resultado.user);
     }
   })
-  .catch(() => {
-    mensajeError.textContent = "No se pudo completar el inicio de sesión. Intenta de nuevo.";
+  .catch((error) => {
+    console.error("Error de login:", error);
+    mensajeError.textContent = `No se pudo iniciar sesión (${error.code || error.message}). Intenta de nuevo.`;
     restaurarBoton();
   });
 
