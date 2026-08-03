@@ -6,10 +6,12 @@
   --linea: #DDE3E1;
   --superficie: #FFFFFF;
   --fondo: #F5F4EF;
-  --azul-profundo: #1B3A4B;
-  --azul-profundo-hover: #142B37;
-  --oro: #C08A3E;
-  --oro-suave: #F3E6D2;
+  --azul-profundo: #2B3A4A;
+  --azul-profundo-hover: #1F2C38;
+  --verde-marca: #3CB99A;
+  --verde-marca-suave: #E4F5F0;
+  --oro: #F0B429;
+  --oro-suave: #FCF0D6;
   --error: #B23A34;
   --error-fondo: #FBEAE9;
   --radio: 10px;
@@ -46,9 +48,15 @@ body {
 }
 
 .marca {
-  margin-bottom: 28px;
-  border-bottom: 2px solid var(--oro);
+  margin-bottom: 24px;
   padding-bottom: 20px;
+  border-bottom: 2px solid var(--verde-marca);
+  text-align: center;
+}
+
+.marca img {
+  height: 44px;
+  margin-bottom: 14px;
 }
 
 .marca-eyebrow {
@@ -56,7 +64,7 @@ body {
   font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--oro);
+  color: var(--verde-marca);
   font-weight: 600;
   margin-bottom: 6px;
 }
@@ -141,8 +149,16 @@ body {
   flex-shrink: 0;
 }
 
-.app-nav .marca-eyebrow { color: var(--oro-suave); }
+.app-nav .marca-eyebrow { color: var(--verde-marca); }
 .app-nav h1 { font-size: 18px; color: #fff; margin: 0 0 24px; }
+.logo-nav-wrap {
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: inline-block;
+  margin-bottom: 20px;
+}
+.logo-nav-wrap img { height: 24px; display: block; }
 
 .app-nav a {
   display: block;
