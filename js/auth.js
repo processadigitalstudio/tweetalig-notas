@@ -9,7 +9,7 @@
 // su correo y rol, y en cuanto esa persona entre por primera vez con Google,
 // el sistema ya sabe quién es.
 
-import { auth, db } from "./firebase-config.js";
+import { auth, db } from "./firebase-config.js?v=3";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 

@@ -55,8 +55,8 @@
 </div>
 
 <script type="module">
-  import { requireAuth } from "../js/auth.js";
-  import { db, DOMINIO_PERMITIDO } from "../js/firebase-config.js";
+  import { requireAuth } from "../js/auth.js?v=3";
+  import { db, DOMINIO_PERMITIDO } from "../js/firebase-config.js?v=3";
   import { collection, doc, setDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
   const { rol } = await requireAuth(["master", "coordinador", "secretaria"]);

@@ -4,7 +4,7 @@
 // que bloqueaba el signInWithRedirect (borraba el estado a mitad de camino
 // en la cadena de redirecciones Google → firebaseapp.com → nuestro sitio).
 
-import { auth, db, proveedorGoogle, DOMINIO_PERMITIDO } from "./firebase-config.js";
+import { auth, db, proveedorGoogle, DOMINIO_PERMITIDO } from "./firebase-config.js?v=3";
 import { signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 

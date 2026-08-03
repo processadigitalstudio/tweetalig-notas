@@ -24,7 +24,7 @@
 </div>
 
 <script type="module">
-  import { requireAuth, cerrarSesion } from "../js/auth.js";
+  import { requireAuth } from "../js/auth.js?v=3";
 
   const NOMBRE_ROL = {
     master: "Master",
@@ -33,51 +33,11 @@
     profesor: "Profesor"
   };
 
-  // Qué ve cada rol en el menú lateral. Todavía son enlaces placeholder —
-  // los vamos activando a medida que construimos cada página.
-  const MENU_POR_ROL = {
-    master: [
-      ["Sedes", "ciudades.html"],
-      ["Profesores", "profesores.html"],
-      ["Clases", "clases.html"],
-      ["Estudiantes", "estudiantes.html"],
-      ["Configuración de notas", "configuracion-notas.html"],
-      ["Accesos y usuarios", "usuarios.html"]
-    ],
-    coordinador: [
-      ["Profesores", "profesores.html"],
-      ["Clases", "clases.html"],
-      ["Estudiantes", "estudiantes.html"]
-    ],
-    secretaria: [
-      ["Profesores", "profesores.html"],
-      ["Clases", "clases.html"],
-      ["Estudiantes", "estudiantes.html"]
-    ],
-    profesor: [
-      ["Notas", "notas.html"],
-      ["Asistencia", "asistencia.html"]
-    ]
-  };
-
   const { usuario, rol, perfil } = await requireAuth();
 
   document.getElementById("etiqueta-rol").textContent = NOMBRE_ROL[rol] || rol;
   document.getElementById("titulo-bienvenida").textContent = `Hola, ${perfil.nombre || usuario.email}`;
   document.getElementById("texto-bienvenida").textContent = "Elige una opción del menú para comenzar.";
-
-  const menuEl = document.getElementById("menu-rol");
-  (MENU_POR_ROL[rol] || []).forEach(([etiqueta, href]) => {
-    const a = document.createElement("a");
-    a.href = href;
-    a.textContent = etiqueta;
-    menuEl.appendChild(a);
-  });
-
-  document.getElementById("link-salir").addEventListener("click", (e) => {
-    e.preventDefault();
-    cerrarSesion();
-  });
 </script>
 </body>
 </html>
