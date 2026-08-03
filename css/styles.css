@@ -69,34 +69,32 @@ body {
   color: var(--azul-profundo);
 }
 
-.form-login {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.form-login label {
-  font-size: 13px;
-  font-weight: 500;
+.texto-login {
+  font-size: 14px;
   color: var(--tinta-suave);
-  margin-top: 12px;
+  margin: 0 0 18px;
 }
 
-.form-login input {
+.boton-google {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   font-family: var(--fuente-cuerpo);
   font-size: 15px;
-  padding: 11px 13px;
+  font-weight: 500;
+  color: var(--tinta);
+  background: var(--superficie);
   border: 1px solid var(--linea);
   border-radius: 8px;
-  background: var(--fondo);
-  color: var(--tinta);
+  padding: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.form-login input:focus {
-  outline: 2px solid var(--azul-profundo);
-  outline-offset: 1px;
-  background: var(--superficie);
-}
+.boton-google:hover { border-color: var(--azul-profundo); background: var(--fondo); }
+.boton-google:disabled { opacity: 0.6; cursor: default; }
 
 .mensaje-error {
   min-height: 18px;

@@ -1,59 +1,55 @@
-// login.js — lógica de la pantalla de inicio de sesión (index.html)
+// login.js — inicio de sesión con Google Workspace de Tweetalig
 
-import { auth, db } from "./firebase-config.js";
-import { signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+import { auth, db, proveedorGoogle, DOMINIO_PERMITIDO } from "./firebase-config.js";
+import { signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-const form = document.getElementById("form-login");
 const mensajeError = document.getElementById("mensaje-error");
-const botonEntrar = document.getElementById("boton-entrar");
+const botonGoogle = document.getElementById("boton-google");
 
-// Si ya hay una sesión activa (por persistencia), no mostrar el login:
-// mandar directo al dashboard.
 onAuthStateChanged(auth, async (usuario) => {
   if (usuario) {
     window.location.href = "pages/dashboard.html";
   }
 });
 
-form.addEventListener("submit", async (evento) => {
-  evento.preventDefault();
+botonGoogle.addEventListener("click", async () => {
   mensajeError.textContent = "";
-  botonEntrar.disabled = true;
-  botonEntrar.textContent = "Entrando...";
-
-  const correo = document.getElementById("correo").value.trim();
-  const clave = document.getElementById("clave").value;
+  botonGoogle.disabled = true;
+  botonGoogle.textContent = "Conectando...";
 
   try {
-    const credencial = await signInWithEmailAndPassword(auth, correo, clave);
+    const resultado = await signInWithPopup(auth, proveedorGoogle);
+    const correo = resultado.user.email.toLowerCase();
 
-    // Verificar que el usuario tenga un rol asignado en Firestore
-    const refPerfil = doc(db, "usuarios", credencial.user.uid);
-    const snap = await getDoc(refPerfil);
+    // Doble verificación: aunque el selector ya filtra por dominio, alguien
+    // podría forzar otra cuenta. Si no es del dominio correcto, se rechaza.
+    if (!correo.endsWith("@" + DOMINIO_PERMITIDO)) {
+      await signOut(auth);
+      mensajeError.textContent = `Debes iniciar sesión con una cuenta @${DOMINIO_PERMITIDO}.`;
+      restaurarBoton();
+      return;
+    }
+
+    const snap = await getDoc(doc(db, "usuarios", correo));
 
     if (!snap.exists()) {
-      mensajeError.textContent = "Tu cuenta no tiene un rol asignado todavía. Contacta a la administración.";
-      botonEntrar.disabled = false;
-      botonEntrar.textContent = "Entrar";
+      await signOut(auth);
+      mensajeError.textContent = "Tu cuenta no está registrada en el sistema. Contacta a la administración de Tweetalig.";
+      restaurarBoton();
       return;
     }
 
     window.location.href = "pages/dashboard.html";
   } catch (error) {
-    mensajeError.textContent = traducirError(error.code);
-    botonEntrar.disabled = false;
-    botonEntrar.textContent = "Entrar";
+    if (error.code !== "auth/popup-closed-by-user") {
+      mensajeError.textContent = "No se pudo iniciar sesión. Intenta de nuevo.";
+    }
+    restaurarBoton();
   }
 });
 
-function traducirError(codigo) {
-  const mensajes = {
-    "auth/invalid-email": "El correo no tiene un formato válido.",
-    "auth/user-not-found": "No existe una cuenta con ese correo.",
-    "auth/wrong-password": "La contraseña es incorrecta.",
-    "auth/invalid-credential": "Correo o contraseña incorrectos.",
-    "auth/too-many-requests": "Demasiados intentos. Espera unos minutos e intenta de nuevo."
-  };
-  return mensajes[codigo] || "No se pudo iniciar sesión. Intenta de nuevo.";
+function restaurarBoton() {
+  botonGoogle.disabled = false;
+  botonGoogle.textContent = "Entrar con Google";
 }

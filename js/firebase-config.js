@@ -6,9 +6,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/fireba
 import {
   getAuth,
   setPersistence,
-  browserLocalPersistence
+  browserLocalPersistence,
+  GoogleAuthProvider
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+// Dominio de Workspace de Tweetalig — solo estas cuentas pueden iniciar sesión
+const DOMINIO_PERMITIDO = "tweetalig.edu.co";
 
 const firebaseConfig = {
   apiKey: "AIzaSyB5yLwagFdTjzYb2XdtSjohwGP8izenBDo",
@@ -28,4 +32,10 @@ const db = getFirestore(app);
 // duradera, para que al refrescar la página NO te saque del login.
 setPersistence(auth, browserLocalPersistence);
 
-export { app, auth, db };
+const proveedorGoogle = new GoogleAuthProvider();
+// Restringe el selector de cuentas de Google a las del dominio de Tweetalig.
+// Esto solo agiliza la experiencia — la validación real ocurre en login.js
+// (rechaza cualquier correo que no termine en el dominio permitido).
+proveedorGoogle.setCustomParameters({ hd: DOMINIO_PERMITIDO });
+
+export { app, auth, db, proveedorGoogle, DOMINIO_PERMITIDO };
