@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tweetalig — Programas</title>
+<link rel="stylesheet" href="../css/styles.css?v=2">
+<style>
+  .tabla-simple { width: 100%; border-collapse: collapse; max-width: 780px; margin-bottom: 28px; }
+  .tabla-simple th, .tabla-simple td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--linea); font-size: 14px; }
+  .tabla-simple th { color: var(--tinta-suave); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .tabla-simple button { background: none; border: none; color: var(--azul-profundo); font-size: 13px; cursor: pointer; text-decoration: underline; padding: 0; margin-right: 10px; }
+
+  .form-tarjeta { background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio); padding: 24px 28px; max-width: 640px; }
+  .form-tarjeta label { display: block; font-size: 13px; font-weight: 500; color: var(--tinta-suave); margin-top: 12px; margin-bottom: 4px; }
+  .form-tarjeta input[type="text"], .form-tarjeta input[type="number"] {
+    font-family: var(--fuente-cuerpo); font-size: 14px; padding: 9px 11px;
+    border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta);
+  }
+  .campo-nombre-programa { width: 100%; }
+
+  .sedes-check { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; }
+  .sedes-check label { display: flex; align-items: center; gap: 6px; font-weight: 400; margin-top: 0; font-size: 14px; color: var(--tinta); }
+
+  .bloque-corte {
+    background: var(--fondo); border: 1px solid var(--linea); border-radius: 8px;
+    padding: 16px 18px; margin-top: 16px;
+  }
+  .encabezado-corte { display: flex; gap: 10px; align-items: flex-end; }
+  .encabezado-corte .campo-nombre-corte { flex: 1; }
+  .encabezado-corte .campo-peso-corte { width: 100px; }
+  .boton-quitar { background: none; border: none; color: var(--error); cursor: pointer; font-size: 13px; padding: 9px 4px; }
+
+  .fila-nota { display: grid; grid-template-columns: 1fr 90px 32px; gap: 10px; margin-top: 8px; align-items: center; }
+  .fila-nota input { width: 100%; }
+
+  .boton-secundario {
+    font-family: var(--fuente-cuerpo); font-size: 13px; font-weight: 500;
+    color: var(--azul-profundo); background: none; border: 1px dashed var(--azul-profundo);
+    border-radius: 6px; padding: 7px 12px; cursor: pointer; margin-top: 10px;
+  }
+  .suma-porcentaje { font-size: 12px; margin-top: 8px; font-weight: 500; }
+  .suma-ok { color: #2E6E4E; }
+  .suma-mal { color: var(--error); }
+
+  .boton-primario { max-width: 220px; margin-top: 20px; }
+  .aviso { font-size: 13px; margin-top: 10px; min-height: 18px; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <nav class="app-nav">
+    <div class="logo-nav-wrap"><img src="../assets/logo-tweetalig.png" alt="Tweetalig"></div>
+    <h1>Portal de notas</h1>
+    <div id="menu-rol"></div>
+    <a href="#" id="link-salir">Cerrar sesión</a>
+  </nav>
+  <main class="app-contenido">
+    <span class="etiqueta-rol">Programas</span>
+    <h2>Programas y esquema de notas</h2>
+    <p style="color: var(--tinta-suave); max-width: 600px; margin-top: -8px;">
+      Cada programa (Regular, Distancia, etc.) define su propio número de cortes,
+      el peso de cada uno, y las notas dentro de cada corte. Las clases se
+      asignan a un programa para saber cómo calcular su nota final.
+    </p>
+
+    <table class="tabla-simple">
+      <thead><tr><th>Programa</th><th>Cortes</th><th>Sedes</th><th></th></tr></thead>
+      <tbody id="lista-programas"></tbody>
+    </table>
+
+    <div class="form-tarjeta">
+      <h3 id="titulo-form" style="font-family: var(--fuente-display); color: var(--azul-profundo); margin: 0;">Crear programa</h3>
+
+      <label for="nombre-programa">Nombre del programa</label>
+      <input type="text" id="nombre-programa" class="campo-nombre-programa" placeholder="Regular, Distancia, Intensivo...">
+
+      <label>Sedes donde aplica</label>
+      <div class="sedes-check" id="sedes-check"></div>
+      <p class="ts" style="font-size: 12px; color: var(--tinta-suave); margin-top: 4px;">Si no marcas ninguna, aplica para todas las sedes.</p>
+
+      <div id="lista-cortes"></div>
+      <button type="button" class="boton-secundario" id="boton-agregar-corte">+ Agregar corte</button>
+      <p class="suma-porcentaje" id="suma-cortes"></p>
+
+      <button id="boton-guardar" class="boton-primario">Guardar programa</button>
+      <button id="boton-cancelar-edicion" class="boton-secundario" style="display:none;">Cancelar edición</button>
+      <p class="aviso" id="aviso"></p>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+  import { requireAuth } from "../js/auth.js?v=3";
+  import { db } from "../js/firebase-config.js?v=3";
+  import { collection, doc, setDoc, addDoc, getDocs, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+  await requireAuth(["master"]);
+
+  let sedes = [];
+  let idEnEdicion = null;
+  let contadorCorte = 0;
+
+  async function cargarSedes() {
+    const snap = await getDocs(collection(db, "ciudades"));
+    sedes = snap.docs.map((d) => ({ id: d.id, nombre: d.data().nombre }));
+    const cont = document.getElementById("sedes-check");
+    cont.innerHTML = "";
+    sedes.forEach((s) => {
+      const lbl = document.createElement("label");
+      lbl.innerHTML = `<input type="checkbox" value="${s.id}"> ${s.nombre}`;
+      cont.appendChild(lbl);
+    });
+  }
+
+  function crearBloqueCorte(datosCorte = null) {
+    contadorCorte++;
+    const idCorte = `corte-${contadorCorte}`;
+    const div = document.createElement("div");
+    div.className = "bloque-corte";
+    div.dataset.idCorte = idCorte;
+    div.innerHTML = `
+      <div class="encabezado-corte">
+        <div class="campo-nombre-corte">
+          <label>Nombre del corte</label>
+          <input type="text" class="input-nombre-corte" value="${datosCorte?.nombre || ""}" placeholder="Corte 1">
+        </div>
+        <div class="campo-peso-corte">
+          <label>Peso (%)</label>
+          <input type="number" class="input-peso-corte" value="${datosCorte?.peso ?? ""}" min="0" max="100">
+        </div>
+        <button type="button" class="boton-quitar boton-quitar-corte">Quitar corte</button>
+      </div>
+      <div class="lista-notas"></div>
+      <button type="button" class="boton-secundario boton-agregar-nota">+ Agregar nota</button>
+      <p class="suma-porcentaje suma-notas-corte"></p>
+    `;
+
+    const listaNotas = div.querySelector(".lista-notas");
+
+    function agregarFilaNota(datosNota = null) {
+      const fila = document.createElement("div");
+      fila.className = "fila-nota";
+      fila.innerHTML = `
+        <input type="text" class="input-nombre-nota" value="${datosNota?.nombre || ""}" placeholder="Nombre de la nota">
+        <input type="number" class="input-porcentaje-nota" value="${datosNota?.porcentaje ?? ""}" min="0" max="100">
+        <button type="button" class="boton-quitar boton-quitar-nota" title="Quitar nota">✕</button>
+      `;
+      fila.querySelector(".boton-quitar-nota").addEventListener("click", () => {
+        fila.remove();
+        actualizarSumaNotas(div);
+      });
+      listaNotas.appendChild(fila);
+    }
+
+    if (datosCorte?.notas?.length) {
+      datosCorte.notas.forEach((n) => agregarFilaNota(n));
+    } else {
+      agregarFilaNota();
+    }
+
+    div.querySelector(".boton-agregar-nota").addEventListener("click", () => {
+      agregarFilaNota();
+      actualizarSumaNotas(div);
+    });
+    div.querySelector(".boton-quitar-corte").addEventListener("click", () => {
+      div.remove();
+      actualizarSumaCortes();
+    });
+    div.querySelectorAll("input").forEach((inp) => {
+      inp.addEventListener("input", () => {
+        actualizarSumaNotas(div);
+        actualizarSumaCortes();
+      });
+    });
+
+    document.getElementById("lista-cortes").appendChild(div);
+    actualizarSumaNotas(div);
+  }
+
+  function actualizarSumaNotas(bloqueCorte) {
+    const porcentajes = [...bloqueCorte.querySelectorAll(".input-porcentaje-nota")].map((i) => Number(i.value) || 0);
+    const suma = porcentajes.reduce((a, b) => a + b, 0);
+    const el = bloqueCorte.querySelector(".suma-notas-corte");
+    el.textContent = `Notas: ${suma}%` + (suma === 100 ? " ✓" : " (debe sumar 100%)");
+    el.className = "suma-porcentaje suma-notas-corte " + (suma === 100 ? "suma-ok" : "suma-mal");
+  }
+
+  function actualizarSumaCortes() {
+    const pesos = [...document.querySelectorAll(".input-peso-corte")].map((i) => Number(i.value) || 0);
+    const suma = pesos.reduce((a, b) => a + b, 0);
+    const el = document.getElementById("suma-cortes");
+    el.textContent = `Suma de pesos de los cortes: ${suma}%` + (suma === 100 ? " — correcto" : " — debe sumar 100%");
+    el.className = "suma-porcentaje " + (suma === 100 ? "suma-ok" : "suma-mal");
+    return suma === 100;
+  }
+
+  document.getElementById("boton-agregar-corte").addEventListener("click", () => {
+    crearBloqueCorte();
+    actualizarSumaCortes();
+  });
+
+  function leerFormulario() {
+    const nombre = document.getElementById("nombre-programa").value.trim();
+    const sedesMarcadas = [...document.querySelectorAll("#sedes-check input:checked")].map((i) => i.value);
+
+    const cortes = [...document.querySelectorAll(".bloque-corte")].map((bloque) => {
+      const notas = [...bloque.querySelectorAll(".fila-nota")].map((fila) => ({
+        nombre: fila.querySelector(".input-nombre-nota").value.trim(),
+        porcentaje: Number(fila.querySelector(".input-porcentaje-nota").value) || 0
+      }));
+      return {
+        nombre: bloque.querySelector(".input-nombre-corte").value.trim(),
+        peso: Number(bloque.querySelector(".input-peso-corte").value) || 0,
+        notas
+      };
+    });
+
+    return { nombre, sedes: sedesMarcadas, cortes };
+  }
+
+  function validar(datos) {
+    if (!datos.nombre) return "Escribe el nombre del programa.";
+    if (datos.cortes.length === 0) return "Agrega al menos un corte.";
+    const sumaCortes = datos.cortes.reduce((a, c) => a + c.peso, 0);
+    if (sumaCortes !== 100) return "Los pesos de los cortes deben sumar 100%.";
+    for (const corte of datos.cortes) {
+      if (!corte.nombre) return "Todos los cortes deben tener nombre.";
+      if (corte.notas.length === 0) return `El corte "${corte.nombre}" necesita al menos una nota.`;
+      const sumaNotas = corte.notas.reduce((a, n) => a + n.porcentaje, 0);
+      if (sumaNotas !== 100) return `Las notas del corte "${corte.nombre}" deben sumar 100%.`;
+      for (const n of corte.notas) {
+        if (!n.nombre) return `Falta el nombre de una nota en "${corte.nombre}".`;
+      }
+    }
+    return null;
+  }
+
+  async function cargarPrograma(id) {
+    const snap = await getDoc(doc(db, "programas", id));
+    if (!snap.exists()) return;
+    const datos = snap.data();
+
+    idEnEdicion = id;
+    document.getElementById("titulo-form").textContent = `Editando: ${datos.nombre}`;
+    document.getElementById("nombre-programa").value = datos.nombre;
+    document.getElementById("boton-cancelar-edicion").style.display = "inline-block";
+
+    document.querySelectorAll("#sedes-check input").forEach((i) => {
+      i.checked = (datos.sedes || []).includes(i.value);
+    });
+
+    document.getElementById("lista-cortes").innerHTML = "";
+    (datos.cortes || []).forEach((c) => crearBloqueCorte(c));
+    actualizarSumaCortes();
+    window.scrollTo({ top: document.querySelector(".form-tarjeta").offsetTop - 20, behavior: "smooth" });
+  }
+
+  function resetearFormulario() {
+    idEnEdicion = null;
+    document.getElementById("titulo-form").textContent = "Crear programa";
+    document.getElementById("nombre-programa").value = "";
+    document.querySelectorAll("#sedes-check input").forEach((i) => (i.checked = false));
+    document.getElementById("lista-cortes").innerHTML = "";
+    document.getElementById("boton-cancelar-edicion").style.display = "none";
+    crearBloqueCorte();
+    actualizarSumaCortes();
+  }
+
+  document.getElementById("boton-cancelar-edicion").addEventListener("click", resetearFormulario);
+
+  async function cargarLista() {
+    const cuerpo = document.getElementById("lista-programas");
+    cuerpo.innerHTML = "";
+    const snap = await getDocs(collection(db, "programas"));
+    snap.forEach((d) => {
+      const p = d.data();
+      const nombresSedes = (p.sedes || []).length
+        ? sedes.filter((s) => p.sedes.includes(s.id)).map((s) => s.nombre).join(", ")
+        : "Todas";
+      const fila = document.createElement("tr");
+      fila.innerHTML = `
+        <td>${p.nombre}</td>
+        <td>${(p.cortes || []).length}</td>
+        <td>${nombresSedes}</td>
+        <td>
+          <button class="btn-editar" data-id="${d.id}">Editar</button>
+          <button class="btn-borrar" data-id="${d.id}">Borrar</button>
+        </td>`;
+      cuerpo.appendChild(fila);
+    });
+
+    cuerpo.querySelectorAll(".btn-editar").forEach((b) => b.addEventListener("click", () => cargarPrograma(b.dataset.id)));
+    cuerpo.querySelectorAll(".btn-borrar").forEach((b) => b.addEventListener("click", async () => {
+      if (confirm("¿Borrar este programa? Las clases que lo usen quedarán sin esquema de notas asignado.")) {
+        await deleteDoc(doc(db, "programas", b.dataset.id));
+        cargarLista();
+      }
+    }));
+  }
+
+  document.getElementById("boton-guardar").addEventListener("click", async () => {
+    const datos = leerFormulario();
+    const error = validar(datos);
+    const aviso = document.getElementById("aviso");
+
+    if (error) {
+      aviso.style.color = "var(--error)";
+      aviso.textContent = error;
+      return;
+    }
+
+    if (idEnEdicion) {
+      await setDoc(doc(db, "programas", idEnEdicion), datos);
+    } else {
+      await addDoc(collection(db, "programas"), datos);
+    }
+
+    aviso.style.color = "#2E6E4E";
+    aviso.textContent = `Programa "${datos.nombre}" guardado.`;
+    resetearFormulario();
+    cargarLista();
+  });
+
+  await cargarSedes();
+  crearBloqueCorte();
+  await cargarLista();
+</script>
+</body>
+</html>

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tweetalig — Sedes</title>
+<link rel="stylesheet" href="../css/styles.css?v=2">
+<style>
+  .tabla-simple { width: 100%; border-collapse: collapse; max-width: 780px; margin-bottom: 28px; }
+  .tabla-simple th, .tabla-simple td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--linea); font-size: 14px; }
+  .tabla-simple th { color: var(--tinta-suave); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .form-tarjeta { background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio); padding: 24px 28px; max-width: 480px; }
+  .form-tarjeta label { display: block; font-size: 13px; font-weight: 500; color: var(--tinta-suave); margin-top: 12px; margin-bottom: 4px; }
+  .form-tarjeta input { width: 100%; font-family: var(--fuente-cuerpo); font-size: 14px; padding: 9px 11px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
+  .form-tarjeta input:focus { outline: 2px solid var(--azul-profundo); background: var(--superficie); }
+  .boton-primario { max-width: 200px; margin-top: 18px; }
+  .aviso { font-size: 13px; margin-top: 10px; min-height: 18px; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <nav class="app-nav">
+    <div class="logo-nav-wrap"><img src="../assets/logo-tweetalig.png" alt="Tweetalig"></div>
+    <h1>Portal de notas</h1>
+    <div id="menu-rol"></div>
+    <a href="#" id="link-salir">Cerrar sesión</a>
+  </nav>
+  <main class="app-contenido">
+    <span class="etiqueta-rol">Sedes</span>
+    <h2>Sedes y coordinación</h2>
+    <p style="color: var(--tinta-suave); max-width: 560px; margin-top: -8px;">
+      Cada sede tiene su propio correo de coordinación. Las alertas de inasistencia se envían desde el script de Apps Script que registres aquí para cada una.
+    </p>
+
+    <table class="tabla-simple">
+      <thead><tr><th>Sede</th><th>Correo de coordinación</th><th>URL de alertas</th></tr></thead>
+      <tbody id="lista-ciudades"></tbody>
+    </table>
+
+    <div class="form-tarjeta">
+      <h3 style="font-family: var(--fuente-display); color: var(--azul-profundo); margin: 0;">Agregar / actualizar sede</h3>
+      <label for="nombre">Sede</label>
+      <input type="text" id="nombre" list="lista-sedes-sugeridas" placeholder="Cartagena">
+      <datalist id="lista-sedes-sugeridas">
+        <option value="Cartagena"></option>
+        <option value="Sincelejo"></option>
+        <option value="Barranquilla"></option>
+      </datalist>
+
+      <label for="correo">Correo de coordinación</label>
+      <input type="email" id="correo" placeholder="coordinacion.cartagena@tweetalig.edu.co">
+
+      <label for="url">URL de alertas (Apps Script Web App)</label>
+      <input type="url" id="url" placeholder="https://script.google.com/macros/s/.../exec">
+
+      <button id="boton-guardar" class="boton-primario">Guardar sede</button>
+      <p class="aviso" id="aviso"></p>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+  import { requireAuth } from "../js/auth.js?v=3";
+  import { db } from "../js/firebase-config.js?v=3";
+  import { collection, doc, setDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+  await requireAuth(["master"]);
+
+  const refColeccion = collection(db, "ciudades");
+
+  async function idParaNombre(nombre) {
+    return nombre.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  }
+
+  async function cargarLista() {
+    const cuerpo = document.getElementById("lista-ciudades");
+    cuerpo.innerHTML = "";
+    const snap = await getDocs(refColeccion);
+    snap.forEach((d) => {
+      const c = d.data();
+      const fila = document.createElement("tr");
+      fila.innerHTML = `<td>${c.nombre}</td><td>${c.correoCoordinacion || "—"}</td><td>${c.urlAlertas ? "Configurada" : "—"}</td>`;
+      cuerpo.appendChild(fila);
+    });
+  }
+
+  document.getElementById("boton-guardar").addEventListener("click", async () => {
+    const nombre = document.getElementById("nombre").value.trim();
+    const correo = document.getElementById("correo").value.trim().toLowerCase();
+    const url = document.getElementById("url").value.trim();
+    const aviso = document.getElementById("aviso");
+
+    if (!nombre) {
+      aviso.style.color = "var(--error)";
+      aviso.textContent = "Escribe el nombre de la sede.";
+      return;
+    }
+
+    const id = await idParaNombre(nombre);
+    await setDoc(doc(db, "ciudades", id), { nombre, correoCoordinacion: correo, urlAlertas: url });
+
+    aviso.style.color = "#2E6E4E";
+    aviso.textContent = `Sede "${nombre}" guardada.`;
+    document.getElementById("nombre").value = "";
+    document.getElementById("correo").value = "";
+    document.getElementById("url").value = "";
+    cargarLista();
+  });
+
+  cargarLista();
+</script>
+</body>
+</html>
