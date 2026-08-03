@@ -1,52 +1,66 @@
 // login.js — inicio de sesión con Google Workspace de Tweetalig
+// Usa signInWithRedirect en vez de signInWithPopup: más confiable, porque
+// no depende de que el navegador permita ventanas emergentes ni cookies
+// de terceros (eso era lo que cerraba la ventana de golpe).
 
 import { auth, db, proveedorGoogle, DOMINIO_PERMITIDO } from "./firebase-config.js";
-import { signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+import {
+  signInWithRedirect,
+  getRedirectResult,
+  onAuthStateChanged,
+  signOut
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const mensajeError = document.getElementById("mensaje-error");
 const botonGoogle = document.getElementById("boton-google");
 
-onAuthStateChanged(auth, async (usuario) => {
+async function validarYRedirigir(usuario) {
+  const correo = usuario.email.toLowerCase();
+
+  if (!correo.endsWith("@" + DOMINIO_PERMITIDO)) {
+    await signOut(auth);
+    mensajeError.textContent = `Debes iniciar sesión con una cuenta @${DOMINIO_PERMITIDO}.`;
+    restaurarBoton();
+    return;
+  }
+
+  const snap = await getDoc(doc(db, "usuarios", correo));
+
+  if (!snap.exists()) {
+    await signOut(auth);
+    mensajeError.textContent = "Tu cuenta no está registrada en el sistema. Contacta a la administración de Tweetalig.";
+    restaurarBoton();
+    return;
+  }
+
+  window.location.href = "pages/dashboard.html";
+}
+
+// Al cargar la página: revisa si venimos de vuelta de un redirect a Google
+getRedirectResult(auth)
+  .then((resultado) => {
+    if (resultado && resultado.user) {
+      validarYRedirigir(resultado.user);
+    }
+  })
+  .catch(() => {
+    mensajeError.textContent = "No se pudo completar el inicio de sesión. Intenta de nuevo.";
+    restaurarBoton();
+  });
+
+// Si ya hay sesión activa (por persistencia), saltar directo al dashboard
+onAuthStateChanged(auth, (usuario) => {
   if (usuario) {
-    window.location.href = "pages/dashboard.html";
+    validarYRedirigir(usuario);
   }
 });
 
-botonGoogle.addEventListener("click", async () => {
+botonGoogle.addEventListener("click", () => {
   mensajeError.textContent = "";
   botonGoogle.disabled = true;
   botonGoogle.textContent = "Conectando...";
-
-  try {
-    const resultado = await signInWithPopup(auth, proveedorGoogle);
-    const correo = resultado.user.email.toLowerCase();
-
-    // Doble verificación: aunque el selector ya filtra por dominio, alguien
-    // podría forzar otra cuenta. Si no es del dominio correcto, se rechaza.
-    if (!correo.endsWith("@" + DOMINIO_PERMITIDO)) {
-      await signOut(auth);
-      mensajeError.textContent = `Debes iniciar sesión con una cuenta @${DOMINIO_PERMITIDO}.`;
-      restaurarBoton();
-      return;
-    }
-
-    const snap = await getDoc(doc(db, "usuarios", correo));
-
-    if (!snap.exists()) {
-      await signOut(auth);
-      mensajeError.textContent = "Tu cuenta no está registrada en el sistema. Contacta a la administración de Tweetalig.";
-      restaurarBoton();
-      return;
-    }
-
-    window.location.href = "pages/dashboard.html";
-  } catch (error) {
-    if (error.code !== "auth/popup-closed-by-user") {
-      mensajeError.textContent = "No se pudo iniciar sesión. Intenta de nuevo.";
-    }
-    restaurarBoton();
-  }
+  signInWithRedirect(auth, proveedorGoogle);
 });
 
 function restaurarBoton() {

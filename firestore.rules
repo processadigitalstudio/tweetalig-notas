@@ -1,0 +1,94 @@
+rules_version = '2';
+
+// Estas reglas son la seguridad REAL del sistema — no la URL, no el código.
+// Aunque alguien esté logueado, esto decide qué puede ver o tocar según su rol.
+// Pégalas en Firebase Console → Firestore Database → Reglas.
+//
+// Los perfiles de "usuarios" usan el CORREO (en minúsculas) como ID del
+// documento, porque el login es con Google Workspace y la cuenta de auth
+// se crea sola en el primer inicio de sesión.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function estaLogueado() {
+      return request.auth != null;
+    }
+
+    function miCorreo() {
+      return request.auth.token.email.lower();
+    }
+
+    function miPerfil() {
+      return get(/databases/$(database)/documents/usuarios/$(miCorreo())).data;
+    }
+
+    function miRol() {
+      return miPerfil().rol;
+    }
+
+    function esMaster() {
+      return estaLogueado() && miRol() == 'master';
+    }
+
+    function esCoordinadorOMaster() {
+      return estaLogueado() && (miRol() == 'coordinador' || miRol() == 'master');
+    }
+
+    function esGestor() {
+      // master, coordinador o secretaria: pueden crear profesores, clases y estudiantes
+      return estaLogueado() && miRol() in ['master', 'coordinador', 'secretaria'];
+    }
+
+    // Colección "usuarios": doc ID = correo en minúsculas.
+    // Guarda el rol de cada persona (master, coordinador, secretaria, profesor).
+    // Solo el MASTER puede crear/editar/borrar cuentas y roles.
+    // Cada quien puede leer su propio documento (para saber su rol al entrar).
+    match /usuarios/{correoId} {
+      allow read: if estaLogueado() && (miCorreo() == correoId || esMaster());
+      allow write: if esMaster();
+    }
+
+    // Colección "ciudades": las 3 sedes (Cartagena, Sincelejo, Barranquilla)
+    // con su correo de coordinación y su URL de alertas (Apps Script).
+    match /ciudades/{id} {
+      allow read: if estaLogueado();
+      allow write: if esMaster();
+    }
+
+    // Colección "clases": nivel + grupo + docente + horario + ciudad
+    match /clases/{claseId} {
+      allow read: if estaLogueado();
+      allow write: if esGestor();
+
+      // Sesiones de asistencia dentro de cada clase
+      match /sesiones/{fecha} {
+        allow read: if estaLogueado();
+        // El profesor solo registra asistencia de SU propia clase.
+        allow write: if estaLogueado() && (
+          esGestor() ||
+          (miRol() == 'profesor' && get(/databases/$(database)/documents/clases/$(claseId)).data.docenteCorreo == miCorreo())
+        );
+      }
+    }
+
+    // Colección "estudiantes": nombre, apellido, cédula, correo, clase asignada
+    match /estudiantes/{id} {
+      allow read: if estaLogueado();
+      allow write: if esGestor();
+    }
+
+    // Colección "configuracion": el esquema fijo de porcentajes de notas
+    // Solo el MASTER lo define/cambia. Todos lo leen.
+    match /configuracion/{id} {
+      allow read: if estaLogueado();
+      allow write: if esMaster();
+    }
+
+    // Colección "notas": cada documento = las notas de un estudiante en una clase
+    match /notas/{id} {
+      allow read: if estaLogueado();
+      allow write: if estaLogueado() && miRol() in ['master', 'coordinador', 'secretaria', 'profesor'];
+    }
+  }
+}
