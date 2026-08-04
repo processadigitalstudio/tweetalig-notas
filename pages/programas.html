@@ -72,8 +72,13 @@
     <div class="form-tarjeta">
       <h3 id="titulo-form" style="font-family: var(--fuente-display); color: var(--azul-profundo); margin: 0;">Crear programa</h3>
 
-      <label for="nombre-programa">Nombre del programa</label>
-      <input type="text" id="nombre-programa" class="campo-nombre-programa" placeholder="Regular, Distancia, Intensivo...">
+      <label for="nombre-programa">Tipo de programa</label>
+      <select id="nombre-programa" class="campo-nombre-programa">
+        <option value="Presencial Semestral">Presencial Semestral</option>
+        <option value="Distancia Semestral">Distancia Semestral</option>
+        <option value="Intensivo Presencial">Intensivo Presencial</option>
+        <option value="Intensivo Distancia">Intensivo Distancia</option>
+      </select>
 
       <label>Sedes donde aplica</label>
       <div class="sedes-check" id="sedes-check"></div>

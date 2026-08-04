@@ -78,6 +78,13 @@ service cloud.firestore {
       allow write: if esGestor();
     }
 
+    // Colección "programas": Regular, Distancia, etc. — cada uno define
+    // sus propios cortes, pesos y notas. Solo el MASTER los crea/edita.
+    match /programas/{id} {
+      allow read: if estaLogueado();
+      allow write: if esMaster();
+    }
+
     // Colección "configuracion": el esquema fijo de porcentajes de notas
     // Solo el MASTER lo define/cambia. Todos lo leen.
     match /configuracion/{id} {
@@ -85,10 +92,23 @@ service cloud.firestore {
       allow write: if esMaster();
     }
 
-    // Colección "notas": cada documento = las notas de un estudiante en una clase
+    // Colección "notas": cada documento debe incluir "claseId" indicando a
+    // qué clase pertenece. Un profesor SOLO puede leer/escribir notas de
+    // las clases que él mismo dicta — no las de otros profesores.
     match /notas/{id} {
-      allow read: if estaLogueado();
-      allow write: if estaLogueado() && miRol() in ['master', 'coordinador', 'secretaria', 'profesor'];
+      allow read: if estaLogueado() && (
+        esGestor() ||
+        (miRol() == 'profesor' && get(/databases/$(database)/documents/clases/$(resource.data.claseId)).data.docenteCorreo == miCorreo())
+      );
+      allow create: if estaLogueado() && (
+        esGestor() ||
+        (miRol() == 'profesor' && get(/databases/$(database)/documents/clases/$(request.resource.data.claseId)).data.docenteCorreo == miCorreo())
+      );
+      allow update: if estaLogueado() && (
+        esGestor() ||
+        (miRol() == 'profesor' && get(/databases/$(database)/documents/clases/$(resource.data.claseId)).data.docenteCorreo == miCorreo())
+      );
+      allow delete: if esGestor();
     }
   }
 }

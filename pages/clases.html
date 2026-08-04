@@ -13,6 +13,7 @@
   .form-tarjeta label { display: block; font-size: 13px; font-weight: 500; color: var(--tinta-suave); margin-top: 12px; margin-bottom: 4px; }
   .form-tarjeta input, .form-tarjeta select { width: 100%; font-family: var(--fuente-cuerpo); font-size: 14px; padding: 9px 11px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
   .fila-doble { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .fila-triple { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 6px; }
   .boton-primario { max-width: 200px; margin-top: 18px; }
   .aviso { font-size: 13px; margin-top: 10px; min-height: 18px; }
 </style>
@@ -33,12 +34,31 @@
     </p>
 
     <table class="tabla-simple">
-      <thead><tr><th>Nivel</th><th>Grupo</th><th>Profesor</th><th>Día</th><th>Hora</th><th>Sede</th><th>Programa</th></tr></thead>
+      <thead><tr><th>Período</th><th>Nivel</th><th>Grupo</th><th>Profesor</th><th>Día</th><th>Hora</th><th>Sede</th><th>Programa</th></tr></thead>
       <tbody id="lista-clases"></tbody>
     </table>
 
     <div class="form-tarjeta">
       <h3 style="font-family: var(--fuente-display); color: var(--azul-profundo); margin: 0;">Crear clase</h3>
+
+      <label style="margin-top: 0;">Período académico</label>
+      <div class="fila-triple">
+        <div>
+          <label for="anio" style="font-size:12px;">Año</label>
+          <select id="anio"></select>
+        </div>
+        <div>
+          <label for="periodo" style="font-size:12px;">Periodo</label>
+          <select id="periodo">
+            <option value="1">1</option>
+            <option value="2">2</option>
+          </select>
+        </div>
+        <div>
+          <label for="ciclo" style="font-size:12px;">Ciclo</label>
+          <select id="ciclo"></select>
+        </div>
+      </div>
 
       <div class="fila-doble">
         <div>
@@ -150,19 +170,46 @@
     if (!alguno) select.innerHTML = "<option value=''>No hay programas disponibles para tu sede</option>";
   }
 
+  function cargarPeriodoAcademico() {
+    const anioActual = new Date().getFullYear();
+    const anioBase = Math.min(2026, anioActual);
+    const selectAnio = document.getElementById("anio");
+    selectAnio.innerHTML = "";
+    for (let a = anioBase; a <= anioBase + 9; a++) {
+      const opt = document.createElement("option");
+      opt.value = a;
+      opt.textContent = a;
+      if (a === anioActual) opt.selected = true;
+      selectAnio.appendChild(opt);
+    }
+
+    const selectCiclo = document.getElementById("ciclo");
+    selectCiclo.innerHTML = "";
+    for (let c = 1; c <= 15; c++) {
+      const opt = document.createElement("option");
+      opt.value = c;
+      opt.textContent = c;
+      selectCiclo.appendChild(opt);
+    }
+  }
+
   async function cargarClases() {
     const cuerpo = document.getElementById("lista-clases");
     cuerpo.innerHTML = "";
     const snap = await getDocs(collection(db, "clases"));
     snap.forEach((d) => {
       const c = d.data();
+      const periodoTexto = `${c.anio || "—"}-${c.periodo || "—"} / Ciclo ${c.ciclo || "—"}`;
       const fila = document.createElement("tr");
-      fila.innerHTML = `<td>${c.nivel}</td><td>${c.grupo}</td><td>${c.docenteNombre || "—"}</td><td>${c.dia}</td><td>${c.hora}</td><td>${c.ciudadNombre || "—"}</td><td>${c.programaNombre || "—"}</td>`;
+      fila.innerHTML = `<td>${periodoTexto}</td><td>${c.nivel}</td><td>${c.grupo}</td><td>${c.docenteNombre || "—"}</td><td>${c.dia}</td><td>${c.hora}</td><td>${c.ciudadNombre || "—"}</td><td>${c.programaNombre || "—"}</td>`;
       cuerpo.appendChild(fila);
     });
   }
 
   document.getElementById("boton-guardar").addEventListener("click", async () => {
+    const anio = Number(document.getElementById("anio").value);
+    const periodo = Number(document.getElementById("periodo").value);
+    const ciclo = Number(document.getElementById("ciclo").value);
     const nivel = document.getElementById("nivel").value.trim();
     const grupo = document.getElementById("grupo").value.trim();
     const dia = document.getElementById("dia").value;
@@ -179,6 +226,7 @@
     }
 
     await addDoc(collection(db, "clases"), {
+      anio, periodo, ciclo,
       nivel, grupo, dia, hora,
       docenteCorreo: selectDocente.value,
       docenteNombre: selectDocente.options[selectDocente.selectedIndex].textContent,
@@ -190,13 +238,14 @@
     });
 
     aviso.style.color = "#2E6E4E";
-    aviso.textContent = `Clase ${nivel} - ${grupo} creada.`;
+    aviso.textContent = `Clase ${nivel} - ${grupo} creada (${anio}-${periodo}, ciclo ${ciclo}).`;
     document.getElementById("nivel").value = "";
     document.getElementById("grupo").value = "";
     document.getElementById("hora").value = "";
     cargarClases();
   });
 
+  cargarPeriodoAcademico();
   await cargarSedes();
   await cargarProfesores();
   await cargarProgramas();
