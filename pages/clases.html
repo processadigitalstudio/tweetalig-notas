@@ -78,11 +78,21 @@
       <div id="lista-horarios"></div>
       <button type="button" class="boton-secundario" id="boton-agregar-horario">+ Agregar horario</button>
 
-      <label for="ciudad">Sede</label>
-      <select id="ciudad"></select>
-
       <label for="programa">Programa</label>
       <select id="programa"></select>
+
+      <div id="bloque-sede-unica">
+        <label for="ciudad">Sede</label>
+        <select id="ciudad"></select>
+      </div>
+
+      <div id="bloque-sedes-distancia" style="display:none;">
+        <label>Sedes de esta clase a distancia</label>
+        <p style="font-size:12px; color: var(--tinta-suave); margin: -2px 0 8px;">
+          Marca todas las sedes que comparten esta clase. Si el grupo se llama distinto en alguna sede, escríbelo — si lo dejas vacío, usa el grupo de arriba.
+        </p>
+        <div id="sedes-distancia-check"></div>
+      </div>
 
       <button id="boton-guardar" class="boton-primario">Crear clase</button>
       <p class="aviso" id="aviso"></p>
@@ -104,20 +114,51 @@
 
   const { usuario, rol, perfil } = await requireAuth(["master", "admin", "coordinador", "secretaria"]);
 
+  let listaProfesores = [];
+
+  let sedes = [];
+
   async function cargarSedes() {
     const select = document.getElementById("ciudad");
     select.innerHTML = "";
     const snap = await getDocs(collection(db, "ciudades"));
-    if (snap.empty) {
+    sedes = snap.docs.map((d) => ({ id: d.id, nombre: d.data().nombre }));
+    if (sedes.length === 0) {
       select.innerHTML = "<option value=''>Registra una sede primero</option>";
       return;
     }
-    snap.forEach((d) => {
+    sedes.forEach((s) => {
       const opt = document.createElement("option");
-      opt.value = d.id;
-      opt.textContent = d.data().nombre;
+      opt.value = s.id;
+      opt.textContent = s.nombre;
       select.appendChild(opt);
     });
+
+    const cont = document.getElementById("sedes-distancia-check");
+    cont.innerHTML = "";
+    sedes.forEach((s) => {
+      const fila = document.createElement("div");
+      fila.style.cssText = "display:flex; align-items:center; gap:8px; margin-bottom:6px;";
+      fila.innerHTML = `
+        <label style="display:flex; align-items:center; gap:6px; font-weight:400; margin:0; width:130px;">
+          <input type="checkbox" class="chk-sede-distancia" value="${s.id}" data-nombre="${s.nombre}"> ${s.nombre}
+        </label>
+        <input type="text" class="grupo-sede-distancia" data-sede="${s.id}" placeholder="Grupo en ${s.nombre} (opcional)" style="flex:1; font-size:13px; padding:7px 9px;">
+      `;
+      cont.appendChild(fila);
+    });
+  }
+
+  function esDistancia(textoOpcion) {
+    return (textoOpcion || "").toLowerCase().includes("distancia");
+  }
+
+  function actualizarModoSede() {
+    const selectPrograma = document.getElementById("programa");
+    const textoPrograma = selectPrograma.options[selectPrograma.selectedIndex]?.textContent || "";
+    const modoDistancia = esDistancia(textoPrograma);
+    document.getElementById("bloque-sede-unica").style.display = modoDistancia ? "none" : "block";
+    document.getElementById("bloque-sedes-distancia").style.display = modoDistancia ? "block" : "none";
   }
 
   function agregarFilaHorario(datos = null) {
@@ -247,7 +288,7 @@
           <span class="nombre-docente" data-id="${d.id}">${c.docenteNombre || "—"}</span>
           <select class="select-reasignar" data-id="${d.id}" style="display:none; font-size:12px; padding:3px;">${opcionesProfesor}</select>
         </td>
-        <td>${textoHorarios(c.horarios)}</td><td>${c.ciudadNombre || "—"}</td><td>${c.programaNombre || "—"}</td>
+        <td>${textoHorarios(c.horarios)}</td><td>${c.ciudadNombre || "—"}${c.grupoDistanciaId ? ' <span style="font-size:11px; color: var(--verde-marca); font-weight:600;">(distancia)</span>' : ""}</td><td>${c.programaNombre || "—"}</td>
         <td><button class="btn-reasignar" data-id="${d.id}">Cambiar profesor</button></td>
       `;
       cuerpo.appendChild(fila);
@@ -280,37 +321,80 @@
     const grupo = document.getElementById("grupo").value.trim();
     const horarios = leerHorarios();
     const selectDocente = document.getElementById("docente");
-    const selectCiudad = document.getElementById("ciudad");
     const selectPrograma = document.getElementById("programa");
     const aviso = document.getElementById("aviso");
 
     const horariosCompletos = horarios.filter((h) => h.horaInicio && h.horaFin);
+    const modoDistancia = esDistancia(selectPrograma.options[selectPrograma.selectedIndex]?.textContent);
 
-    if (!nivel || !grupo || !selectDocente.value || !selectCiudad.value || !selectPrograma.value || horariosCompletos.length === 0) {
+    if (!nivel || !grupo || !selectDocente.value || !selectPrograma.value || horariosCompletos.length === 0) {
       aviso.style.color = "var(--error)";
       aviso.textContent = "Completa todos los campos, incluyendo al menos un horario con hora de inicio y fin.";
       return;
     }
 
-    await addDoc(collection(db, "clases"), {
-      anio, periodo, ciclo,
-      nivel, grupo,
+    const datosBase = {
+      anio, periodo, ciclo, nivel,
       horarios: horariosCompletos,
       docenteCorreo: selectDocente.value,
       docenteNombre: selectDocente.options[selectDocente.selectedIndex].textContent,
-      ciudadId: selectCiudad.value,
-      ciudadNombre: selectCiudad.options[selectCiudad.selectedIndex].textContent,
       programaId: selectPrograma.value,
       programaNombre: selectPrograma.options[selectPrograma.selectedIndex].textContent,
       estudiantes: []
-    });
-    await registrarLog(usuario, rol, "Creó clase", `${nivel} - ${grupo} (${anio}-${periodo}, ciclo ${ciclo})`);
+    };
 
-    aviso.style.color = "#2E6E4E";
-    aviso.textContent = `Clase ${nivel} - ${grupo} creada (${anio}-${periodo}, ciclo ${ciclo}).`;
+    if (modoDistancia) {
+      const sedesMarcadas = [...document.querySelectorAll(".chk-sede-distancia:checked")];
+      if (sedesMarcadas.length === 0) {
+        aviso.style.color = "var(--error)";
+        aviso.textContent = "Marca al menos una sede para esta clase a distancia.";
+        return;
+      }
+
+      const grupoDistanciaId = `${nivel}-${grupo}-${anio}${periodo}${ciclo}-${Date.now()}`;
+      let creadas = 0;
+
+      for (const chk of sedesMarcadas) {
+        const ciudadId = chk.value;
+        const ciudadNombre = chk.dataset.nombre;
+        const inputGrupo = document.querySelector(`.grupo-sede-distancia[data-sede="${ciudadId}"]`);
+        const grupoSede = (inputGrupo?.value || "").trim() || grupo;
+
+        await addDoc(collection(db, "clases"), {
+          ...datosBase,
+          grupo: grupoSede,
+          ciudadId, ciudadNombre,
+          grupoDistanciaId
+        });
+        creadas++;
+      }
+
+      await registrarLog(usuario, rol, "Creó clase a distancia (multi-sede)", `${nivel} - ${grupo} en ${creadas} sede(s) (${anio}-${periodo}, ciclo ${ciclo})`);
+      aviso.style.color = "#2E6E4E";
+      aviso.textContent = `Clase a distancia creada en ${creadas} sede(s) — quedan ligadas como la misma clase real.`;
+    } else {
+      const selectCiudad = document.getElementById("ciudad");
+      if (!selectCiudad.value) {
+        aviso.style.color = "var(--error)";
+        aviso.textContent = "Selecciona la sede.";
+        return;
+      }
+      await addDoc(collection(db, "clases"), {
+        ...datosBase,
+        grupo,
+        ciudadId: selectCiudad.value,
+        ciudadNombre: selectCiudad.options[selectCiudad.selectedIndex].textContent
+      });
+      await registrarLog(usuario, rol, "Creó clase", `${nivel} - ${grupo} (${anio}-${periodo}, ciclo ${ciclo})`);
+      aviso.style.color = "#2E6E4E";
+      aviso.textContent = `Clase ${nivel} - ${grupo} creada (${anio}-${periodo}, ciclo ${ciclo}).`;
+    }
+
     document.getElementById("nivel").value = "";
     document.getElementById("grupo").value = "";
     document.getElementById("lista-horarios").innerHTML = "";
+    document.querySelectorAll(".chk-sede-distancia").forEach((c) => (c.checked = false));
+    document.querySelectorAll(".grupo-sede-distancia").forEach((i) => (i.value = ""));
     agregarFilaHorario();
     cargarClases();
   });
@@ -320,10 +404,12 @@
   document.getElementById("anio").addEventListener("change", cargarProgramas);
   document.getElementById("periodo").addEventListener("change", cargarProgramas);
   document.getElementById("ciclo").addEventListener("change", cargarProgramas);
+  document.getElementById("programa").addEventListener("change", actualizarModoSede);
 
   await cargarSedes();
   await cargarProfesores();
   await cargarProgramas();
+  actualizarModoSede();
   await cargarClases();
 </script>
 </body>
