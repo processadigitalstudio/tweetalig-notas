@@ -33,6 +33,47 @@
   </nav>
   <main class="app-contenido">
     <span class="etiqueta-rol">Carga masiva</span>
+    <h2>Cargar clases por CSV</h2>
+
+    <div class="tarjeta">
+      <h3>1. Elige lo que van a compartir todas estas clases</h3>
+      <p>Período, programa y horario(s) — se aplican igual a todas las filas del CSV.</p>
+
+      <label style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin:10px 0 4px;">Período académico</label>
+      <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; max-width: 420px;">
+        <select id="cl-anio"></select>
+        <select id="cl-periodo"><option value="1">1</option><option value="2">2</option></select>
+        <select id="cl-ciclo"></select>
+      </div>
+
+      <label style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin:14px 0 4px;">Programa</label>
+      <select id="cl-programa" style="max-width: 420px;"></select>
+
+      <label style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin:14px 0 4px;">Horarios</label>
+      <div id="cl-lista-horarios" style="max-width: 420px;"></div>
+      <button type="button" class="boton-secundario" id="cl-boton-agregar-horario">+ Agregar horario</button>
+    </div>
+
+    <div class="tarjeta">
+      <h3>2. Descarga la plantilla</h3>
+      <p>
+        Columnas requeridas, en este orden exacto: <code>ciudad, nivel, grupo, correoProfesor</code><br><br>
+        <b>Importante:</b> el correo del profesor debe ser uno ya registrado en "Profesores". Si el programa elegido arriba es de tipo Distancia, usa la misma ciudad/nivel/grupo en filas distintas por cada sede — cada fila crea una clase.
+      </p>
+      <button class="boton-secundario" id="cl-boton-plantilla">Descargar plantilla de ejemplo (.csv)</button>
+    </div>
+
+    <div class="tarjeta">
+      <h3>3. Sube tu archivo</h3>
+      <input type="file" id="cl-archivo-csv" accept=".csv">
+      <br>
+      <button class="boton-secundario" id="cl-boton-procesar" disabled>Procesar archivo</button>
+      <div class="resultado" id="cl-resultado"></div>
+    </div>
+
+    <hr style="max-width:720px; margin: 32px 0; border: none; border-top: 1px solid var(--linea);">
+
+    <span class="etiqueta-rol">Carga masiva</span>
     <h2>Cargar estudiantes por CSV</h2>
 
     <div class="tarjeta">
@@ -69,9 +110,210 @@
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { db } from "../js/firebase-config.js?v=3";
-  import { collection, getDocs, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { collection, getDocs, doc, setDoc, addDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
   const { usuario, rol } = await requireAuth(["master", "admin", "coordinador", "secretaria"]);
+
+  // ============ CARGA MASIVA DE CLASES ============
+
+  function cargarSelectoresPeriodoClases() {
+    const anioActual = new Date().getFullYear();
+    const anioBase = Math.min(2026, anioActual);
+    const selectAnio = document.getElementById("cl-anio");
+    selectAnio.innerHTML = "";
+    for (let a = anioBase; a <= anioBase + 9; a++) {
+      const opt = document.createElement("option");
+      opt.value = a; opt.textContent = a;
+      if (a === anioActual) opt.selected = true;
+      selectAnio.appendChild(opt);
+    }
+    const selectCiclo = document.getElementById("cl-ciclo");
+    selectCiclo.innerHTML = "";
+    for (let c = 1; c <= 15; c++) {
+      const opt = document.createElement("option");
+      opt.value = c; opt.textContent = c;
+      selectCiclo.appendChild(opt);
+    }
+  }
+
+  async function cargarProgramasClases() {
+    const select = document.getElementById("cl-programa");
+    select.innerHTML = "";
+    const anio = Number(document.getElementById("cl-anio").value);
+    const periodo = Number(document.getElementById("cl-periodo").value);
+    const ciclo = Number(document.getElementById("cl-ciclo").value);
+
+    const snap = await getDocs(collection(db, "programas"));
+    const coincidentes = snap.docs.filter((d) => {
+      const p = d.data();
+      return p.anio === anio && p.periodo === periodo && p.ciclo === ciclo;
+    });
+
+    if (coincidentes.length === 0) {
+      select.innerHTML = "<option value=''>No hay programas para ese período — créalo primero</option>";
+      return;
+    }
+    coincidentes.forEach((d) => {
+      const opt = document.createElement("option");
+      opt.value = d.id;
+      opt.textContent = d.data().nombre;
+      select.appendChild(opt);
+    });
+  }
+
+  function clAgregarFilaHorario() {
+    const cont = document.getElementById("cl-lista-horarios");
+    const fila = document.createElement("div");
+    fila.className = "fila-horario-masiva";
+    fila.style.cssText = "display:grid; grid-template-columns: 1fr 1fr 1fr 30px; gap:8px; margin-bottom:8px;";
+    fila.innerHTML = `
+      <select class="cl-input-dia" style="font-size:13px; padding:7px;">
+        <option>Lunes</option><option>Martes</option><option>Miércoles</option>
+        <option>Jueves</option><option>Viernes</option><option>Sábado</option>
+      </select>
+      <input type="time" class="cl-input-inicio" style="font-size:13px; padding:7px;">
+      <input type="time" class="cl-input-fin" style="font-size:13px; padding:7px;">
+      <button type="button" style="background:none;border:none;color:var(--error);cursor:pointer;">✕</button>
+    `;
+    fila.querySelector("button").addEventListener("click", () => fila.remove());
+    cont.appendChild(fila);
+  }
+  document.getElementById("cl-boton-agregar-horario").addEventListener("click", clAgregarFilaHorario);
+
+  function clLeerHorarios() {
+    return [...document.querySelectorAll(".fila-horario-masiva")]
+      .map((f) => ({
+        dia: f.querySelector(".cl-input-dia").value,
+        horaInicio: f.querySelector(".cl-input-inicio").value,
+        horaFin: f.querySelector(".cl-input-fin").value
+      }))
+      .filter((h) => h.horaInicio && h.horaFin);
+  }
+
+  const PLANTILLA_CLASES_CSV = `ciudad,nivel,grupo,correoProfesor
+Cartagena,A1,A,maria.torres@tweetalig.edu.co
+Cartagena,A1,B,maria.torres@tweetalig.edu.co
+Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co`;
+
+  document.getElementById("cl-boton-plantilla").addEventListener("click", () => {
+    const blob = new Blob([PLANTILLA_CLASES_CSV], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "plantilla-clases.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  let filasClasesArchivo = [];
+  const inputArchivoClases = document.getElementById("cl-archivo-csv");
+  const botonProcesarClases = document.getElementById("cl-boton-procesar");
+
+  inputArchivoClases.addEventListener("change", () => {
+    const archivo = inputArchivoClases.files[0];
+    if (!archivo) return;
+    Papa.parse(archivo, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (resultado) => {
+        filasClasesArchivo = resultado.data;
+        botonProcesarClases.disabled = filasClasesArchivo.length === 0;
+        document.getElementById("cl-resultado").innerHTML =
+          `<p style="color:var(--tinta-suave); font-size:13px;">${filasClasesArchivo.length} fila(s) detectadas.</p>`;
+      }
+    });
+  });
+
+  botonProcesarClases.addEventListener("click", async () => {
+    botonProcesarClases.disabled = true;
+    botonProcesarClases.textContent = "Procesando...";
+
+    const anio = Number(document.getElementById("cl-anio").value);
+    const periodo = Number(document.getElementById("cl-periodo").value);
+    const ciclo = Number(document.getElementById("cl-ciclo").value);
+    const selectPrograma = document.getElementById("cl-programa");
+    const programaId = selectPrograma.value;
+    const programaNombre = selectPrograma.options[selectPrograma.selectedIndex]?.textContent || "";
+    const horarios = clLeerHorarios();
+
+    if (!programaId || horarios.length === 0) {
+      document.getElementById("cl-resultado").innerHTML = `<p class="err">Falta elegir el programa o agregar al menos un horario completo.</p>`;
+      botonProcesarClases.textContent = "Procesar archivo";
+      botonProcesarClases.disabled = false;
+      return;
+    }
+
+    const snapCiudades = await getDocs(collection(db, "ciudades"));
+    const ciudades = snapCiudades.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    const snapProfesores = await getDocs(query(collection(db, "usuarios"), where("rol", "==", "profesor")));
+    const profesores = snapProfesores.docs.map((d) => ({ correo: d.id, ...d.data() }));
+
+    const resultados = [];
+    let exitosos = 0, fallidos = 0;
+
+    for (const fila of filasClasesArchivo) {
+      const ciudadNombre = (fila.ciudad || "").trim();
+      const nivel = (fila.nivel || "").trim();
+      const grupo = (fila.grupo || "").trim();
+      const correoProfesor = (fila.correoProfesor || "").trim().toLowerCase();
+
+      if (!ciudadNombre || !nivel || !grupo || !correoProfesor) {
+        resultados.push({ ok: false, texto: `Fila incompleta: ${JSON.stringify(fila)}` });
+        fallidos++;
+        continue;
+      }
+
+      const ciudad = ciudades.find((c) => (c.nombre || "").toLowerCase() === ciudadNombre.toLowerCase());
+      if (!ciudad) {
+        resultados.push({ ok: false, texto: `${nivel} - ${grupo}: la sede "${ciudadNombre}" no existe. Créala primero.` });
+        fallidos++;
+        continue;
+      }
+
+      const profesor = profesores.find((p) => p.correo === correoProfesor);
+      if (!profesor) {
+        resultados.push({ ok: false, texto: `${nivel} - ${grupo}: el profesor "${correoProfesor}" no está registrado. Créalo primero.` });
+        fallidos++;
+        continue;
+      }
+
+      await addDoc(collection(db, "clases"), {
+        anio, periodo, ciclo,
+        nivel, grupo, horarios,
+        docenteCorreo: profesor.correo,
+        docenteNombre: profesor.nombre,
+        ciudadId: ciudad.id,
+        ciudadNombre: ciudad.nombre,
+        programaId, programaNombre,
+        estudiantes: []
+      });
+      resultados.push({ ok: true, texto: `${nivel} - ${grupo} (${ciudad.nombre}): creada con profesor ${profesor.nombre}.` });
+      exitosos++;
+    }
+
+    const contenedor = document.getElementById("cl-resultado");
+    contenedor.innerHTML = `<p class="resumen">${exitosos} clase(s) creadas, ${fallidos} con error.</p>`;
+    resultados.forEach((r) => {
+      const div = document.createElement("div");
+      div.className = "fila-resultado " + (r.ok ? "ok" : "err");
+      div.textContent = (r.ok ? "✓ " : "✕ ") + r.texto;
+      contenedor.appendChild(div);
+    });
+
+    await registrarLog(usuario, rol, "Cargó clases por CSV", `${exitosos} exitosas, ${fallidos} con error`);
+    botonProcesarClases.textContent = "Procesar archivo";
+    botonProcesarClases.disabled = false;
+  });
+
+  cargarSelectoresPeriodoClases();
+  clAgregarFilaHorario();
+  await cargarProgramasClases();
+  document.getElementById("cl-anio").addEventListener("change", cargarProgramasClases);
+  document.getElementById("cl-periodo").addEventListener("change", cargarProgramasClases);
+  document.getElementById("cl-ciclo").addEventListener("change", cargarProgramasClases);
+
+  // ============ CARGA MASIVA DE ESTUDIANTES ============
 
   const PLANTILLA_CSV = `nombre,apellido,cedula,correo,nivel,grupo,ciudad
 Juan,Pérez Gómez,1102345678,juan.perez@example.com,A1,A,Cartagena
