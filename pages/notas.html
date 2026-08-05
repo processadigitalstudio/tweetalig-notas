@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tweetalig — Notas</title>
+<link rel="stylesheet" href="../css/styles.css?v=2">
+</head>
+<body>
+<div class="app-shell">
+  <nav class="app-nav">
+    <div class="logo-nav-wrap"><img src="../assets/logo-tweetalig.png" alt="Tweetalig"></div>
+    <h1>Portal de notas</h1>
+    <div id="menu-rol"></div>
+    <a href="#" id="link-salir">Cerrar sesión</a>
+  </nav>
+  <main class="app-contenido">
+    <span class="etiqueta-rol">Notas</span>
+    <h2>Próximamente</h2>
+    <p style="color: var(--tinta-suave); max-width: 500px;">
+      Esta pantalla — donde cargarás las notas de tus estudiantes por corte —
+      está en construcción. Pronto vas a poder entrar aquí a registrar
+      calificaciones directamente.
+    </p>
+  </main>
+</div>
+<script type="module">
+  import { requireAuth } from "../js/auth.js?v=3";
+  await requireAuth(["profesor", "master", "admin", "coordinador", "secretaria"]);
+</script>
+</body>
+</html>

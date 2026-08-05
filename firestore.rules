@@ -1,12 +1,14 @@
 rules_version = '2';
 
 // Estas reglas son la seguridad REAL del sistema — no la URL, no el código.
-// Aunque alguien esté logueado, esto decide qué puede ver o tocar según su rol.
 // Pégalas en Firebase Console → Firestore Database → Reglas.
 //
-// Los perfiles de "usuarios" usan el CORREO (en minúsculas) como ID del
-// documento, porque el login es con Google Workspace y la cuenta de auth
-// se crea sola en el primer inicio de sesión.
+// Jerarquía de roles:
+// - master: SOLO Roxy. Control total. Su cuenta nunca se puede borrar desde la app.
+// - admin: control total igual que master (ej. Dirección Académica, Registro y
+//   Control), pero SÍ se puede quitar desde el panel de Accesos.
+// - coordinador / secretaria: gestionan profesores, clases y estudiantes de su sede.
+// - profesor: solo sus propias clases.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -31,40 +33,47 @@ service cloud.firestore {
       return estaLogueado() && miRol() == 'master';
     }
 
-    function esCoordinadorOMaster() {
-      return estaLogueado() && (miRol() == 'coordinador' || miRol() == 'master');
+    function esAdminOMaster() {
+      return estaLogueado() && miRol() in ['master', 'admin'];
     }
 
     function esGestor() {
-      // master, coordinador o secretaria: pueden crear profesores, clases y estudiantes
-      return estaLogueado() && miRol() in ['master', 'coordinador', 'secretaria'];
+      // Puede crear/editar profesores, clases y estudiantes.
+      return estaLogueado() && miRol() in ['master', 'admin', 'coordinador', 'secretaria'];
     }
 
     // Colección "usuarios": doc ID = correo en minúsculas.
-    // Guarda el rol de cada persona (master, coordinador, secretaria, profesor).
-    // Solo el MASTER puede crear/editar/borrar cuentas y roles.
-    // Cada quien puede leer su propio documento (para saber su rol al entrar).
+    // - Leer: cada quien su propio perfil, o cualquier admin/master ve todos.
+    // - Crear/editar: admin o master, pero SOLO master puede asignar el rol "master".
+    // - Borrar: admin o master, pero NUNCA se puede borrar una cuenta con rol "master".
     match /usuarios/{correoId} {
-      allow read: if estaLogueado() && (miCorreo() == correoId || esMaster());
-      allow write: if esMaster();
+      allow read: if estaLogueado() && (miCorreo() == correoId || esAdminOMaster());
+      allow create, update: if esAdminOMaster() &&
+        (request.resource.data.rol != 'master' || esMaster());
+      allow delete: if esAdminOMaster() && resource.data.rol != 'master';
     }
 
-    // Colección "ciudades": las 3 sedes (Cartagena, Sincelejo, Barranquilla)
-    // con su correo de coordinación y su URL de alertas (Apps Script).
+    // Colección "ciudades": sedes con su correo de coordinación y URL de alertas.
     match /ciudades/{id} {
       allow read: if estaLogueado();
-      allow write: if esMaster();
+      allow write: if esAdminOMaster();
     }
 
-    // Colección "clases": nivel + grupo + docente + horario + ciudad
+    // Colección "periodos": doc ID = "{anio}-{periodo}-{ciclo}", ej. "2026-1-3".
+    // Guarda fecha de inicio/fin y si está activo. Coordinadores y secretarias
+    // también pueden activar/desactivar (esGestor), no solo admin/master.
+    match /periodos/{id} {
+      allow read: if estaLogueado();
+      allow write: if esGestor();
+    }
+
+    // Colección "clases": nivel + grupo + docente + horario + ciudad + programa + periodo
     match /clases/{claseId} {
       allow read: if estaLogueado();
       allow write: if esGestor();
 
-      // Sesiones de asistencia dentro de cada clase
       match /sesiones/{fecha} {
         allow read: if estaLogueado();
-        // El profesor solo registra asistencia de SU propia clase.
         allow write: if estaLogueado() && (
           esGestor() ||
           (miRol() == 'profesor' && get(/databases/$(database)/documents/clases/$(claseId)).data.docenteCorreo == miCorreo())
@@ -78,33 +87,28 @@ service cloud.firestore {
       allow write: if esGestor();
     }
 
-    // Colección "logs": historial de auditoría. Cualquier usuario logueado
-    // puede CREAR una entrada (registra sus propias acciones), pero nadie
-    // puede editar ni borrar el historial — ni siquiera el MASTER — para
-    // que sea un registro confiable. Solo el MASTER puede leerlo.
+    // Colección "logs": historial de auditoría, inmutable. Solo admin/master lo leen.
     match /logs/{id} {
       allow read: if esMaster();
       allow create: if estaLogueado();
       allow update, delete: if false;
     }
 
-    // Colección "programas": Regular, Distancia, etc. — cada uno define
-    // sus propios cortes, pesos y notas. Solo el MASTER los crea/edita.
+    // Colección "programas": cada uno define sus cortes, pesos y notas,
+    // anclado a un año/periodo/ciclo específico.
     match /programas/{id} {
       allow read: if estaLogueado();
-      allow write: if esMaster();
+      allow write: if esAdminOMaster();
     }
 
-    // Colección "configuracion": el esquema fijo de porcentajes de notas
-    // Solo el MASTER lo define/cambia. Todos lo leen.
+    // Colección "configuracion": legado, ya no se usa activamente.
     match /configuracion/{id} {
       allow read: if estaLogueado();
-      allow write: if esMaster();
+      allow write: if esAdminOMaster();
     }
 
-    // Colección "notas": cada documento debe incluir "claseId" indicando a
-    // qué clase pertenece. Un profesor SOLO puede leer/escribir notas de
-    // las clases que él mismo dicta — no las de otros profesores.
+    // Colección "notas": un profesor SOLO puede leer/escribir notas de sus
+    // propias clases — no las de otros profesores.
     match /notas/{id} {
       allow read: if estaLogueado() && (
         esGestor() ||

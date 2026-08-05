@@ -100,6 +100,34 @@
         contenedor.appendChild(bloque);
       }
     }
+  } else if (rol === "profesor") {
+    const contenedor = document.getElementById("contenedor-periodos");
+    const q = query(collection(db, "clases"), where("docenteCorreo", "==", usuario.email.toLowerCase()));
+    const snapMisClases = await getDocs(q);
+
+    if (snapMisClases.empty) {
+      contenedor.innerHTML = "<p style='color: var(--tinta-suave); margin-top: 24px;'>Todavía no tienes clases asignadas.</p>";
+    } else {
+      const bloque = document.createElement("div");
+      bloque.className = "bloque-periodo";
+      bloque.innerHTML = `<h3>Mis clases</h3>`;
+      const tabla = document.createElement("table");
+      tabla.className = "tabla-simple";
+      tabla.innerHTML = `
+        <thead><tr><th>Período</th><th>Nivel</th><th>Grupo</th><th>Horarios</th><th>Sede</th><th>Programa</th></tr></thead>
+        <tbody></tbody>
+      `;
+      const cuerpo = tabla.querySelector("tbody");
+      snapMisClases.forEach((d) => {
+        const c = d.data();
+        const horariosTexto = (c.horarios || []).map((h) => `${h.dia} ${h.horaInicio}-${h.horaFin}`).join(", ") || "—";
+        const fila = document.createElement("tr");
+        fila.innerHTML = `<td>${c.anio}-${c.periodo} / Ciclo ${c.ciclo}</td><td>${c.nivel}</td><td>${c.grupo}</td><td>${horariosTexto}</td><td>${c.ciudadNombre || "—"}</td><td>${c.programaNombre || "—"}</td>`;
+        cuerpo.appendChild(fila);
+      });
+      bloque.appendChild(tabla);
+      contenedor.appendChild(bloque);
+    }
   }
 </script>
 </body>
