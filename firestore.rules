@@ -107,21 +107,20 @@ service cloud.firestore {
       allow write: if esAdminOMaster();
     }
 
-    // Colección "notas": un profesor SOLO puede leer/escribir notas de sus
-    // propias clases — no las de otros profesores.
+    // Colección "notas": el ID del documento es "{claseId}_{cedula}", así
+    // podemos saber de qué clase es sin depender de que el documento ya
+    // exista (leer un documento inexistente rompía la validación anterior).
     match /notas/{id} {
-      allow read: if estaLogueado() && (
-        esGestor() ||
-        (miRol() == 'profesor' && get(/databases/$(database)/documents/clases/$(resource.data.claseId)).data.docenteCorreo == miCorreo())
-      );
-      allow create: if estaLogueado() && (
-        esGestor() ||
-        (miRol() == 'profesor' && get(/databases/$(database)/documents/clases/$(request.resource.data.claseId)).data.docenteCorreo == miCorreo())
-      );
-      allow update: if estaLogueado() && (
-        esGestor() ||
-        (miRol() == 'profesor' && get(/databases/$(database)/documents/clases/$(resource.data.claseId)).data.docenteCorreo == miCorreo())
-      );
+      function claseIdDelDocumento() {
+        return id.split('_')[0];
+      }
+      function esMiPropiaClase() {
+        return miRol() == 'profesor' &&
+          get(/databases/$(database)/documents/clases/$(claseIdDelDocumento())).data.docenteCorreo == miCorreo();
+      }
+
+      allow read: if estaLogueado() && (esGestor() || esMiPropiaClase());
+      allow create, update: if estaLogueado() && (esGestor() || esMiPropiaClase());
       allow delete: if esGestor();
     }
   }

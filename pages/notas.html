@@ -139,40 +139,45 @@
     const contenedor = document.getElementById("contenido-notas");
     contenedor.innerHTML = "<p style='color:var(--tinta-suave);'>Cargando...</p>";
 
-    const programaId = grupo.clases[0].programaId;
-    const snapPrograma = await getDoc(doc(db, "programas", programaId));
-    if (!snapPrograma.exists()) {
-      contenedor.innerHTML = "<p style='color:var(--error);'>Esta clase no tiene un programa de notas configurado.</p>";
-      return;
-    }
-    programaActual = snapPrograma.data();
+    try {
+      const programaId = grupo.clases[0].programaId;
+      const snapPrograma = await getDoc(doc(db, "programas", programaId));
+      if (!snapPrograma.exists()) {
+        contenedor.innerHTML = "<p style='color:var(--error);'>Esta clase no tiene un programa de notas configurado.</p>";
+        return;
+      }
+      programaActual = snapPrograma.data();
 
-    const idsClases = grupo.clases.map((c) => c.id);
-    let estudiantes = [];
-    for (let i = 0; i < idsClases.length; i += 10) {
-      const lote = idsClases.slice(i, i + 10);
-      const q = query(collection(db, "estudiantes"), where("claseId", "in", lote));
-      const snap = await getDocs(q);
-      snap.forEach((d) => estudiantes.push({ id: d.id, ...d.data() }));
-    }
-    estudiantes.sort((a, b) => (a.apellido || "").localeCompare(b.apellido || ""));
-    estudiantesActuales = estudiantes;
+      const idsClases = grupo.clases.map((c) => c.id);
+      let estudiantes = [];
+      for (let i = 0; i < idsClases.length; i += 10) {
+        const lote = idsClases.slice(i, i + 10);
+        const q = query(collection(db, "estudiantes"), where("claseId", "in", lote));
+        const snap = await getDocs(q);
+        snap.forEach((d) => estudiantes.push({ id: d.id, ...d.data() }));
+      }
+      estudiantes.sort((a, b) => (a.apellido || "").localeCompare(b.apellido || ""));
+      estudiantesActuales = estudiantes;
 
-    if (estudiantes.length === 0) {
-      contenedor.innerHTML = "<p style='color:var(--tinta-suave);'>Todavía no hay estudiantes matriculados en esta clase.</p>";
-      return;
-    }
+      if (estudiantes.length === 0) {
+        contenedor.innerHTML = "<p style='color:var(--tinta-suave);'>Todavía no hay estudiantes matriculados en esta clase.</p>";
+        return;
+      }
 
-    notasGuardadas = {};
-    for (const est of estudiantes) {
-      const idNota = `${est.claseId}_${est.cedula}`;
-      const snapNota = await getDoc(doc(db, "notas", idNota));
-      notasGuardadas[est.cedula] = snapNota.exists() ? snapNota.data().valores || {} : {};
-    }
+      notasGuardadas = {};
+      for (const est of estudiantes) {
+        const idNota = `${est.claseId}_${est.cedula}`;
+        const snapNota = await getDoc(doc(db, "notas", idNota));
+        notasGuardadas[est.cedula] = snapNota.exists() ? snapNota.data().valores || {} : {};
+      }
 
-    corteActivoIndex = 0;
-    pintarPestanas();
-    pintarTablaCorte();
+      corteActivoIndex = 0;
+      pintarPestanas();
+      pintarTablaCorte();
+    } catch (error) {
+      console.error("Error cargando la planilla:", error);
+      contenedor.innerHTML = `<p style="color:var(--error);">No se pudo cargar la planilla (${error.code || error.message}). Avisa a soporte con este mensaje.</p>`;
+    }
   }
 
   function pintarPestanas() {
@@ -249,7 +254,7 @@
       corte.notas.forEach((n, ni) => {
         const clave = `c${corteActivoIndex}n${ni}`;
         const valorActual = (notasGuardadas[est.cedula] || {})[clave] ?? "";
-        celdas += `<td><input type="number" step="0.1" min="0" max="5" class="input-nota" data-cedula="${est.cedula}" data-clave="${clave}" value="${valorActual}"></td>`;
+        celdas += `<td><input type="text" inputmode="decimal" class="input-nota" data-cedula="${est.cedula}" data-clave="${clave}" value="${valorActual}" placeholder="1.0-5.0"></td>`;
       });
       celdas += `<td class="col-promedio" id="prom-${est.cedula}">${formatear(calcularPromedioCorte(est.cedula, corteActivoIndex))}</td>`;
       fila.innerHTML = celdas;
@@ -264,8 +269,30 @@
         const cedula = input.dataset.cedula;
         const clave = input.dataset.clave;
         if (!notasGuardadas[cedula]) notasGuardadas[cedula] = {};
-        notasGuardadas[cedula][clave] = input.value === "" ? undefined : Number(input.value);
+
+        const texto = input.value.trim().replace(",", ".");
+        if (texto === "") {
+          notasGuardadas[cedula][clave] = undefined;
+        } else {
+          let num = Number(texto);
+          if (isNaN(num)) {
+            input.style.borderColor = "var(--error)";
+            return;
+          }
+          num = Math.round(num * 10) / 10; // un solo decimal
+          if (num < 1) num = 1;
+          if (num > 5) num = 5;
+          notasGuardadas[cedula][clave] = num;
+        }
+        input.style.borderColor = "var(--linea)";
         document.getElementById(`prom-${cedula}`).textContent = formatear(calcularPromedioCorte(cedula, corteActivoIndex));
+      });
+
+      input.addEventListener("blur", () => {
+        const cedula = input.dataset.cedula;
+        const clave = input.dataset.clave;
+        const valor = (notasGuardadas[cedula] || {})[clave];
+        input.value = valor !== undefined ? valor.toFixed(1) : "";
       });
     });
 

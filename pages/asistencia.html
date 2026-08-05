@@ -5,6 +5,38 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Tweetalig — Asistencia</title>
 <link rel="stylesheet" href="../css/styles.css?v=2">
+<style>
+  .selector-clase { max-width: 480px; margin-bottom: 20px; }
+  .selector-clase select { width: 100%; font-family: var(--fuente-cuerpo); font-size: 14px; padding: 10px 12px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
+
+  .lista-fechas { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; max-width: 900px; }
+  .pastilla-fecha {
+    font-family: var(--fuente-cuerpo); font-size: 12.5px; font-weight: 500;
+    padding: 8px 12px; border-radius: 8px; border: 1px solid var(--linea);
+    background: var(--superficie); color: var(--tinta); cursor: pointer; text-align: center; min-width: 78px;
+  }
+  .pastilla-fecha .dia-semana { display:block; font-size: 10.5px; color: var(--tinta-suave); text-transform: uppercase; }
+  .pastilla-fecha.activa { background: var(--azul-profundo); color: #fff; border-color: var(--azul-profundo); }
+  .pastilla-fecha.activa .dia-semana { color: #cfe0ea; }
+  .pastilla-fecha.es-festivo { background: var(--oro-suave); border-color: var(--oro); }
+  .pastilla-fecha.es-festivo.activa { background: var(--oro); color: var(--tinta); border-color: var(--oro); }
+
+  .tabla-asistencia { width: 100%; border-collapse: collapse; max-width: 700px; }
+  .tabla-asistencia th, .tabla-asistencia td { padding: 9px 10px; border-bottom: 1px solid var(--linea); font-size: 13.5px; text-align: left; }
+  .tabla-asistencia th { color: var(--tinta-suave); font-weight: 500; font-size: 11.5px; text-transform: uppercase; }
+
+  .switch-presente { display: flex; gap: 6px; }
+  .switch-presente button {
+    font-family: var(--fuente-cuerpo); font-size: 12px; font-weight: 500; padding: 6px 14px;
+    border-radius: 16px; border: 1px solid var(--linea); background: var(--superficie); color: var(--tinta-suave); cursor: pointer;
+  }
+  .switch-presente button.marcado-presente { background: var(--verde-marca-suave); border-color: var(--verde-marca); color: #1E7A5F; }
+  .switch-presente button.marcado-ausente { background: var(--error-fondo); border-color: var(--error); color: var(--error); }
+
+  .toggle-festivo { display:flex; align-items:center; gap:8px; margin-bottom:16px; font-size:14px; }
+  .boton-primario { max-width: 240px; margin-top: 18px; }
+  .aviso { font-size: 13px; margin-top: 10px; min-height: 18px; }
+</style>
 </head>
 <body>
 <div class="app-shell">
@@ -16,16 +48,281 @@
   </nav>
   <main class="app-contenido">
     <span class="etiqueta-rol">Asistencia</span>
-    <h2>Próximamente</h2>
-    <p style="color: var(--tinta-suave); max-width: 500px;">
-      Esta pantalla — donde marcarás asistencia por sesión de clase — está en
-      construcción. Pronto vas a poder registrar quién asistió cada día.
-    </p>
+    <h2>Registrar asistencia</h2>
+
+    <div id="selector-profesor" style="display:none; margin-bottom:16px;">
+      <label style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin-bottom:4px;">Ver como profesor (solo para revisión)</label>
+      <select id="profesor-vista" style="max-width:420px; padding:8px 10px; border:1px solid var(--linea); border-radius:7px;"></select>
+    </div>
+
+    <div class="selector-clase">
+      <label style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin-bottom:4px;">Clase</label>
+      <select id="selector-clase"></select>
+    </div>
+
+    <div id="contenido-asistencia"></div>
   </main>
 </div>
+
 <script type="module">
-  import { requireAuth } from "../js/auth.js?v=3";
-  await requireAuth(["profesor", "master", "admin", "coordinador", "secretaria"]);
+  import { requireAuth, registrarLog } from "../js/auth.js?v=3";
+  import { db } from "../js/firebase-config.js?v=3";
+  import { collection, getDocs, getDoc, doc, setDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+  const { usuario, rol } = await requireAuth(["profesor", "master", "admin"]);
+
+  const DIAS_SEMANA = { "Domingo": 0, "Lunes": 1, "Martes": 2, "Miércoles": 3, "Jueves": 4, "Viernes": 5, "Sábado": 6 };
+  const DIAS_CORTOS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+
+  let correoActivo = usuario.email.toLowerCase();
+  let gruposClase = [];
+
+  if (rol === "master" || rol === "admin") {
+    document.getElementById("selector-profesor").style.display = "block";
+    const selectProf = document.getElementById("profesor-vista");
+    const snapProf = await getDocs(query(collection(db, "usuarios"), where("rol", "==", "profesor")));
+    selectProf.innerHTML = "";
+    snapProf.forEach((d) => {
+      const opt = document.createElement("option");
+      opt.value = d.id;
+      opt.textContent = d.data().nombre;
+      selectProf.appendChild(opt);
+    });
+    if (!snapProf.empty) correoActivo = selectProf.options[0].value;
+    selectProf.addEventListener("change", async () => {
+      correoActivo = selectProf.value;
+      await cargarGrupos();
+    });
+  }
+
+  async function cargarGrupos() {
+    const q = query(collection(db, "clases"), where("docenteCorreo", "==", correoActivo));
+    const snap = await getDocs(q);
+    const clases = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    const porClave = {};
+    clases.forEach((c) => {
+      const clave = c.grupoDistanciaId || c.id;
+      if (!porClave[clave]) porClave[clave] = [];
+      porClave[clave].push(c);
+    });
+
+    gruposClase = Object.entries(porClave).map(([key, clasesGrupo]) => {
+      clasesGrupo.sort((a, b) => (a.id < b.id ? -1 : 1));
+      const primera = clasesGrupo[0];
+      const sedes = clasesGrupo.map((c) => c.ciudadNombre).join(", ");
+      return {
+        key,
+        claseAncla: clasesGrupo[0].id, // aquí se guarda la asistencia combinada
+        etiqueta: `${primera.nivel} - ${primera.grupo} (${sedes}) — ${primera.anio}-${primera.periodo} Ciclo ${primera.ciclo}`,
+        clases: clasesGrupo
+      };
+    });
+
+    const select = document.getElementById("selector-clase");
+    select.innerHTML = "";
+    if (gruposClase.length === 0) {
+      select.innerHTML = "<option value=''>No tienes clases asignadas</option>";
+      document.getElementById("contenido-asistencia").innerHTML = "";
+      return;
+    }
+    gruposClase.forEach((g) => {
+      const opt = document.createElement("option");
+      opt.value = g.key;
+      opt.textContent = g.etiqueta;
+      select.appendChild(opt);
+    });
+
+    await cargarCalendario(gruposClase[0].key);
+  }
+
+  document.getElementById("selector-clase").addEventListener("change", (e) => cargarCalendario(e.target.value));
+
+  let fechasSesion = [];
+  let fechaActiva = null;
+  let estudiantesActuales = [];
+  let sesionesGuardadas = {}; // fecha -> { festivo, asistencia }
+  let grupoActual = null;
+
+  function formatoFecha(d) {
+    return d.toISOString().slice(0, 10);
+  }
+
+  async function cargarCalendario(claveGrupo) {
+    grupoActual = gruposClase.find((g) => g.key === claveGrupo);
+    const contenedor = document.getElementById("contenido-asistencia");
+    contenedor.innerHTML = "<p style='color:var(--tinta-suave);'>Cargando...</p>";
+
+    try {
+      const primera = grupoActual.clases[0];
+      const idPeriodo = `${primera.anio}-${primera.periodo}-${primera.ciclo}`;
+      const snapPeriodo = await getDoc(doc(db, "periodos", idPeriodo));
+
+      if (!snapPeriodo.exists() || !snapPeriodo.data().fechaInicio || !snapPeriodo.data().fechaFin) {
+        contenedor.innerHTML = `<p style="color:var(--error);">El período ${idPeriodo} todavía no tiene fecha de inicio/fin configurada. Pide que la agreguen en "Períodos académicos".</p>`;
+        return;
+      }
+      const per = snapPeriodo.data();
+      const inicio = new Date(per.fechaInicio + "T00:00:00");
+      const fin = new Date(per.fechaFin + "T00:00:00");
+
+      const diasClase = (primera.horarios || []).map((h) => DIAS_SEMANA[h.dia]);
+      fechasSesion = [];
+      for (let d = new Date(inicio); d <= fin; d.setDate(d.getDate() + 1)) {
+        if (diasClase.includes(d.getDay())) fechasSesion.push(new Date(d));
+      }
+
+      // Cargar sesiones ya guardadas para esta clase ancla
+      const snapSesiones = await getDocs(collection(db, "clases", grupoActual.claseAncla, "sesiones"));
+      sesionesGuardadas = {};
+      snapSesiones.forEach((d) => { sesionesGuardadas[d.id] = d.data(); });
+
+      // Cargar estudiantes de todas las sedes del grupo
+      const idsClases = grupoActual.clases.map((c) => c.id);
+      let estudiantes = [];
+      for (let i = 0; i < idsClases.length; i += 10) {
+        const lote = idsClases.slice(i, i + 10);
+        const q = query(collection(db, "estudiantes"), where("claseId", "in", lote));
+        const snap = await getDocs(q);
+        snap.forEach((d) => estudiantes.push({ id: d.id, ...d.data() }));
+      }
+      estudiantes.sort((a, b) => (a.apellido || "").localeCompare(b.apellido || ""));
+      estudiantesActuales = estudiantes;
+
+      pintarFechas();
+      if (fechasSesion.length > 0) {
+        fechaActiva = formatoFecha(fechasSesion[0]);
+        pintarDia();
+      }
+    } catch (error) {
+      console.error("Error cargando asistencia:", error);
+      contenedor.innerHTML = `<p style="color:var(--error);">No se pudo cargar (${error.code || error.message}).</p>`;
+    }
+  }
+
+  function pintarFechas() {
+    const contenedor = document.getElementById("contenido-asistencia");
+    contenedor.innerHTML = "";
+
+    if (fechasSesion.length === 0) {
+      contenedor.innerHTML = "<p style='color:var(--tinta-suave);'>No hay sesiones calculadas — revisa que la clase tenga horarios y el período tenga fechas.</p>";
+      return;
+    }
+
+    const lista = document.createElement("div");
+    lista.className = "lista-fechas";
+    fechasSesion.forEach((d) => {
+      const fechaTexto = formatoFecha(d);
+      const guardada = sesionesGuardadas[fechaTexto];
+      const btn = document.createElement("button");
+      btn.className = "pastilla-fecha" +
+        (fechaTexto === fechaActiva ? " activa" : "") +
+        (guardada?.festivo ? " es-festivo" : "");
+      btn.innerHTML = `<span class="dia-semana">${DIAS_CORTOS[d.getDay()]}</span>${d.getDate()}/${d.getMonth() + 1}`;
+      btn.addEventListener("click", () => {
+        fechaActiva = fechaTexto;
+        pintarFechas();
+        pintarDia();
+      });
+      lista.appendChild(btn);
+    });
+    contenedor.appendChild(lista);
+
+    const div = document.createElement("div");
+    div.id = "cuerpo-dia";
+    contenedor.appendChild(div);
+  }
+
+  function pintarDia() {
+    const cuerpo = document.getElementById("cuerpo-dia");
+    const guardada = sesionesGuardadas[fechaActiva] || { festivo: false, asistencia: {} };
+
+    cuerpo.innerHTML = `
+      <label class="toggle-festivo">
+        <input type="checkbox" id="chk-festivo" ${guardada.festivo ? "checked" : ""}>
+        Marcar este día como festivo (no hay clase / no se toma asistencia)
+      </label>
+      <div id="zona-estudiantes"></div>
+    `;
+
+    const chkFestivo = document.getElementById("chk-festivo");
+    const zona = document.getElementById("zona-estudiantes");
+
+    function pintarTablaEstudiantes() {
+      if (chkFestivo.checked) {
+        zona.innerHTML = "";
+        return;
+      }
+      const tabla = document.createElement("table");
+      tabla.className = "tabla-asistencia";
+      tabla.innerHTML = `<thead><tr><th>Estudiante</th><th>Asistencia</th></tr></thead><tbody></tbody>`;
+      const tbody = tabla.querySelector("tbody");
+
+      estudiantesActuales.forEach((est) => {
+        const estadoActual = guardada.asistencia?.[est.cedula] || "";
+        const fila = document.createElement("tr");
+        fila.innerHTML = `
+          <td>${est.nombre} ${est.apellido}</td>
+          <td>
+            <div class="switch-presente" data-cedula="${est.cedula}">
+              <button type="button" class="btn-presente ${estadoActual === "presente" ? "marcado-presente" : ""}" data-valor="presente">Presente</button>
+              <button type="button" class="btn-ausente ${estadoActual === "ausente" ? "marcado-ausente" : ""}" data-valor="ausente">Ausente</button>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(fila);
+      });
+
+      zona.innerHTML = "";
+      zona.appendChild(tabla);
+
+      tabla.querySelectorAll(".switch-presente").forEach((grupo) => {
+        grupo.querySelectorAll("button").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const cedula = grupo.dataset.cedula;
+            if (!guardada.asistencia) guardada.asistencia = {};
+            guardada.asistencia[cedula] = btn.dataset.valor;
+            grupo.querySelectorAll("button").forEach((b) => b.classList.remove("marcado-presente", "marcado-ausente"));
+            btn.classList.add(btn.dataset.valor === "presente" ? "marcado-presente" : "marcado-ausente");
+          });
+        });
+      });
+    }
+
+    chkFestivo.addEventListener("change", () => {
+      guardada.festivo = chkFestivo.checked;
+      pintarTablaEstudiantes();
+    });
+
+    pintarTablaEstudiantes();
+
+    const botonGuardar = document.createElement("button");
+    botonGuardar.className = "boton-primario";
+    botonGuardar.textContent = "Guardar asistencia de este día";
+    botonGuardar.addEventListener("click", async () => {
+      const aviso = document.getElementById("aviso-asistencia");
+      aviso.textContent = "Guardando...";
+      await setDoc(doc(db, "clases", grupoActual.claseAncla, "sesiones", fechaActiva), {
+        fecha: fechaActiva,
+        festivo: chkFestivo.checked,
+        asistencia: chkFestivo.checked ? {} : (guardada.asistencia || {})
+      });
+      sesionesGuardadas[fechaActiva] = { fecha: fechaActiva, festivo: chkFestivo.checked, asistencia: guardada.asistencia || {} };
+      await registrarLog(usuario, rol, "Guardó asistencia", `${fechaActiva} — ${grupoActual.etiqueta}`);
+      pintarFechas();
+      pintarDia();
+      document.getElementById("aviso-asistencia").textContent = "Asistencia guardada correctamente.";
+      document.getElementById("aviso-asistencia").style.color = "#2E6E4E";
+    });
+    cuerpo.appendChild(botonGuardar);
+
+    const aviso = document.createElement("p");
+    aviso.className = "aviso";
+    aviso.id = "aviso-asistencia";
+    cuerpo.appendChild(aviso);
+  }
+
+  await cargarGrupos();
 </script>
 </body>
 </html>
