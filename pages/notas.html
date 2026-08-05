@@ -21,8 +21,8 @@
   .tabla-notas th, .tabla-notas td { padding: 8px 10px; border-bottom: 1px solid var(--linea); font-size: 13px; text-align: center; }
   .tabla-notas th { color: var(--tinta-suave); font-weight: 500; font-size: 11.5px; text-transform: uppercase; }
   .tabla-notas td.nombre-estudiante { text-align: left; font-weight: 500; color: var(--tinta); white-space: nowrap; }
-  .tabla-notas input[type="number"] {
-    width: 62px; font-family: var(--fuente-cuerpo); font-size: 13px; padding: 6px;
+  .tabla-notas input[type="text"] {
+    width: 56px; font-family: var(--fuente-cuerpo); font-size: 13px; padding: 5px;
     border: 1px solid var(--linea); border-radius: 6px; text-align: center; background: var(--fondo);
   }
   .col-promedio { font-weight: 600; color: var(--azul-profundo); }
@@ -184,6 +184,11 @@
     const contenedor = document.getElementById("contenido-notas");
     contenedor.innerHTML = "";
 
+    const contador = document.createElement("p");
+    contador.style.cssText = "font-size:13px; color:var(--tinta-suave); margin: 0 0 14px;";
+    contador.textContent = `${estudiantesActuales.length} estudiante(s) matriculado(s) en esta clase.`;
+    contenedor.appendChild(contador);
+
     const pestanas = document.createElement("div");
     pestanas.className = "pestanas";
     (programaActual.cortes || []).forEach((corte, i) => {
@@ -242,7 +247,7 @@
     const tabla = document.createElement("table");
     tabla.className = "tabla-notas";
 
-    let theadHtml = `<tr><th style="text-align:left;">Estudiante</th>`;
+    let theadHtml = `<tr><th style="text-align:left;">ID</th><th style="text-align:left;">Estudiante</th>`;
     corte.notas.forEach((n) => { theadHtml += `<th>${n.nombre}<br>(${n.porcentaje}%)</th>`; });
     theadHtml += `<th class="col-promedio">Promedio corte</th></tr>`;
     tabla.innerHTML = `<thead>${theadHtml}</thead><tbody></tbody>`;
@@ -250,7 +255,7 @@
     const tbody = tabla.querySelector("tbody");
     estudiantesActuales.forEach((est) => {
       const fila = document.createElement("tr");
-      let celdas = `<td class="nombre-estudiante">${est.nombre} ${est.apellido}</td>`;
+      let celdas = `<td>${est.cedula}</td><td class="nombre-estudiante">${est.apellido} ${est.nombre}</td>`;
       corte.notas.forEach((n, ni) => {
         const clave = `c${corteActivoIndex}n${ni}`;
         const valorActual = (notasGuardadas[est.cedula] || {})[clave] ?? "";
@@ -313,14 +318,14 @@
     const tabla = document.createElement("table");
     tabla.className = "tabla-notas";
 
-    let theadHtml = `<tr><th style="text-align:left;">Estudiante</th>`;
+    let theadHtml = `<tr><th style="text-align:left;">ID</th><th style="text-align:left;">Estudiante</th>`;
     programaActual.cortes.forEach((c) => { theadHtml += `<th>${c.nombre} (${c.peso}%)</th>`; });
     theadHtml += `<th class="col-final">Nota final</th></tr>`;
     tabla.innerHTML = `<thead>${theadHtml}</thead><tbody></tbody>`;
 
     const tbody = tabla.querySelector("tbody");
     estudiantesActuales.forEach((est) => {
-      let celdas = `<td class="nombre-estudiante">${est.nombre} ${est.apellido}</td>`;
+      let celdas = `<td>${est.cedula}</td><td class="nombre-estudiante">${est.apellido} ${est.nombre}</td>`;
       programaActual.cortes.forEach((c, i) => {
         celdas += `<td>${formatear(calcularPromedioCorte(est.cedula, i))}</td>`;
       });
@@ -348,7 +353,7 @@
       await setDoc(doc(db, "notas", idNota), {
         claseId: est.claseId,
         cedula: est.cedula,
-        estudianteNombre: `${est.nombre} ${est.apellido}`,
+        estudianteNombre: `${est.apellido} ${est.nombre}`,
         valores: notasGuardadas[est.cedula] || {}
       }, { merge: true });
     }

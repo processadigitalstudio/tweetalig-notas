@@ -9,7 +9,7 @@
   .selector-clase { max-width: 480px; margin-bottom: 20px; }
   .selector-clase select { width: 100%; font-family: var(--fuente-cuerpo); font-size: 14px; padding: 10px 12px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
 
-  .lista-fechas { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; max-width: 900px; }
+  .lista-fechas { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; max-width: 900px; }
   .pastilla-fecha {
     font-family: var(--fuente-cuerpo); font-size: 12.5px; font-weight: 500;
     padding: 8px 12px; border-radius: 8px; border: 1px solid var(--linea);
@@ -21,20 +21,23 @@
   .pastilla-fecha.es-festivo { background: var(--oro-suave); border-color: var(--oro); }
   .pastilla-fecha.es-festivo.activa { background: var(--oro); color: var(--tinta); border-color: var(--oro); }
 
-  .tabla-asistencia { width: 100%; border-collapse: collapse; max-width: 700px; }
-  .tabla-asistencia th, .tabla-asistencia td { padding: 9px 10px; border-bottom: 1px solid var(--linea); font-size: 13.5px; text-align: left; }
-  .tabla-asistencia th { color: var(--tinta-suave); font-weight: 500; font-size: 11.5px; text-transform: uppercase; }
+  .info-bloques { font-size: 13px; color: var(--tinta-suave); margin-bottom: 14px; }
 
-  .switch-presente { display: flex; gap: 6px; }
-  .switch-presente button {
-    font-family: var(--fuente-cuerpo); font-size: 12px; font-weight: 500; padding: 6px 14px;
-    border-radius: 16px; border: 1px solid var(--linea); background: var(--superficie); color: var(--tinta-suave); cursor: pointer;
-  }
-  .switch-presente button.marcado-presente { background: var(--verde-marca-suave); border-color: var(--verde-marca); color: #1E7A5F; }
-  .switch-presente button.marcado-ausente { background: var(--error-fondo); border-color: var(--error); color: var(--error); }
+  .tabla-asistencia { width: 100%; border-collapse: collapse; max-width: 750px; }
+  .tabla-asistencia th, .tabla-asistencia td { padding: 9px 10px; border-bottom: 1px solid var(--linea); font-size: 13.5px; text-align: left; }
+  .tabla-asistencia th { color: var(--tinta-suave); font-weight: 500; font-size: 11px; text-transform: uppercase; text-align: center; }
+  .tabla-asistencia th:first-child, .tabla-asistencia th:nth-child(2) { text-align: left; }
+  .tabla-asistencia td.celda-bloque { text-align: center; }
+  .tabla-asistencia input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+  .col-horas { font-weight: 600; color: var(--error); text-align: center; }
 
   .toggle-festivo { display:flex; align-items:center; gap:8px; margin-bottom:16px; font-size:14px; }
   .boton-primario { max-width: 240px; margin-top: 18px; }
+  .boton-secundario {
+    font-family: var(--fuente-cuerpo); font-size: 12.5px; font-weight: 500;
+    color: var(--azul-profundo); background: none; border: 1px dashed var(--azul-profundo);
+    border-radius: 6px; padding: 7px 12px; cursor: pointer;
+  }
   .aviso { font-size: 13px; margin-top: 10px; min-height: 18px; }
 </style>
 </head>
@@ -49,6 +52,10 @@
   <main class="app-contenido">
     <span class="etiqueta-rol">Asistencia</span>
     <h2>Registrar asistencia</h2>
+    <p style="color: var(--tinta-suave); max-width: 600px; margin-top: -8px; font-size: 13.5px;">
+      Solo marca la casilla del bloque en que el estudiante <b>faltó</b> — si no marcas nada, se asume presente.
+      Un bloque presencial dura 45 min, uno a distancia 60 min.
+    </p>
 
     <div id="selector-profesor" style="display:none; margin-bottom:16px;">
       <label style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin-bottom:4px;">Ver como profesor (solo para revisión)</label>
@@ -113,7 +120,8 @@
       const sedes = clasesGrupo.map((c) => c.ciudadNombre).join(", ");
       return {
         key,
-        claseAncla: clasesGrupo[0].id, // aquí se guarda la asistencia combinada
+        claseAncla: clasesGrupo[0].id,
+        esDistancia: (primera.programaNombre || "").toLowerCase().includes("distancia"),
         etiqueta: `${primera.nivel} - ${primera.grupo} (${sedes}) — ${primera.anio}-${primera.periodo} Ciclo ${primera.ciclo}`,
         clases: clasesGrupo
       };
@@ -138,14 +146,18 @@
 
   document.getElementById("selector-clase").addEventListener("change", (e) => cargarCalendario(e.target.value));
 
-  let fechasSesion = [];
-  let fechaActiva = null;
+  let fechasSesion = []; // [{fecha: Date, horario: {...}, bloqueMin, numBloques}]
+  let fechaActivaTexto = null;
   let estudiantesActuales = [];
-  let sesionesGuardadas = {}; // fecha -> { festivo, asistencia }
+  let sesionesGuardadas = {};
   let grupoActual = null;
 
-  function formatoFecha(d) {
-    return d.toISOString().slice(0, 10);
+  function formatoFecha(d) { return d.toISOString().slice(0, 10); }
+
+  function minutosEntre(horaInicio, horaFin) {
+    const [h1, m1] = horaInicio.split(":").map(Number);
+    const [h2, m2] = horaFin.split(":").map(Number);
+    return (h2 * 60 + m2) - (h1 * 60 + m1);
   }
 
   async function cargarCalendario(claveGrupo) {
@@ -166,18 +178,22 @@
       const inicio = new Date(per.fechaInicio + "T00:00:00");
       const fin = new Date(per.fechaFin + "T00:00:00");
 
-      const diasClase = (primera.horarios || []).map((h) => DIAS_SEMANA[h.dia]);
+      const bloqueMin = grupoActual.esDistancia ? 60 : 45;
+      const horarios = primera.horarios || [];
+
       fechasSesion = [];
       for (let d = new Date(inicio); d <= fin; d.setDate(d.getDate() + 1)) {
-        if (diasClase.includes(d.getDay())) fechasSesion.push(new Date(d));
+        const horario = horarios.find((h) => DIAS_SEMANA[h.dia] === d.getDay());
+        if (!horario) continue;
+        const duracion = minutosEntre(horario.horaInicio, horario.horaFin);
+        const numBloques = Math.max(1, Math.round(duracion / bloqueMin));
+        fechasSesion.push({ fecha: new Date(d), horario, numBloques, bloqueMin });
       }
 
-      // Cargar sesiones ya guardadas para esta clase ancla
       const snapSesiones = await getDocs(collection(db, "clases", grupoActual.claseAncla, "sesiones"));
       sesionesGuardadas = {};
       snapSesiones.forEach((d) => { sesionesGuardadas[d.id] = d.data(); });
 
-      // Cargar estudiantes de todas las sedes del grupo
       const idsClases = grupoActual.clases.map((c) => c.id);
       let estudiantes = [];
       for (let i = 0; i < idsClases.length; i += 10) {
@@ -191,7 +207,7 @@
 
       pintarFechas();
       if (fechasSesion.length > 0) {
-        fechaActiva = formatoFecha(fechasSesion[0]);
+        fechaActivaTexto = formatoFecha(fechasSesion[0].fecha);
         pintarDia();
       }
     } catch (error) {
@@ -211,22 +227,46 @@
 
     const lista = document.createElement("div");
     lista.className = "lista-fechas";
-    fechasSesion.forEach((d) => {
-      const fechaTexto = formatoFecha(d);
+    fechasSesion.forEach((s) => {
+      const fechaTexto = formatoFecha(s.fecha);
       const guardada = sesionesGuardadas[fechaTexto];
       const btn = document.createElement("button");
       btn.className = "pastilla-fecha" +
-        (fechaTexto === fechaActiva ? " activa" : "") +
+        (fechaTexto === fechaActivaTexto ? " activa" : "") +
         (guardada?.festivo ? " es-festivo" : "");
-      btn.innerHTML = `<span class="dia-semana">${DIAS_CORTOS[d.getDay()]}</span>${d.getDate()}/${d.getMonth() + 1}`;
+      btn.innerHTML = `<span class="dia-semana">${DIAS_CORTOS[s.fecha.getDay()]}</span>${s.fecha.getDate()}/${s.fecha.getMonth() + 1}`;
       btn.addEventListener("click", () => {
-        fechaActiva = fechaTexto;
+        fechaActivaTexto = fechaTexto;
         pintarFechas();
         pintarDia();
       });
       lista.appendChild(btn);
     });
     contenedor.appendChild(lista);
+
+    const filaExtra = document.createElement("div");
+    filaExtra.style.cssText = "display:flex; gap:8px; align-items:center; margin-bottom:18px; flex-wrap: wrap;";
+    filaExtra.innerHTML = `
+      <input type="date" id="input-fecha-extra" style="font-size:13px; padding:7px 9px; border:1px solid var(--linea); border-radius:6px;">
+      <button type="button" class="boton-secundario" id="boton-agregar-fecha-extra">+ Agregar fecha (clase extra / recuperación)</button>
+      <button type="button" class="boton-secundario" id="boton-ver-resumen">Ver resumen de horas de inasistencia</button>
+    `;
+    contenedor.appendChild(filaExtra);
+
+    document.getElementById("boton-agregar-fecha-extra").addEventListener("click", () => {
+      const valor = document.getElementById("input-fecha-extra").value;
+      if (!valor) return;
+      if (!fechasSesion.some((s) => formatoFecha(s.fecha) === valor)) {
+        const bloqueMin = grupoActual.esDistancia ? 60 : 60; // fecha extra: bloque completo por defecto
+        fechasSesion.push({ fecha: new Date(valor + "T00:00:00"), horario: null, numBloques: 1, bloqueMin });
+        fechasSesion.sort((a, b) => a.fecha - b.fecha);
+      }
+      fechaActivaTexto = valor;
+      pintarFechas();
+      pintarDia();
+    });
+
+    document.getElementById("boton-ver-resumen").addEventListener("click", pintarResumenAsistencia);
 
     const div = document.createElement("div");
     div.id = "cuerpo-dia";
@@ -235,9 +275,13 @@
 
   function pintarDia() {
     const cuerpo = document.getElementById("cuerpo-dia");
-    const guardada = sesionesGuardadas[fechaActiva] || { festivo: false, asistencia: {} };
+    const sesionInfo = fechasSesion.find((s) => formatoFecha(s.fecha) === fechaActivaTexto);
+    const numBloques = sesionInfo?.numBloques || 1;
+    const bloqueMin = sesionInfo?.bloqueMin || 60;
+    const guardada = sesionesGuardadas[fechaActivaTexto] || { festivo: false, ausencias: {} };
 
     cuerpo.innerHTML = `
+      <p class="info-bloques">${numBloques} bloque(s) de ${bloqueMin} min ese día.</p>
       <label class="toggle-festivo">
         <input type="checkbox" id="chk-festivo" ${guardada.festivo ? "checked" : ""}>
         Marcar este día como festivo (no hay clase / no se toma asistencia)
@@ -249,51 +293,45 @@
     const zona = document.getElementById("zona-estudiantes");
 
     function pintarTablaEstudiantes() {
-      if (chkFestivo.checked) {
-        zona.innerHTML = "";
-        return;
-      }
+      if (chkFestivo.checked) { zona.innerHTML = ""; return; }
+
       const tabla = document.createElement("table");
       tabla.className = "tabla-asistencia";
-      tabla.innerHTML = `<thead><tr><th>Estudiante</th><th>Asistencia</th></tr></thead><tbody></tbody>`;
+      let theadHtml = `<tr><th>ID</th><th>Estudiante</th>`;
+      for (let b = 1; b <= numBloques; b++) theadHtml += `<th>Bloque ${b}</th>`;
+      theadHtml += `<th>Horas ausente</th></tr>`;
+      tabla.innerHTML = `<thead>${theadHtml}</thead><tbody></tbody>`;
       const tbody = tabla.querySelector("tbody");
 
       estudiantesActuales.forEach((est) => {
-        const estadoActual = guardada.asistencia?.[est.cedula] || "";
+        const marcados = guardada.ausencias?.[est.cedula] || [];
+        let celdas = `<td>${est.cedula}</td><td>${est.apellido} ${est.nombre}</td>`;
+        for (let b = 0; b < numBloques; b++) {
+          celdas += `<td class="celda-bloque"><input type="checkbox" class="chk-bloque" data-cedula="${est.cedula}" data-bloque="${b}" ${marcados[b] ? "checked" : ""}></td>`;
+        }
+        celdas += `<td class="col-horas" id="horas-${est.cedula}">${((marcados.filter(Boolean).length) * bloqueMin / 60).toFixed(2)}</td>`;
         const fila = document.createElement("tr");
-        fila.innerHTML = `
-          <td>${est.nombre} ${est.apellido}</td>
-          <td>
-            <div class="switch-presente" data-cedula="${est.cedula}">
-              <button type="button" class="btn-presente ${estadoActual === "presente" ? "marcado-presente" : ""}" data-valor="presente">Presente</button>
-              <button type="button" class="btn-ausente ${estadoActual === "ausente" ? "marcado-ausente" : ""}" data-valor="ausente">Ausente</button>
-            </div>
-          </td>
-        `;
+        fila.innerHTML = celdas;
         tbody.appendChild(fila);
       });
 
       zona.innerHTML = "";
       zona.appendChild(tabla);
 
-      tabla.querySelectorAll(".switch-presente").forEach((grupo) => {
-        grupo.querySelectorAll("button").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            const cedula = grupo.dataset.cedula;
-            if (!guardada.asistencia) guardada.asistencia = {};
-            guardada.asistencia[cedula] = btn.dataset.valor;
-            grupo.querySelectorAll("button").forEach((b) => b.classList.remove("marcado-presente", "marcado-ausente"));
-            btn.classList.add(btn.dataset.valor === "presente" ? "marcado-presente" : "marcado-ausente");
-          });
+      tabla.querySelectorAll(".chk-bloque").forEach((chk) => {
+        chk.addEventListener("change", () => {
+          const cedula = chk.dataset.cedula;
+          const b = Number(chk.dataset.bloque);
+          if (!guardada.ausencias) guardada.ausencias = {};
+          if (!guardada.ausencias[cedula]) guardada.ausencias[cedula] = new Array(numBloques).fill(false);
+          guardada.ausencias[cedula][b] = chk.checked;
+          const totalHoras = guardada.ausencias[cedula].filter(Boolean).length * bloqueMin / 60;
+          document.getElementById(`horas-${cedula}`).textContent = totalHoras.toFixed(2);
         });
       });
     }
 
-    chkFestivo.addEventListener("change", () => {
-      guardada.festivo = chkFestivo.checked;
-      pintarTablaEstudiantes();
-    });
-
+    chkFestivo.addEventListener("change", pintarTablaEstudiantes);
     pintarTablaEstudiantes();
 
     const botonGuardar = document.createElement("button");
@@ -302,13 +340,14 @@
     botonGuardar.addEventListener("click", async () => {
       const aviso = document.getElementById("aviso-asistencia");
       aviso.textContent = "Guardando...";
-      await setDoc(doc(db, "clases", grupoActual.claseAncla, "sesiones", fechaActiva), {
-        fecha: fechaActiva,
+      await setDoc(doc(db, "clases", grupoActual.claseAncla, "sesiones", fechaActivaTexto), {
+        fecha: fechaActivaTexto,
         festivo: chkFestivo.checked,
-        asistencia: chkFestivo.checked ? {} : (guardada.asistencia || {})
+        numBloques, bloqueMin,
+        ausencias: chkFestivo.checked ? {} : (guardada.ausencias || {})
       });
-      sesionesGuardadas[fechaActiva] = { fecha: fechaActiva, festivo: chkFestivo.checked, asistencia: guardada.asistencia || {} };
-      await registrarLog(usuario, rol, "Guardó asistencia", `${fechaActiva} — ${grupoActual.etiqueta}`);
+      sesionesGuardadas[fechaActivaTexto] = { fecha: fechaActivaTexto, festivo: chkFestivo.checked, numBloques, bloqueMin, ausencias: guardada.ausencias || {} };
+      await registrarLog(usuario, rol, "Guardó asistencia", `${fechaActivaTexto} — ${grupoActual.etiqueta}`);
       pintarFechas();
       pintarDia();
       document.getElementById("aviso-asistencia").textContent = "Asistencia guardada correctamente.";
@@ -320,6 +359,38 @@
     aviso.className = "aviso";
     aviso.id = "aviso-asistencia";
     cuerpo.appendChild(aviso);
+  }
+
+  function pintarResumenAsistencia() {
+    const cuerpo = document.getElementById("cuerpo-dia");
+    const horasTotales = {};
+    estudiantesActuales.forEach((est) => { horasTotales[est.cedula] = 0; });
+
+    Object.values(sesionesGuardadas).forEach((sesion) => {
+      if (sesion.festivo) return;
+      const bloqueMin = sesion.bloqueMin || 60;
+      Object.entries(sesion.ausencias || {}).forEach(([cedula, marcados]) => {
+        if (horasTotales[cedula] === undefined) horasTotales[cedula] = 0;
+        const bloquesMarcados = (marcados || []).filter(Boolean).length;
+        horasTotales[cedula] += bloquesMarcados * bloqueMin / 60;
+      });
+    });
+
+    const tabla = document.createElement("table");
+    tabla.className = "tabla-asistencia";
+    tabla.innerHTML = `<thead><tr><th>ID</th><th>Estudiante</th><th>Horas de inasistencia</th></tr></thead><tbody></tbody>`;
+    const tbody = tabla.querySelector("tbody");
+
+    estudiantesActuales.forEach((est) => {
+      const horas = horasTotales[est.cedula] || 0;
+      const alerta = horas >= 2 ? ` style="color:var(--error); font-weight:600;"` : "";
+      const fila = document.createElement("tr");
+      fila.innerHTML = `<td>${est.cedula}</td><td>${est.apellido} ${est.nombre}</td><td${alerta}>${horas.toFixed(2)}${horas >= 2 ? " ⚠" : ""}</td>`;
+      tbody.appendChild(fila);
+    });
+
+    cuerpo.innerHTML = "";
+    cuerpo.appendChild(tabla);
   }
 
   await cargarGrupos();
