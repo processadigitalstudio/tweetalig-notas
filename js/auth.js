@@ -11,7 +11,23 @@
 
 import { auth, db } from "./firebase-config.js?v=3";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
-import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { doc, getDoc, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+// Registra una acción en el log de auditoría — quién hizo qué y cuándo.
+// Se llama DESPUÉS de que una acción se guardó con éxito (crear, editar, borrar).
+async function registrarLog(usuario, rol, accion, detalle = "") {
+  try {
+    await addDoc(collection(db, "logs"), {
+      correo: usuario.email,
+      rol,
+      accion,
+      detalle,
+      fecha: serverTimestamp()
+    });
+  } catch (e) {
+    console.error("No se pudo registrar el log:", e);
+  }
+}
 
 function esperarUsuario() {
   return new Promise((resolve) => {
@@ -35,7 +51,8 @@ const MENU_POR_ROL = {
     ["Clases", "clases.html"],
     ["Estudiantes", "estudiantes.html"],
     ["Programas", "programas.html"],
-    ["Accesos y usuarios", "usuarios.html"]
+    ["Accesos y usuarios", "usuarios.html"],
+    ["Log de cambios", "logs.html"]
   ],
   coordinador: [
     ["Profesores", "profesores.html"],
@@ -124,4 +141,4 @@ async function cerrarSesion() {
   window.location.href = rutaLogin();
 }
 
-export { requireAuth, cerrarSesion, idPerfil };
+export { requireAuth, cerrarSesion, idPerfil, registrarLog };

@@ -18,6 +18,8 @@
     border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta);
   }
   .campo-nombre-programa { width: 100%; }
+  .fila-triple-programa { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 6px; }
+  .fila-triple-programa select { width: 100%; font-family: var(--fuente-cuerpo); font-size: 14px; padding: 9px 11px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
 
   .sedes-check { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; }
   .sedes-check label { display: flex; align-items: center; gap: 6px; font-weight: 400; margin-top: 0; font-size: 14px; color: var(--tinta); }
@@ -65,12 +67,31 @@
     </p>
 
     <table class="tabla-simple">
-      <thead><tr><th>Programa</th><th>Cortes</th><th>Sedes</th><th></th></tr></thead>
+      <thead><tr><th>Período</th><th>Programa</th><th>Cortes</th><th>Sedes</th><th></th></tr></thead>
       <tbody id="lista-programas"></tbody>
     </table>
 
     <div class="form-tarjeta">
       <h3 id="titulo-form" style="font-family: var(--fuente-display); color: var(--azul-profundo); margin: 0;">Crear programa</h3>
+
+      <label>Período académico de este programa</label>
+      <div class="fila-triple-programa">
+        <div>
+          <label style="font-size:12px;">Año</label>
+          <select id="anio-programa"></select>
+        </div>
+        <div>
+          <label style="font-size:12px;">Periodo</label>
+          <select id="periodo-programa">
+            <option value="1">1</option>
+            <option value="2">2</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px;">Ciclo</label>
+          <select id="ciclo-programa"></select>
+        </div>
+      </div>
 
       <label for="nombre-programa">Tipo de programa</label>
       <select id="nombre-programa" class="campo-nombre-programa">
@@ -96,11 +117,34 @@
 </div>
 
 <script type="module">
-  import { requireAuth } from "../js/auth.js?v=3";
+  import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, doc, setDoc, addDoc, getDocs, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-  await requireAuth(["master"]);
+  const { usuario, rol } = await requireAuth(["master"]);
+
+  function cargarPeriodoAcademico() {
+    const anioActual = new Date().getFullYear();
+    const anioBase = Math.min(2026, anioActual);
+    const selectAnio = document.getElementById("anio-programa");
+    selectAnio.innerHTML = "";
+    for (let a = anioBase; a <= anioBase + 9; a++) {
+      const opt = document.createElement("option");
+      opt.value = a;
+      opt.textContent = a;
+      if (a === anioActual) opt.selected = true;
+      selectAnio.appendChild(opt);
+    }
+    const selectCiclo = document.getElementById("ciclo-programa");
+    selectCiclo.innerHTML = "";
+    for (let c = 1; c <= 15; c++) {
+      const opt = document.createElement("option");
+      opt.value = c;
+      opt.textContent = c;
+      selectCiclo.appendChild(opt);
+    }
+  }
+  cargarPeriodoAcademico();
 
   let sedes = [];
   let idEnEdicion = null;
@@ -207,6 +251,9 @@
 
   function leerFormulario() {
     const nombre = document.getElementById("nombre-programa").value.trim();
+    const anio = Number(document.getElementById("anio-programa").value);
+    const periodo = Number(document.getElementById("periodo-programa").value);
+    const ciclo = Number(document.getElementById("ciclo-programa").value);
     const sedesMarcadas = [...document.querySelectorAll("#sedes-check input:checked")].map((i) => i.value);
 
     const cortes = [...document.querySelectorAll(".bloque-corte")].map((bloque) => {
@@ -221,7 +268,7 @@
       };
     });
 
-    return { nombre, sedes: sedesMarcadas, cortes };
+    return { nombre, anio, periodo, ciclo, sedes: sedesMarcadas, cortes };
   }
 
   function validar(datos) {
@@ -249,6 +296,9 @@
     idEnEdicion = id;
     document.getElementById("titulo-form").textContent = `Editando: ${datos.nombre}`;
     document.getElementById("nombre-programa").value = datos.nombre;
+    document.getElementById("anio-programa").value = datos.anio || new Date().getFullYear();
+    document.getElementById("periodo-programa").value = datos.periodo || 1;
+    document.getElementById("ciclo-programa").value = datos.ciclo || 1;
     document.getElementById("boton-cancelar-edicion").style.display = "inline-block";
 
     document.querySelectorAll("#sedes-check input").forEach((i) => {
@@ -285,6 +335,7 @@
         : "Todas";
       const fila = document.createElement("tr");
       fila.innerHTML = `
+        <td>${p.anio || "—"}-${p.periodo || "—"} / Ciclo ${p.ciclo || "—"}</td>
         <td>${p.nombre}</td>
         <td>${(p.cortes || []).length}</td>
         <td>${nombresSedes}</td>
@@ -299,6 +350,7 @@
     cuerpo.querySelectorAll(".btn-borrar").forEach((b) => b.addEventListener("click", async () => {
       if (confirm("¿Borrar este programa? Las clases que lo usen quedarán sin esquema de notas asignado.")) {
         await deleteDoc(doc(db, "programas", b.dataset.id));
+        await registrarLog(usuario, rol, "Borró programa", b.dataset.id);
         cargarLista();
       }
     }));
@@ -317,8 +369,10 @@
 
     if (idEnEdicion) {
       await setDoc(doc(db, "programas", idEnEdicion), datos);
+      await registrarLog(usuario, rol, "Editó programa", datos.nombre);
     } else {
       await addDoc(collection(db, "programas"), datos);
+      await registrarLog(usuario, rol, "Creó programa", datos.nombre);
     }
 
     aviso.style.color = "#2E6E4E";

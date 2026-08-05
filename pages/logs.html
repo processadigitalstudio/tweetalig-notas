@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tweetalig — Log de cambios</title>
+<link rel="stylesheet" href="../css/styles.css?v=2">
+<style>
+  .tabla-simple { width: 100%; border-collapse: collapse; max-width: 900px; }
+  .tabla-simple th, .tabla-simple td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--linea); font-size: 13px; }
+  .tabla-simple th { color: var(--tinta-suave); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .tabla-simple td.fecha { color: var(--tinta-suave); white-space: nowrap; }
+  .cargando { color: var(--tinta-suave); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <nav class="app-nav">
+    <div class="logo-nav-wrap"><img src="../assets/logo-tweetalig.png" alt="Tweetalig"></div>
+    <h1>Portal de notas</h1>
+    <div id="menu-rol"></div>
+    <a href="#" id="link-salir">Cerrar sesión</a>
+  </nav>
+  <main class="app-contenido">
+    <span class="etiqueta-rol">Log de cambios</span>
+    <h2>Historial de acciones</h2>
+    <p style="color: var(--tinta-suave); max-width: 560px; margin-top: -8px;">
+      Registro de quién creó, editó o borró información en el sistema. Muestra las últimas 200 acciones, más reciente primero.
+    </p>
+
+    <p class="cargando" id="cargando">Cargando...</p>
+    <table class="tabla-simple" id="tabla-log" style="display:none;">
+      <thead><tr><th>Fecha</th><th>Quién</th><th>Rol</th><th>Acción</th><th>Detalle</th></tr></thead>
+      <tbody id="lista-log"></tbody>
+    </table>
+  </main>
+</div>
+
+<script type="module">
+  import { requireAuth } from "../js/auth.js?v=3";
+  import { db } from "../js/firebase-config.js?v=3";
+  import { collection, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+  await requireAuth(["master"]);
+
+  const NOMBRE_ROL = { master: "Master", coordinador: "Coordinador", secretaria: "Secretaria", profesor: "Profesor" };
+
+  function formatearFecha(ts) {
+    if (!ts?.toDate) return "—";
+    const f = ts.toDate();
+    return f.toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" });
+  }
+
+  const q = query(collection(db, "logs"), orderBy("fecha", "desc"), limit(200));
+  const snap = await getDocs(q);
+
+  document.getElementById("cargando").style.display = "none";
+  document.getElementById("tabla-log").style.display = "table";
+
+  const cuerpo = document.getElementById("lista-log");
+  if (snap.empty) {
+    cuerpo.innerHTML = "<tr><td colspan='5'>Todavía no hay acciones registradas.</td></tr>";
+  } else {
+    snap.forEach((d) => {
+      const l = d.data();
+      const fila = document.createElement("tr");
+      fila.innerHTML = `
+        <td class="fecha">${formatearFecha(l.fecha)}</td>
+        <td>${l.correo || "—"}</td>
+        <td>${NOMBRE_ROL[l.rol] || l.rol || "—"}</td>
+        <td>${l.accion || "—"}</td>
+        <td>${l.detalle || ""}</td>
+      `;
+      cuerpo.appendChild(fila);
+    });
+  }
+</script>
+</body>
+</html>

@@ -55,11 +55,11 @@
 </div>
 
 <script type="module">
-  import { requireAuth } from "../js/auth.js?v=3";
+  import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { db, DOMINIO_PERMITIDO } from "../js/firebase-config.js?v=3";
   import { collection, doc, setDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-  const { rol } = await requireAuth(["master", "coordinador", "secretaria"]);
+  const { usuario, rol } = await requireAuth(["master", "coordinador", "secretaria"]);
 
   async function cargarSedes() {
     const select = document.getElementById("ciudad");
@@ -112,6 +112,7 @@
     await setDoc(doc(db, "usuarios", correo), {
       nombre, rol: "profesor", ciudadId, ciudadNombre
     });
+    await registrarLog(usuario, rol, "Registró profesor", `${nombre} (${correo})`);
 
     aviso.style.color = "#2E6E4E";
     aviso.textContent = `Profesor ${nombre} registrado.`;

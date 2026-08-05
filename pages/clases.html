@@ -101,11 +101,11 @@
 </div>
 
 <script type="module">
-  import { requireAuth } from "../js/auth.js?v=3";
+  import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, addDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-  const { rol, perfil } = await requireAuth(["master", "coordinador", "secretaria"]);
+  const { usuario, rol, perfil } = await requireAuth(["master", "coordinador", "secretaria"]);
 
   async function cargarSedes() {
     const select = document.getElementById("ciudad");
@@ -141,7 +141,8 @@
   }
 
   // Coordinadora/secretaria con sede asignada solo ven los programas que
-  // aplican a su sede (o los que están marcados para "todas las sedes").
+  // aplican a su sede. Además, solo se muestran los programas que
+  // coinciden con el año/periodo/ciclo elegido arriba para esta clase.
   async function cargarProgramas() {
     const select = document.getElementById("programa");
     select.innerHTML = "";
@@ -154,12 +155,17 @@
     const miSede = perfil?.ciudadId;
     const restringirPorSede = (rol === "coordinador" || rol === "secretaria") && miSede;
 
+    const anioClase = Number(document.getElementById("anio").value);
+    const periodoClase = Number(document.getElementById("periodo").value);
+    const cicloClase = Number(document.getElementById("ciclo").value);
+
     let alguno = false;
     snap.forEach((d) => {
       const p = d.data();
       const sedesPermitidas = p.sedes || [];
       const aplicaAquiTambien = sedesPermitidas.length === 0 || !restringirPorSede || sedesPermitidas.includes(miSede);
-      if (!aplicaAquiTambien) return;
+      const mismoPeriodo = p.anio === anioClase && p.periodo === periodoClase && p.ciclo === cicloClase;
+      if (!aplicaAquiTambien || !mismoPeriodo) return;
       alguno = true;
       const opt = document.createElement("option");
       opt.value = d.id;
@@ -167,7 +173,7 @@
       select.appendChild(opt);
     });
 
-    if (!alguno) select.innerHTML = "<option value=''>No hay programas disponibles para tu sede</option>";
+    if (!alguno) select.innerHTML = "<option value=''>No hay programas para ese período/sede — créalo primero</option>";
   }
 
   function cargarPeriodoAcademico() {
@@ -236,6 +242,7 @@
       programaNombre: selectPrograma.options[selectPrograma.selectedIndex].textContent,
       estudiantes: []
     });
+    await registrarLog(usuario, rol, "Creó clase", `${nivel} - ${grupo} (${anio}-${periodo}, ciclo ${ciclo})`);
 
     aviso.style.color = "#2E6E4E";
     aviso.textContent = `Clase ${nivel} - ${grupo} creada (${anio}-${periodo}, ciclo ${ciclo}).`;
@@ -246,6 +253,10 @@
   });
 
   cargarPeriodoAcademico();
+  document.getElementById("anio").addEventListener("change", cargarProgramas);
+  document.getElementById("periodo").addEventListener("change", cargarProgramas);
+  document.getElementById("ciclo").addEventListener("change", cargarProgramas);
+
   await cargarSedes();
   await cargarProfesores();
   await cargarProgramas();

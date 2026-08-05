@@ -78,6 +78,16 @@ service cloud.firestore {
       allow write: if esGestor();
     }
 
+    // Colección "logs": historial de auditoría. Cualquier usuario logueado
+    // puede CREAR una entrada (registra sus propias acciones), pero nadie
+    // puede editar ni borrar el historial — ni siquiera el MASTER — para
+    // que sea un registro confiable. Solo el MASTER puede leerlo.
+    match /logs/{id} {
+      allow read: if esMaster();
+      allow create: if estaLogueado();
+      allow update, delete: if false;
+    }
+
     // Colección "programas": Regular, Distancia, etc. — cada uno define
     // sus propios cortes, pesos y notas. Solo el MASTER los crea/edita.
     match /programas/{id} {
