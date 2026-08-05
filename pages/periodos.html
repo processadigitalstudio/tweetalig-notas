@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tweetalig — Períodos académicos</title>
+<link rel="stylesheet" href="../css/styles.css?v=2">
+<style>
+  .tabla-simple { width: 100%; border-collapse: collapse; max-width: 780px; margin-bottom: 28px; }
+  .tabla-simple th, .tabla-simple td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--linea); font-size: 14px; }
+  .tabla-simple th { color: var(--tinta-suave); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .tabla-simple button { background: none; border: none; font-size: 13px; cursor: pointer; text-decoration: underline; padding: 0; }
+  .btn-activar { color: #2E6E4E; }
+  .btn-desactivar { color: var(--error); }
+  .estado-activo { color: #2E6E4E; font-weight: 600; }
+  .estado-inactivo { color: var(--tinta-suave); }
+  .form-tarjeta { background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio); padding: 24px 28px; max-width: 480px; }
+  .form-tarjeta label { display: block; font-size: 13px; font-weight: 500; color: var(--tinta-suave); margin-top: 12px; margin-bottom: 4px; }
+  .form-tarjeta input, .form-tarjeta select { width: 100%; font-family: var(--fuente-cuerpo); font-size: 14px; padding: 9px 11px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
+  .fila-triple { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .boton-primario { max-width: 220px; margin-top: 18px; }
+  .aviso { font-size: 13px; margin-top: 10px; min-height: 18px; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <nav class="app-nav">
+    <div class="logo-nav-wrap"><img src="../assets/logo-tweetalig.png" alt="Tweetalig"></div>
+    <h1>Portal de notas</h1>
+    <div id="menu-rol"></div>
+    <a href="#" id="link-salir">Cerrar sesión</a>
+  </nav>
+  <main class="app-contenido">
+    <span class="etiqueta-rol">Períodos académicos</span>
+    <h2>Fechas y estado de cada período</h2>
+    <p style="color: var(--tinta-suave); max-width: 600px; margin-top: -8px;">
+      Un período inactivo indica que ya terminó — sirve como referencia para saber
+      qué clases ya no deben recibir cambios. Coordinadores y secretarias pueden
+      activar/desactivar desde aquí.
+    </p>
+
+    <table class="tabla-simple">
+      <thead><tr><th>Período</th><th>Inicio</th><th>Fin</th><th>Estado</th><th></th></tr></thead>
+      <tbody id="lista-periodos"></tbody>
+    </table>
+
+    <div class="form-tarjeta">
+      <h3 style="font-family: var(--fuente-display); color: var(--azul-profundo); margin: 0;">Crear / actualizar período</h3>
+
+      <label>Período</label>
+      <div class="fila-triple">
+        <select id="anio"></select>
+        <select id="periodo"><option value="1">1</option><option value="2">2</option></select>
+        <select id="ciclo"></select>
+      </div>
+
+      <label for="inicio">Fecha de inicio</label>
+      <input type="date" id="inicio">
+
+      <label for="fin">Fecha de fin</label>
+      <input type="date" id="fin">
+
+      <label style="display:flex; align-items:center; gap:8px; font-weight:400;">
+        <input type="checkbox" id="activo" style="width:auto;" checked> Período activo
+      </label>
+
+      <button id="boton-guardar" class="boton-primario">Guardar período</button>
+      <p class="aviso" id="aviso"></p>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+  import { requireAuth, registrarLog } from "../js/auth.js?v=3";
+  import { db } from "../js/firebase-config.js?v=3";
+  import { collection, doc, setDoc, getDocs, orderBy, query } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+  const { usuario, rol } = await requireAuth(["master", "admin", "coordinador", "secretaria"]);
+
+  function idPeriodo(anio, periodo, ciclo) {
+    return `${anio}-${periodo}-${ciclo}`;
+  }
+
+  function cargarSelectoresPeriodo() {
+    const anioActual = new Date().getFullYear();
+    const anioBase = Math.min(2026, anioActual);
+    const selectAnio = document.getElementById("anio");
+    selectAnio.innerHTML = "";
+    for (let a = anioBase; a <= anioBase + 9; a++) {
+      const opt = document.createElement("option");
+      opt.value = a; opt.textContent = a;
+      if (a === anioActual) opt.selected = true;
+      selectAnio.appendChild(opt);
+    }
+    const selectCiclo = document.getElementById("ciclo");
+    selectCiclo.innerHTML = "";
+    for (let c = 1; c <= 15; c++) {
+      const opt = document.createElement("option");
+      opt.value = c; opt.textContent = c;
+      selectCiclo.appendChild(opt);
+    }
+  }
+
+  async function cargarLista() {
+    const cuerpo = document.getElementById("lista-periodos");
+    cuerpo.innerHTML = "";
+    const snap = await getDocs(collection(db, "periodos"));
+    const docs = snap.docs.sort((a, b) => (a.id < b.id ? 1 : -1));
+    if (docs.length === 0) {
+      cuerpo.innerHTML = "<tr><td colspan='5'>Todavía no hay períodos creados.</td></tr>";
+      return;
+    }
+    docs.forEach((d) => {
+      const p = d.data();
+      const fila = document.createElement("tr");
+      fila.innerHTML = `
+        <td>${p.anio}-${p.periodo} / Ciclo ${p.ciclo}</td>
+        <td>${p.fechaInicio || "—"}</td>
+        <td>${p.fechaFin || "—"}</td>
+        <td class="${p.activo ? "estado-activo" : "estado-inactivo"}">${p.activo ? "Activo" : "Inactivo"}</td>
+        <td><button class="${p.activo ? "btn-desactivar" : "btn-activar"}" data-id="${d.id}" data-activo="${p.activo}">${p.activo ? "Desactivar" : "Activar"}</button></td>
+      `;
+      cuerpo.appendChild(fila);
+    });
+
+    cuerpo.querySelectorAll("button[data-id]").forEach((b) => b.addEventListener("click", async () => {
+      const nuevoEstado = b.dataset.activo !== "true";
+      await setDoc(doc(db, "periodos", b.dataset.id), { activo: nuevoEstado }, { merge: true });
+      await registrarLog(usuario, rol, nuevoEstado ? "Activó período" : "Desactivó período", b.dataset.id);
+      cargarLista();
+    }));
+  }
+
+  document.getElementById("boton-guardar").addEventListener("click", async () => {
+    const anio = Number(document.getElementById("anio").value);
+    const periodo = Number(document.getElementById("periodo").value);
+    const ciclo = Number(document.getElementById("ciclo").value);
+    const fechaInicio = document.getElementById("inicio").value;
+    const fechaFin = document.getElementById("fin").value;
+    const activo = document.getElementById("activo").checked;
+    const aviso = document.getElementById("aviso");
+
+    const id = idPeriodo(anio, periodo, ciclo);
+    await setDoc(doc(db, "periodos", id), { anio, periodo, ciclo, fechaInicio, fechaFin, activo });
+    await registrarLog(usuario, rol, "Guardó período", id);
+
+    aviso.style.color = "#2E6E4E";
+    aviso.textContent = `Período ${id} guardado.`;
+    cargarLista();
+  });
+
+  cargarSelectoresPeriodo();
+  await cargarLista();
+</script>
+</body>
+</html>

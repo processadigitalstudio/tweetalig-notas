@@ -9,10 +9,13 @@
   .tabla-simple { width: 100%; border-collapse: collapse; max-width: 780px; margin-bottom: 28px; }
   .tabla-simple th, .tabla-simple td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--linea); font-size: 14px; }
   .tabla-simple th { color: var(--tinta-suave); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .tabla-simple button { background: none; border: none; color: var(--error); font-size: 13px; cursor: pointer; text-decoration: underline; padding: 0; }
   .form-tarjeta { background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio); padding: 24px 28px; max-width: 480px; }
   .form-tarjeta label { display: block; font-size: 13px; font-weight: 500; color: var(--tinta-suave); margin-top: 12px; margin-bottom: 4px; }
-  .form-tarjeta input, .form-tarjeta select { width: 100%; font-family: var(--fuente-cuerpo); font-size: 14px; padding: 9px 11px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
-  .form-tarjeta input:focus, .form-tarjeta select:focus { outline: 2px solid var(--azul-profundo); background: var(--superficie); }
+  .form-tarjeta input { width: 100%; font-family: var(--fuente-cuerpo); font-size: 14px; padding: 9px 11px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
+  .form-tarjeta input:focus { outline: 2px solid var(--azul-profundo); background: var(--superficie); }
+  .sedes-check { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; }
+  .sedes-check label { display: flex; align-items: center; gap: 6px; font-weight: 400; margin-top: 0; font-size: 14px; color: var(--tinta); }
   .boton-primario { max-width: 220px; margin-top: 18px; }
   .aviso { font-size: 13px; margin-top: 10px; min-height: 18px; }
 </style>
@@ -29,11 +32,13 @@
     <span class="etiqueta-rol">Profesores</span>
     <h2>Profesores registrados</h2>
     <p style="color: var(--tinta-suave); max-width: 560px; margin-top: -8px;">
-      Registra al profesor con su correo de Tweetalig. En cuanto inicie sesión con Google por primera vez, el sistema ya lo reconoce con este rol.
+      Registra al profesor con su correo de Tweetalig y marca todas las sedes donde da clase
+      (marca varias si dicta programas a distancia con estudiantes de más de una sede).
+      En cuanto inicie sesión con Google por primera vez, el sistema ya lo reconoce con este rol.
     </p>
 
     <table class="tabla-simple">
-      <thead><tr><th>Nombre</th><th>Correo</th><th>Sede</th></tr></thead>
+      <thead><tr><th>Nombre</th><th>Correo</th><th>Sedes</th><th></th></tr></thead>
       <tbody id="lista-profesores"></tbody>
     </table>
 
@@ -45,8 +50,8 @@
       <label for="correo">Correo (@tweetalig.edu.co)</label>
       <input type="email" id="correo" placeholder="maria.torres@tweetalig.edu.co">
 
-      <label for="ciudad">Sede</label>
-      <select id="ciudad"></select>
+      <label>Sedes donde dicta</label>
+      <div class="sedes-check" id="sedes-check"></div>
 
       <button id="boton-guardar" class="boton-primario">Registrar profesor</button>
       <p class="aviso" id="aviso"></p>
@@ -57,23 +62,25 @@
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { db, DOMINIO_PERMITIDO } from "../js/firebase-config.js?v=3";
-  import { collection, doc, setDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { collection, doc, setDoc, deleteDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-  const { usuario, rol } = await requireAuth(["master", "coordinador", "secretaria"]);
+  const { usuario, rol } = await requireAuth(["master", "admin", "coordinador", "secretaria"]);
+
+  let sedes = [];
 
   async function cargarSedes() {
-    const select = document.getElementById("ciudad");
-    select.innerHTML = "";
     const snap = await getDocs(collection(db, "ciudades"));
-    if (snap.empty) {
-      select.innerHTML = "<option value=''>No hay sedes registradas todavía</option>";
+    sedes = snap.docs.map((d) => ({ id: d.id, nombre: d.data().nombre }));
+    const cont = document.getElementById("sedes-check");
+    cont.innerHTML = "";
+    if (sedes.length === 0) {
+      cont.innerHTML = "<p style='color:var(--error); font-size:13px;'>No hay sedes registradas todavía.</p>";
       return;
     }
-    snap.forEach((d) => {
-      const opt = document.createElement("option");
-      opt.value = d.id;
-      opt.textContent = d.data().nombre;
-      select.appendChild(opt);
+    sedes.forEach((s) => {
+      const lbl = document.createElement("label");
+      lbl.innerHTML = `<input type="checkbox" value="${s.id}" data-nombre="${s.nombre}"> ${s.nombre}`;
+      cont.appendChild(lbl);
     });
   }
 
@@ -84,18 +91,30 @@
     const snap = await getDocs(q);
     snap.forEach((d) => {
       const p = d.data();
+      const nombresSedes = (p.ciudadNombres || [p.ciudadNombre]).filter(Boolean).join(", ");
       const fila = document.createElement("tr");
-      fila.innerHTML = `<td>${p.nombre || "—"}</td><td>${d.id}</td><td>${p.ciudadNombre || "—"}</td>`;
+      fila.innerHTML = `
+        <td>${p.nombre || "—"}</td>
+        <td>${d.id}</td>
+        <td>${nombresSedes || "—"}</td>
+        <td><button class="btn-borrar" data-id="${d.id}" data-nombre="${p.nombre}">Quitar acceso</button></td>
+      `;
       cuerpo.appendChild(fila);
     });
+
+    cuerpo.querySelectorAll(".btn-borrar").forEach((b) => b.addEventListener("click", async () => {
+      if (confirm(`¿Quitar el acceso de ${b.dataset.nombre}? Ya no podrá iniciar sesión, pero las notas y clases que ya cargó NO se borran.`)) {
+        await deleteDoc(doc(db, "usuarios", b.dataset.id));
+        await registrarLog(usuario, rol, "Quitó acceso a profesor", `${b.dataset.nombre} (${b.dataset.id})`);
+        cargarProfesores();
+      }
+    }));
   }
 
   document.getElementById("boton-guardar").addEventListener("click", async () => {
     const nombre = document.getElementById("nombre").value.trim();
     const correo = document.getElementById("correo").value.trim().toLowerCase();
-    const selectCiudad = document.getElementById("ciudad");
-    const ciudadId = selectCiudad.value;
-    const ciudadNombre = selectCiudad.options[selectCiudad.selectedIndex]?.textContent || "";
+    const marcadas = [...document.querySelectorAll("#sedes-check input:checked")];
     const aviso = document.getElementById("aviso");
 
     if (!nombre || !correo) {
@@ -108,16 +127,27 @@
       aviso.textContent = `El correo debe terminar en @${DOMINIO_PERMITIDO}.`;
       return;
     }
+    if (marcadas.length === 0) {
+      aviso.style.color = "var(--error)";
+      aviso.textContent = "Marca al menos una sede.";
+      return;
+    }
+
+    const ciudadIds = marcadas.map((i) => i.value);
+    const ciudadNombres = marcadas.map((i) => i.dataset.nombre);
 
     await setDoc(doc(db, "usuarios", correo), {
-      nombre, rol: "profesor", ciudadId, ciudadNombre
+      nombre, rol: "profesor",
+      ciudadId: ciudadIds[0], ciudadNombre: ciudadNombres[0], // compatibilidad con lo anterior
+      ciudadIds, ciudadNombres
     });
-    await registrarLog(usuario, rol, "Registró profesor", `${nombre} (${correo})`);
+    await registrarLog(usuario, rol, "Registró profesor", `${nombre} (${correo}) — ${ciudadNombres.join(", ")}`);
 
     aviso.style.color = "#2E6E4E";
     aviso.textContent = `Profesor ${nombre} registrado.`;
     document.getElementById("nombre").value = "";
     document.getElementById("correo").value = "";
+    document.querySelectorAll("#sedes-check input").forEach((i) => (i.checked = false));
     cargarProfesores();
   });
 

@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Tweetalig — Panel</title>
 <link rel="stylesheet" href="../css/styles.css?v=2">
+<style>
+  .tabla-simple { width: 100%; border-collapse: collapse; max-width: 900px; margin-top: 24px; }
+  .tabla-simple th, .tabla-simple td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--linea); font-size: 14px; }
+  .tabla-simple th { color: var(--tinta-suave); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .bloque-periodo { margin-top: 28px; }
+  .bloque-periodo h3 { font-family: var(--fuente-display); font-size: 17px; color: var(--azul-profundo); margin: 0 0 4px; }
+  .bloque-periodo p.rango { font-size: 12px; color: var(--tinta-suave); margin: 0; }
+</style>
 </head>
 <body>
 
@@ -20,14 +28,19 @@
     <span class="etiqueta-rol" id="etiqueta-rol"></span>
     <h2 id="titulo-bienvenida">Cargando...</h2>
     <p id="texto-bienvenida"></p>
+
+    <div id="contenedor-periodos"></div>
   </main>
 </div>
 
 <script type="module">
   import { requireAuth } from "../js/auth.js?v=3";
+  import { db } from "../js/firebase-config.js?v=3";
+  import { collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
   const NOMBRE_ROL = {
     master: "Master",
+    admin: "Admin",
     coordinador: "Coordinador académico",
     secretaria: "Secretaria académica",
     profesor: "Profesor"
@@ -38,6 +51,56 @@
   document.getElementById("etiqueta-rol").textContent = NOMBRE_ROL[rol] || rol;
   document.getElementById("titulo-bienvenida").textContent = `Hola, ${perfil.nombre || usuario.email}`;
   document.getElementById("texto-bienvenida").textContent = "Elige una opción del menú para comenzar.";
+
+  // Solo tiene sentido mostrar esto a roles de gestión (no al profesor, que
+  // tiene su propia vista de "mis clases" cuando construyamos esa pantalla).
+  if (["master", "admin", "coordinador", "secretaria"].includes(rol)) {
+    const contenedor = document.getElementById("contenedor-periodos");
+
+    const snapPeriodos = await getDocs(query(collection(db, "periodos"), where("activo", "==", true)));
+
+    if (snapPeriodos.empty) {
+      contenedor.innerHTML = "<p style='color: var(--tinta-suave); margin-top: 24px;'>No hay períodos marcados como activos todavía. Ve a \"Períodos académicos\" para crear/activar uno.</p>";
+    } else {
+      for (const dPeriodo of snapPeriodos.docs) {
+        const per = dPeriodo.data();
+        const q = query(
+          collection(db, "clases"),
+          where("anio", "==", per.anio),
+          where("periodo", "==", per.periodo),
+          where("ciclo", "==", per.ciclo)
+        );
+        const snapClases = await getDocs(q);
+
+        const bloque = document.createElement("div");
+        bloque.className = "bloque-periodo";
+        bloque.innerHTML = `
+          <h3>${per.anio}-${per.periodo} / Ciclo ${per.ciclo}</h3>
+          <p class="rango">${per.fechaInicio || "sin fecha de inicio"} → ${per.fechaFin || "sin fecha de fin"} · ${snapClases.size} clase(s) activa(s)</p>
+        `;
+
+        if (!snapClases.empty) {
+          const tabla = document.createElement("table");
+          tabla.className = "tabla-simple";
+          tabla.innerHTML = `
+            <thead><tr><th>Nivel</th><th>Grupo</th><th>Profesor</th><th>Horarios</th><th>Sede</th><th>Programa</th></tr></thead>
+            <tbody></tbody>
+          `;
+          const cuerpo = tabla.querySelector("tbody");
+          snapClases.forEach((d) => {
+            const c = d.data();
+            const horariosTexto = (c.horarios || []).map((h) => `${h.dia} ${h.horaInicio}-${h.horaFin}`).join(", ") || "—";
+            const fila = document.createElement("tr");
+            fila.innerHTML = `<td>${c.nivel}</td><td>${c.grupo}</td><td>${c.docenteNombre || "—"}</td><td>${horariosTexto}</td><td>${c.ciudadNombre || "—"}</td><td>${c.programaNombre || "—"}</td>`;
+            cuerpo.appendChild(fila);
+          });
+          bloque.appendChild(tabla);
+        }
+
+        contenedor.appendChild(bloque);
+      }
+    }
+  }
 </script>
 </body>
 </html>

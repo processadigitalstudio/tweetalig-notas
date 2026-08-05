@@ -34,7 +34,7 @@
     </p>
 
     <table class="tabla-simple">
-      <thead><tr><th>Período</th><th>Nivel</th><th>Grupo</th><th>Profesor</th><th>Día</th><th>Hora</th><th>Sede</th><th>Programa</th></tr></thead>
+      <thead><tr><th>Período</th><th>Nivel</th><th>Grupo</th><th>Profesor</th><th>Horarios</th><th>Sede</th><th>Programa</th><th></th></tr></thead>
       <tbody id="lista-clases"></tbody>
     </table>
 
@@ -74,19 +74,9 @@
       <label for="docente">Profesor</label>
       <select id="docente"></select>
 
-      <div class="fila-doble">
-        <div>
-          <label for="dia">Día</label>
-          <select id="dia">
-            <option>Lunes</option><option>Martes</option><option>Miércoles</option>
-            <option>Jueves</option><option>Viernes</option><option>Sábado</option>
-          </select>
-        </div>
-        <div>
-          <label for="hora">Hora</label>
-          <input type="time" id="hora">
-        </div>
-      </div>
+      <label style="margin-top:0;">Horarios de esta clase</label>
+      <div id="lista-horarios"></div>
+      <button type="button" class="boton-secundario" id="boton-agregar-horario">+ Agregar horario</button>
 
       <label for="ciudad">Sede</label>
       <select id="ciudad"></select>
@@ -100,12 +90,19 @@
   </main>
 </div>
 
+<style>
+  .fila-horario { display: grid; grid-template-columns: 1fr 1fr 1fr 32px; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .fila-horario select, .fila-horario input { width: 100%; font-family: var(--fuente-cuerpo); font-size: 13px; padding: 8px 9px; border: 1px solid var(--linea); border-radius: 6px; background: var(--fondo); color: var(--tinta); }
+  .boton-quitar-horario { background: none; border: none; color: var(--error); cursor: pointer; font-size: 15px; }
+  .boton-secundario { font-family: var(--fuente-cuerpo); font-size: 13px; font-weight: 500; color: var(--azul-profundo); background: none; border: 1px dashed var(--azul-profundo); border-radius: 6px; padding: 7px 12px; cursor: pointer; margin: 6px 0 14px; }
+</style>
+
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { db } from "../js/firebase-config.js?v=3";
-  import { collection, addDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { collection, addDoc, updateDoc, doc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-  const { usuario, rol, perfil } = await requireAuth(["master", "coordinador", "secretaria"]);
+  const { usuario, rol, perfil } = await requireAuth(["master", "admin", "coordinador", "secretaria"]);
 
   async function cargarSedes() {
     const select = document.getElementById("ciudad");
@@ -123,19 +120,53 @@
     });
   }
 
+  function agregarFilaHorario(datos = null) {
+    const cont = document.getElementById("lista-horarios");
+    const fila = document.createElement("div");
+    fila.className = "fila-horario";
+    fila.innerHTML = `
+      <select class="input-dia-horario">
+        <option>Lunes</option><option>Martes</option><option>Miércoles</option>
+        <option>Jueves</option><option>Viernes</option><option>Sábado</option>
+      </select>
+      <input type="time" class="input-inicio-horario" value="${datos?.horaInicio || ""}">
+      <input type="time" class="input-fin-horario" value="${datos?.horaFin || ""}">
+      <button type="button" class="boton-quitar-horario" title="Quitar">✕</button>
+    `;
+    if (datos?.dia) fila.querySelector(".input-dia-horario").value = datos.dia;
+    fila.querySelector(".boton-quitar-horario").addEventListener("click", () => fila.remove());
+    cont.appendChild(fila);
+  }
+
+  function leerHorarios() {
+    return [...document.querySelectorAll(".fila-horario")].map((fila) => ({
+      dia: fila.querySelector(".input-dia-horario").value,
+      horaInicio: fila.querySelector(".input-inicio-horario").value,
+      horaFin: fila.querySelector(".input-fin-horario").value
+    }));
+  }
+
+  function textoHorarios(horarios) {
+    if (!horarios || horarios.length === 0) return "—";
+    return horarios.map((h) => `${h.dia} ${h.horaInicio}-${h.horaFin}`).join(", ");
+  }
+
+  document.getElementById("boton-agregar-horario").addEventListener("click", () => agregarFilaHorario());
+
   async function cargarProfesores() {
     const select = document.getElementById("docente");
     select.innerHTML = "";
     const q = query(collection(db, "usuarios"), where("rol", "==", "profesor"));
     const snap = await getDocs(q);
-    if (snap.empty) {
+    listaProfesores = snap.docs.map((d) => ({ correo: d.id, nombre: d.data().nombre }));
+    if (listaProfesores.length === 0) {
       select.innerHTML = "<option value=''>Registra un profesor primero</option>";
       return;
     }
-    snap.forEach((d) => {
+    listaProfesores.forEach((p) => {
       const opt = document.createElement("option");
-      opt.value = d.id; // correo
-      opt.textContent = d.data().nombre;
+      opt.value = p.correo;
+      opt.textContent = p.nombre;
       select.appendChild(opt);
     });
   }
@@ -206,10 +237,39 @@
     snap.forEach((d) => {
       const c = d.data();
       const periodoTexto = `${c.anio || "—"}-${c.periodo || "—"} / Ciclo ${c.ciclo || "—"}`;
+      const opcionesProfesor = listaProfesores.map((p) =>
+        `<option value="${p.correo}" ${p.correo === c.docenteCorreo ? "selected" : ""}>${p.nombre}</option>`
+      ).join("");
       const fila = document.createElement("tr");
-      fila.innerHTML = `<td>${periodoTexto}</td><td>${c.nivel}</td><td>${c.grupo}</td><td>${c.docenteNombre || "—"}</td><td>${c.dia}</td><td>${c.hora}</td><td>${c.ciudadNombre || "—"}</td><td>${c.programaNombre || "—"}</td>`;
+      fila.innerHTML = `
+        <td>${periodoTexto}</td><td>${c.nivel}</td><td>${c.grupo}</td>
+        <td>
+          <span class="nombre-docente" data-id="${d.id}">${c.docenteNombre || "—"}</span>
+          <select class="select-reasignar" data-id="${d.id}" style="display:none; font-size:12px; padding:3px;">${opcionesProfesor}</select>
+        </td>
+        <td>${textoHorarios(c.horarios)}</td><td>${c.ciudadNombre || "—"}</td><td>${c.programaNombre || "—"}</td>
+        <td><button class="btn-reasignar" data-id="${d.id}">Cambiar profesor</button></td>
+      `;
       cuerpo.appendChild(fila);
     });
+
+    cuerpo.querySelectorAll(".btn-reasignar").forEach((b) => b.addEventListener("click", async () => {
+      const id = b.dataset.id;
+      const span = cuerpo.querySelector(`.nombre-docente[data-id="${id}"]`);
+      const select = cuerpo.querySelector(`.select-reasignar[data-id="${id}"]`);
+
+      if (select.style.display === "none") {
+        span.style.display = "none";
+        select.style.display = "inline-block";
+        b.textContent = "Guardar";
+      } else {
+        const nuevoCorreo = select.value;
+        const nuevoNombre = select.options[select.selectedIndex].textContent;
+        await updateDoc(doc(db, "clases", id), { docenteCorreo: nuevoCorreo, docenteNombre: nuevoNombre });
+        await registrarLog(usuario, rol, "Reasignó profesor de clase", `${id} → ${nuevoNombre}`);
+        cargarClases();
+      }
+    }));
   }
 
   document.getElementById("boton-guardar").addEventListener("click", async () => {
@@ -218,22 +278,24 @@
     const ciclo = Number(document.getElementById("ciclo").value);
     const nivel = document.getElementById("nivel").value.trim();
     const grupo = document.getElementById("grupo").value.trim();
-    const dia = document.getElementById("dia").value;
-    const hora = document.getElementById("hora").value;
+    const horarios = leerHorarios();
     const selectDocente = document.getElementById("docente");
     const selectCiudad = document.getElementById("ciudad");
     const selectPrograma = document.getElementById("programa");
     const aviso = document.getElementById("aviso");
 
-    if (!nivel || !grupo || !hora || !selectDocente.value || !selectCiudad.value || !selectPrograma.value) {
+    const horariosCompletos = horarios.filter((h) => h.horaInicio && h.horaFin);
+
+    if (!nivel || !grupo || !selectDocente.value || !selectCiudad.value || !selectPrograma.value || horariosCompletos.length === 0) {
       aviso.style.color = "var(--error)";
-      aviso.textContent = "Completa todos los campos, incluyendo el programa.";
+      aviso.textContent = "Completa todos los campos, incluyendo al menos un horario con hora de inicio y fin.";
       return;
     }
 
     await addDoc(collection(db, "clases"), {
       anio, periodo, ciclo,
-      nivel, grupo, dia, hora,
+      nivel, grupo,
+      horarios: horariosCompletos,
       docenteCorreo: selectDocente.value,
       docenteNombre: selectDocente.options[selectDocente.selectedIndex].textContent,
       ciudadId: selectCiudad.value,
@@ -248,11 +310,13 @@
     aviso.textContent = `Clase ${nivel} - ${grupo} creada (${anio}-${periodo}, ciclo ${ciclo}).`;
     document.getElementById("nivel").value = "";
     document.getElementById("grupo").value = "";
-    document.getElementById("hora").value = "";
+    document.getElementById("lista-horarios").innerHTML = "";
+    agregarFilaHorario();
     cargarClases();
   });
 
   cargarPeriodoAcademico();
+  agregarFilaHorario();
   document.getElementById("anio").addEventListener("change", cargarProgramas);
   document.getElementById("periodo").addEventListener("change", cargarProgramas);
   document.getElementById("ciclo").addEventListener("change", cargarProgramas);

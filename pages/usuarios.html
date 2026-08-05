@@ -56,12 +56,12 @@
       <select id="rol">
         <option value="coordinador">Coordinador académico</option>
         <option value="secretaria">Secretaria académica</option>
-        <option value="master">Master (control total, como Roxy)</option>
+        <option value="admin">Admin (control total)</option>
       </select>
 
       <div id="campo-cargo" style="display:none;">
-        <label for="cargo">Cargo (solo para mostrar, ej. "Dirección Académica")</label>
-        <input type="text" id="cargo" placeholder="Dirección Académica, Registro y Control...">
+        <label for="cargo">Cargo</label>
+        <input type="text" id="cargo" placeholder="Dirección Académica">
       </div>
 
       <div id="campo-sede">
@@ -80,19 +80,19 @@
   import { db, DOMINIO_PERMITIDO } from "../js/firebase-config.js?v=3";
   import { collection, doc, setDoc, deleteDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-  const { usuario, rol: miRol } = await requireAuth(["master"]);
+  const { usuario, rol: miRol } = await requireAuth(["master", "admin"]);
 
-  const NOMBRE_ROL = { coordinador: "Coordinador académico", secretaria: "Secretaria académica", master: "Master" };
-  const CLASE_ROL = { coordinador: "rol-coordinador", secretaria: "rol-secretaria", master: "rol-secretaria" };
+  const NOMBRE_ROL = { coordinador: "Coordinador académico", secretaria: "Secretaria académica", admin: "Admin", master: "Master" };
+  const CLASE_ROL = { coordinador: "rol-coordinador", secretaria: "rol-secretaria", admin: "rol-secretaria", master: "rol-secretaria" };
 
   const selectRol = document.getElementById("rol");
   const campoCargo = document.getElementById("campo-cargo");
   const campoSede = document.getElementById("campo-sede");
 
   function actualizarCamposSegunRol() {
-    const esMaster = selectRol.value === "master";
-    campoCargo.style.display = esMaster ? "block" : "none";
-    campoSede.style.display = esMaster ? "none" : "block";
+    const esAdmin = selectRol.value === "admin";
+    campoCargo.style.display = esAdmin ? "block" : "none";
+    campoSede.style.display = esAdmin ? "none" : "block";
   }
   selectRol.addEventListener("change", actualizarCamposSegunRol);
   actualizarCamposSegunRol();
@@ -116,18 +116,21 @@
   async function cargarLista() {
     const cuerpo = document.getElementById("lista-usuarios");
     cuerpo.innerHTML = "";
-    const q = query(collection(db, "usuarios"), where("rol", "in", ["coordinador", "secretaria", "master"]));
+    const q = query(collection(db, "usuarios"), where("rol", "in", ["coordinador", "secretaria", "admin", "master"]));
     const snap = await getDocs(q);
     snap.forEach((d) => {
       const u = d.data();
-      const cargoOSede = u.rol === "master" ? (u.cargo || "Master") : (u.ciudadNombre || "—");
+      const cargoOSede = (u.rol === "admin" || u.rol === "master") ? (u.cargo || (u.rol === "master" ? "Master" : "Admin")) : (u.ciudadNombre || "—");
+      const botonAccion = u.rol === "master"
+        ? `<span style="color: var(--tinta-suave); font-size: 12px;">Protegida</span>`
+        : `<button class="btn-borrar" data-id="${d.id}">Quitar acceso</button>`;
       const fila = document.createElement("tr");
       fila.innerHTML = `
         <td>${u.nombre || "—"}</td>
         <td>${d.id}</td>
         <td><span class="etiqueta-rol-tabla ${CLASE_ROL[u.rol] || ""}">${NOMBRE_ROL[u.rol] || u.rol}</span></td>
         <td>${cargoOSede}</td>
-        <td><button class="btn-borrar" data-id="${d.id}">Quitar acceso</button></td>
+        <td>${botonAccion}</td>
       `;
       cuerpo.appendChild(fila);
     });
@@ -160,7 +163,7 @@
 
     let datos = { nombre, rol: rolNuevo };
 
-    if (rolNuevo === "master") {
+    if (rolNuevo === "admin") {
       const cargo = document.getElementById("cargo").value.trim();
       if (!cargo) {
         aviso.style.color = "var(--error)";

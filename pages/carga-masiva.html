@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tweetalig — Carga masiva</title>
+<link rel="stylesheet" href="../css/styles.css?v=2">
+<style>
+  .tarjeta { background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio); padding: 24px 28px; max-width: 720px; margin-bottom: 24px; }
+  .tarjeta h3 { font-family: var(--fuente-display); color: var(--azul-profundo); margin: 0 0 8px; font-size: 18px; }
+  .tarjeta p { color: var(--tinta-suave); font-size: 14px; margin: 0 0 14px; }
+  .boton-secundario {
+    font-family: var(--fuente-cuerpo); font-size: 13px; font-weight: 500;
+    color: var(--azul-profundo); background: none; border: 1px solid var(--azul-profundo);
+    border-radius: 6px; padding: 8px 14px; cursor: pointer; margin-right: 10px;
+  }
+  input[type="file"] { font-family: var(--fuente-cuerpo); font-size: 14px; margin: 10px 0; }
+  .resultado { margin-top: 16px; }
+  .fila-resultado { font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--linea); }
+  .ok { color: #2E6E4E; }
+  .err { color: var(--error); }
+  .resumen { font-weight: 600; margin-top: 10px; }
+  code { background: var(--fondo); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <nav class="app-nav">
+    <div class="logo-nav-wrap"><img src="../assets/logo-tweetalig.png" alt="Tweetalig"></div>
+    <h1>Portal de notas</h1>
+    <div id="menu-rol"></div>
+    <a href="#" id="link-salir">Cerrar sesión</a>
+  </nav>
+  <main class="app-contenido">
+    <span class="etiqueta-rol">Carga masiva</span>
+    <h2>Cargar estudiantes por CSV</h2>
+
+    <div class="tarjeta">
+      <h3>1. Elige el período académico</h3>
+      <p>Todos los estudiantes de este archivo se matricularán en clases de este mismo período — así no hay que repetirlo en cada fila del CSV.</p>
+      <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; max-width: 420px;">
+        <select id="anio"></select>
+        <select id="periodo"><option value="1">1</option><option value="2">2</option></select>
+        <select id="ciclo"></select>
+      </div>
+    </div>
+
+    <div class="tarjeta">
+      <h3>2. Descarga la plantilla</h3>
+      <p>
+        Columnas requeridas, en este orden exacto: <code>nombre, apellido, cedula, correo, nivel, grupo, ciudad</code><br><br>
+        <b>Importante:</b> el horario y el año/periodo/ciclo ya NO van en el CSV — se toman del período que elegiste arriba y del horario que ya configuraste en "Clases". La clase (nivel+grupo+sede, en ese período) tiene que existir antes de subir el archivo.
+      </p>
+      <button class="boton-secundario" id="boton-plantilla">Descargar plantilla de ejemplo (.csv)</button>
+    </div>
+
+    <div class="tarjeta">
+      <h3>3. Sube tu archivo</h3>
+      <p>El archivo debe ser .csv, con encabezados en la primera fila (igual que la plantilla).</p>
+      <input type="file" id="archivo-csv" accept=".csv">
+      <br>
+      <button class="boton-secundario" id="boton-procesar" disabled>Procesar archivo</button>
+      <div class="resultado" id="resultado"></div>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script type="module">
+  import { requireAuth, registrarLog } from "../js/auth.js?v=3";
+  import { db } from "../js/firebase-config.js?v=3";
+  import { collection, getDocs, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+  const { usuario, rol } = await requireAuth(["master", "admin", "coordinador", "secretaria"]);
+
+  const PLANTILLA_CSV = `nombre,apellido,cedula,correo,nivel,grupo,ciudad
+Juan,Pérez Gómez,1102345678,juan.perez@example.com,A1,A,Cartagena
+María,Rodríguez Silva,1102345679,maria.rodriguez@example.com,A1,A,Cartagena
+Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo`;
+
+  function cargarSelectoresPeriodo() {
+    const anioActual = new Date().getFullYear();
+    const anioBase = Math.min(2026, anioActual);
+    const selectAnio = document.getElementById("anio");
+    selectAnio.innerHTML = "";
+    for (let a = anioBase; a <= anioBase + 9; a++) {
+      const opt = document.createElement("option");
+      opt.value = a; opt.textContent = a;
+      if (a === anioActual) opt.selected = true;
+      selectAnio.appendChild(opt);
+    }
+    const selectCiclo = document.getElementById("ciclo");
+    selectCiclo.innerHTML = "";
+    for (let c = 1; c <= 15; c++) {
+      const opt = document.createElement("option");
+      opt.value = c; opt.textContent = c;
+      selectCiclo.appendChild(opt);
+    }
+  }
+  cargarSelectoresPeriodo();
+
+  document.getElementById("boton-plantilla").addEventListener("click", () => {
+    const blob = new Blob([PLANTILLA_CSV], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "plantilla-estudiantes.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  let filasArchivo = [];
+  const inputArchivo = document.getElementById("archivo-csv");
+  const botonProcesar = document.getElementById("boton-procesar");
+
+  inputArchivo.addEventListener("change", () => {
+    const archivo = inputArchivo.files[0];
+    if (!archivo) return;
+    Papa.parse(archivo, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (resultado) => {
+        filasArchivo = resultado.data;
+        botonProcesar.disabled = filasArchivo.length === 0;
+        document.getElementById("resultado").innerHTML =
+          `<p style="color:var(--tinta-suave); font-size:13px;">${filasArchivo.length} fila(s) detectadas. Click en "Procesar archivo" para continuar.</p>`;
+      }
+    });
+  });
+
+  function normalizar(txt) {
+    return (txt || "").toString().trim().toLowerCase();
+  }
+
+  botonProcesar.addEventListener("click", async () => {
+    botonProcesar.disabled = true;
+    botonProcesar.textContent = "Procesando...";
+
+    const anio = Number(document.getElementById("anio").value);
+    const periodo = Number(document.getElementById("periodo").value);
+    const ciclo = Number(document.getElementById("ciclo").value);
+
+    const snapClases = await getDocs(collection(db, "clases"));
+    const clases = snapClases.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((c) => c.anio === anio && c.periodo === periodo && c.ciclo === ciclo);
+
+    const resultados = [];
+    let exitosos = 0;
+    let fallidos = 0;
+
+    for (const fila of filasArchivo) {
+      const nombre = (fila.nombre || "").trim();
+      const apellido = (fila.apellido || "").trim();
+      const cedula = (fila.cedula || "").trim();
+      const correo = (fila.correo || "").trim().toLowerCase();
+      const nivel = (fila.nivel || "").trim();
+      const grupo = (fila.grupo || "").trim();
+      const ciudad = (fila.ciudad || "").trim();
+
+      if (!nombre || !apellido || !cedula) {
+        resultados.push({ ok: false, texto: `Fila con cédula "${cedula || "vacía"}": faltan nombre, apellido o cédula.` });
+        fallidos++;
+        continue;
+      }
+
+      const clase = clases.find((c) =>
+        normalizar(c.nivel) === normalizar(nivel) &&
+        normalizar(c.grupo) === normalizar(grupo) &&
+        normalizar(c.ciudadNombre) === normalizar(ciudad)
+      );
+
+      if (!clase) {
+        resultados.push({ ok: false, texto: `${nombre} ${apellido} (${cedula}): no existe una clase ${anio}-${periodo} ciclo ${ciclo} con nivel ${nivel}, grupo ${grupo}, sede ${ciudad}. Créala primero.` });
+        fallidos++;
+        continue;
+      }
+
+      try {
+        await setDoc(doc(db, "estudiantes", cedula), {
+          nombre, apellido, cedula, correo,
+          claseId: clase.id,
+          claseTexto: `${clase.nivel} - ${clase.grupo} (${clase.anio}-${clase.periodo}, ciclo ${clase.ciclo})`,
+          ciudadId: clase.ciudadId, ciudadNombre: clase.ciudadNombre
+        });
+        resultados.push({ ok: true, texto: `${nombre} ${apellido} (${cedula}): matriculado en ${clase.nivel} - ${clase.grupo}.` });
+        exitosos++;
+      } catch (e) {
+        resultados.push({ ok: false, texto: `${nombre} ${apellido} (${cedula}): error al guardar — ${e.message}` });
+        fallidos++;
+      }
+    }
+
+    const contenedor = document.getElementById("resultado");
+    contenedor.innerHTML = `<p class="resumen">${exitosos} estudiante(s) cargados con éxito, ${fallidos} con error.</p>`;
+    resultados.forEach((r) => {
+      const div = document.createElement("div");
+      div.className = "fila-resultado " + (r.ok ? "ok" : "err");
+      div.textContent = (r.ok ? "✓ " : "✕ ") + r.texto;
+      contenedor.appendChild(div);
+    });
+
+    await registrarLog(usuario, rol, "Cargó estudiantes por CSV", `${exitosos} exitosos, ${fallidos} con error`);
+
+    botonProcesar.textContent = "Procesar archivo";
+    botonProcesar.disabled = false;
+  });
+</script>
+</body>
+</html>

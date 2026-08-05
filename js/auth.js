@@ -50,19 +50,35 @@ const MENU_POR_ROL = {
     ["Profesores", "profesores.html"],
     ["Clases", "clases.html"],
     ["Estudiantes", "estudiantes.html"],
+    ["Carga masiva (CSV)", "carga-masiva.html"],
     ["Programas", "programas.html"],
+    ["Períodos", "periodos.html"],
+    ["Accesos y usuarios", "usuarios.html"],
+    ["Log de cambios", "logs.html"]
+  ],
+  admin: [
+    ["Sedes", "ciudades.html"],
+    ["Profesores", "profesores.html"],
+    ["Clases", "clases.html"],
+    ["Estudiantes", "estudiantes.html"],
+    ["Carga masiva (CSV)", "carga-masiva.html"],
+    ["Programas", "programas.html"],
+    ["Períodos", "periodos.html"],
     ["Accesos y usuarios", "usuarios.html"],
     ["Log de cambios", "logs.html"]
   ],
   coordinador: [
     ["Profesores", "profesores.html"],
     ["Clases", "clases.html"],
-    ["Estudiantes", "estudiantes.html"]
+    ["Estudiantes", "estudiantes.html"],
+    ["Carga masiva (CSV)", "carga-masiva.html"],
+    ["Períodos", "periodos.html"]
   ],
   secretaria: [
     ["Profesores", "profesores.html"],
     ["Clases", "clases.html"],
-    ["Estudiantes", "estudiantes.html"]
+    ["Estudiantes", "estudiantes.html"],
+    ["Carga masiva (CSV)", "carga-masiva.html"]
   ],
   profesor: [
     ["Notas", "notas.html"],
