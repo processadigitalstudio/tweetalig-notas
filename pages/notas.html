@@ -5,6 +5,32 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Tweetalig — Notas</title>
 <link rel="stylesheet" href="../css/styles.css?v=2">
+<style>
+  .selector-clase { max-width: 480px; margin-bottom: 20px; }
+  .selector-clase select { width: 100%; font-family: var(--fuente-cuerpo); font-size: 14px; padding: 10px 12px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
+
+  .pestanas { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
+  .pestana {
+    font-family: var(--fuente-cuerpo); font-size: 13px; font-weight: 500;
+    padding: 8px 16px; border-radius: 20px; border: 1px solid var(--linea);
+    background: var(--superficie); color: var(--tinta-suave); cursor: pointer;
+  }
+  .pestana.activa { background: var(--azul-profundo); color: #fff; border-color: var(--azul-profundo); }
+
+  .tabla-notas { width: 100%; border-collapse: collapse; max-width: 1100px; }
+  .tabla-notas th, .tabla-notas td { padding: 8px 10px; border-bottom: 1px solid var(--linea); font-size: 13px; text-align: center; }
+  .tabla-notas th { color: var(--tinta-suave); font-weight: 500; font-size: 11.5px; text-transform: uppercase; }
+  .tabla-notas td.nombre-estudiante { text-align: left; font-weight: 500; color: var(--tinta); white-space: nowrap; }
+  .tabla-notas input[type="number"] {
+    width: 62px; font-family: var(--fuente-cuerpo); font-size: 13px; padding: 6px;
+    border: 1px solid var(--linea); border-radius: 6px; text-align: center; background: var(--fondo);
+  }
+  .col-promedio { font-weight: 600; color: var(--azul-profundo); }
+  .col-final { font-weight: 700; color: var(--verde-marca); }
+
+  .boton-primario { max-width: 220px; margin-top: 18px; }
+  .aviso { font-size: 13px; margin-top: 10px; min-height: 18px; }
+</style>
 </head>
 <body>
 <div class="app-shell">
@@ -16,17 +42,297 @@
   </nav>
   <main class="app-contenido">
     <span class="etiqueta-rol">Notas</span>
-    <h2>Próximamente</h2>
-    <p style="color: var(--tinta-suave); max-width: 500px;">
-      Esta pantalla — donde cargarás las notas de tus estudiantes por corte —
-      está en construcción. Pronto vas a poder entrar aquí a registrar
-      calificaciones directamente.
-    </p>
+    <h2>Cargar notas</h2>
+
+    <div id="selector-profesor" style="display:none; margin-bottom:16px;">
+      <label style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin-bottom:4px;">Ver como profesor (solo para revisión)</label>
+      <select id="profesor-vista" style="max-width:420px; padding:8px 10px; border:1px solid var(--linea); border-radius:7px;"></select>
+    </div>
+
+    <div class="selector-clase">
+      <label style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin-bottom:4px;">Clase</label>
+      <select id="selector-clase"></select>
+    </div>
+
+    <div id="contenido-notas"></div>
   </main>
 </div>
+
 <script type="module">
-  import { requireAuth } from "../js/auth.js?v=3";
-  await requireAuth(["profesor", "master", "admin", "coordinador", "secretaria"]);
+  import { requireAuth, registrarLog } from "../js/auth.js?v=3";
+  import { db } from "../js/firebase-config.js?v=3";
+  import { collection, getDocs, getDoc, doc, setDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+  const { usuario, rol } = await requireAuth(["profesor", "master", "admin"]);
+
+  let correoActivo = usuario.email.toLowerCase();
+  let gruposClase = [];
+
+  if (rol === "master" || rol === "admin") {
+    document.getElementById("selector-profesor").style.display = "block";
+    const selectProf = document.getElementById("profesor-vista");
+    const snapProf = await getDocs(query(collection(db, "usuarios"), where("rol", "==", "profesor")));
+    selectProf.innerHTML = "";
+    snapProf.forEach((d) => {
+      const opt = document.createElement("option");
+      opt.value = d.id;
+      opt.textContent = d.data().nombre;
+      selectProf.appendChild(opt);
+    });
+    if (!snapProf.empty) correoActivo = selectProf.options[0].value;
+    selectProf.addEventListener("change", async () => {
+      correoActivo = selectProf.value;
+      await cargarGrupos();
+    });
+  }
+
+  async function cargarGrupos() {
+    const q = query(collection(db, "clases"), where("docenteCorreo", "==", correoActivo));
+    const snap = await getDocs(q);
+    const clases = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    const porClave = {};
+    clases.forEach((c) => {
+      const clave = c.grupoDistanciaId || c.id;
+      if (!porClave[clave]) porClave[clave] = [];
+      porClave[clave].push(c);
+    });
+
+    gruposClase = Object.entries(porClave).map(([key, clasesGrupo]) => {
+      const primera = clasesGrupo[0];
+      const sedes = clasesGrupo.map((c) => c.ciudadNombre).join(", ");
+      return {
+        key,
+        etiqueta: `${primera.nivel} - ${primera.grupo} (${sedes}) — ${primera.anio}-${primera.periodo} Ciclo ${primera.ciclo}`,
+        clases: clasesGrupo
+      };
+    });
+
+    const select = document.getElementById("selector-clase");
+    select.innerHTML = "";
+    if (gruposClase.length === 0) {
+      select.innerHTML = "<option value=''>No tienes clases asignadas</option>";
+      document.getElementById("contenido-notas").innerHTML = "";
+      return;
+    }
+    gruposClase.forEach((g) => {
+      const opt = document.createElement("option");
+      opt.value = g.key;
+      opt.textContent = g.etiqueta;
+      select.appendChild(opt);
+    });
+
+    await cargarPlanilla(gruposClase[0].key);
+  }
+
+  document.getElementById("selector-clase").addEventListener("change", (e) => cargarPlanilla(e.target.value));
+
+  let corteActivoIndex = 0;
+  let estudiantesActuales = [];
+  let programaActual = null;
+  let notasGuardadas = {};
+
+  async function cargarPlanilla(claveGrupo) {
+    const grupo = gruposClase.find((g) => g.key === claveGrupo);
+    if (!grupo) return;
+
+    const contenedor = document.getElementById("contenido-notas");
+    contenedor.innerHTML = "<p style='color:var(--tinta-suave);'>Cargando...</p>";
+
+    const programaId = grupo.clases[0].programaId;
+    const snapPrograma = await getDoc(doc(db, "programas", programaId));
+    if (!snapPrograma.exists()) {
+      contenedor.innerHTML = "<p style='color:var(--error);'>Esta clase no tiene un programa de notas configurado.</p>";
+      return;
+    }
+    programaActual = snapPrograma.data();
+
+    const idsClases = grupo.clases.map((c) => c.id);
+    let estudiantes = [];
+    for (let i = 0; i < idsClases.length; i += 10) {
+      const lote = idsClases.slice(i, i + 10);
+      const q = query(collection(db, "estudiantes"), where("claseId", "in", lote));
+      const snap = await getDocs(q);
+      snap.forEach((d) => estudiantes.push({ id: d.id, ...d.data() }));
+    }
+    estudiantes.sort((a, b) => (a.apellido || "").localeCompare(b.apellido || ""));
+    estudiantesActuales = estudiantes;
+
+    if (estudiantes.length === 0) {
+      contenedor.innerHTML = "<p style='color:var(--tinta-suave);'>Todavía no hay estudiantes matriculados en esta clase.</p>";
+      return;
+    }
+
+    notasGuardadas = {};
+    for (const est of estudiantes) {
+      const idNota = `${est.claseId}_${est.cedula}`;
+      const snapNota = await getDoc(doc(db, "notas", idNota));
+      notasGuardadas[est.cedula] = snapNota.exists() ? snapNota.data().valores || {} : {};
+    }
+
+    corteActivoIndex = 0;
+    pintarPestanas();
+    pintarTablaCorte();
+  }
+
+  function pintarPestanas() {
+    const contenedor = document.getElementById("contenido-notas");
+    contenedor.innerHTML = "";
+
+    const pestanas = document.createElement("div");
+    pestanas.className = "pestanas";
+    (programaActual.cortes || []).forEach((corte, i) => {
+      const btn = document.createElement("button");
+      btn.className = "pestana" + (i === corteActivoIndex ? " activa" : "");
+      btn.textContent = `${corte.nombre} (${corte.peso}%)`;
+      btn.addEventListener("click", () => {
+        corteActivoIndex = i;
+        pintarPestanas();
+        pintarTablaCorte();
+      });
+      pestanas.appendChild(btn);
+    });
+    const btnResumen = document.createElement("button");
+    btnResumen.className = "pestana" + (corteActivoIndex === "resumen" ? " activa" : "");
+    btnResumen.textContent = "Resumen y nota final";
+    btnResumen.addEventListener("click", () => {
+      corteActivoIndex = "resumen";
+      pintarPestanas();
+      pintarResumen();
+    });
+    pestanas.appendChild(btnResumen);
+
+    contenedor.appendChild(pestanas);
+    const div = document.createElement("div");
+    div.id = "cuerpo-planilla";
+    contenedor.appendChild(div);
+  }
+
+  function calcularPromedioCorte(cedula, corteIndex) {
+    const corte = programaActual.cortes[corteIndex];
+    const valores = notasGuardadas[cedula] || {};
+    let suma = 0;
+    for (let n = 0; n < corte.notas.length; n++) {
+      const val = Number(valores[`c${corteIndex}n${n}`]);
+      if (isNaN(val) || valores[`c${corteIndex}n${n}`] === undefined) return null;
+      suma += val * (corte.notas[n].porcentaje / 100);
+    }
+    return suma;
+  }
+
+  function calcularNotaFinal(cedula) {
+    let total = 0;
+    for (let c = 0; c < programaActual.cortes.length; c++) {
+      const prom = calcularPromedioCorte(cedula, c);
+      if (prom === null) return null;
+      total += prom * (programaActual.cortes[c].peso / 100);
+    }
+    return total;
+  }
+
+  function pintarTablaCorte() {
+    const corte = programaActual.cortes[corteActivoIndex];
+    const cuerpo = document.getElementById("cuerpo-planilla");
+
+    const tabla = document.createElement("table");
+    tabla.className = "tabla-notas";
+
+    let theadHtml = `<tr><th style="text-align:left;">Estudiante</th>`;
+    corte.notas.forEach((n) => { theadHtml += `<th>${n.nombre}<br>(${n.porcentaje}%)</th>`; });
+    theadHtml += `<th class="col-promedio">Promedio corte</th></tr>`;
+    tabla.innerHTML = `<thead>${theadHtml}</thead><tbody></tbody>`;
+
+    const tbody = tabla.querySelector("tbody");
+    estudiantesActuales.forEach((est) => {
+      const fila = document.createElement("tr");
+      let celdas = `<td class="nombre-estudiante">${est.nombre} ${est.apellido}</td>`;
+      corte.notas.forEach((n, ni) => {
+        const clave = `c${corteActivoIndex}n${ni}`;
+        const valorActual = (notasGuardadas[est.cedula] || {})[clave] ?? "";
+        celdas += `<td><input type="number" step="0.1" min="0" max="5" class="input-nota" data-cedula="${est.cedula}" data-clave="${clave}" value="${valorActual}"></td>`;
+      });
+      celdas += `<td class="col-promedio" id="prom-${est.cedula}">${formatear(calcularPromedioCorte(est.cedula, corteActivoIndex))}</td>`;
+      fila.innerHTML = celdas;
+      tbody.appendChild(fila);
+    });
+
+    cuerpo.innerHTML = "";
+    cuerpo.appendChild(tabla);
+
+    tabla.querySelectorAll(".input-nota").forEach((input) => {
+      input.addEventListener("input", () => {
+        const cedula = input.dataset.cedula;
+        const clave = input.dataset.clave;
+        if (!notasGuardadas[cedula]) notasGuardadas[cedula] = {};
+        notasGuardadas[cedula][clave] = input.value === "" ? undefined : Number(input.value);
+        document.getElementById(`prom-${cedula}`).textContent = formatear(calcularPromedioCorte(cedula, corteActivoIndex));
+      });
+    });
+
+    const botonGuardar = document.createElement("button");
+    botonGuardar.className = "boton-primario";
+    botonGuardar.textContent = "Guardar notas de este corte";
+    botonGuardar.addEventListener("click", guardarNotas);
+    cuerpo.appendChild(botonGuardar);
+
+    const aviso = document.createElement("p");
+    aviso.className = "aviso";
+    aviso.id = "aviso-notas";
+    cuerpo.appendChild(aviso);
+  }
+
+  function pintarResumen() {
+    const cuerpo = document.getElementById("cuerpo-planilla");
+    const tabla = document.createElement("table");
+    tabla.className = "tabla-notas";
+
+    let theadHtml = `<tr><th style="text-align:left;">Estudiante</th>`;
+    programaActual.cortes.forEach((c) => { theadHtml += `<th>${c.nombre} (${c.peso}%)</th>`; });
+    theadHtml += `<th class="col-final">Nota final</th></tr>`;
+    tabla.innerHTML = `<thead>${theadHtml}</thead><tbody></tbody>`;
+
+    const tbody = tabla.querySelector("tbody");
+    estudiantesActuales.forEach((est) => {
+      let celdas = `<td class="nombre-estudiante">${est.nombre} ${est.apellido}</td>`;
+      programaActual.cortes.forEach((c, i) => {
+        celdas += `<td>${formatear(calcularPromedioCorte(est.cedula, i))}</td>`;
+      });
+      celdas += `<td class="col-final">${formatear(calcularNotaFinal(est.cedula))}</td>`;
+      const fila = document.createElement("tr");
+      fila.innerHTML = celdas;
+      tbody.appendChild(fila);
+    });
+
+    cuerpo.innerHTML = "";
+    cuerpo.appendChild(tabla);
+  }
+
+  function formatear(valor) {
+    return valor === null ? "—" : valor.toFixed(2);
+  }
+
+  async function guardarNotas() {
+    const aviso = document.getElementById("aviso-notas");
+    aviso.textContent = "Guardando...";
+    aviso.style.color = "var(--tinta-suave)";
+
+    for (const est of estudiantesActuales) {
+      const idNota = `${est.claseId}_${est.cedula}`;
+      await setDoc(doc(db, "notas", idNota), {
+        claseId: est.claseId,
+        cedula: est.cedula,
+        estudianteNombre: `${est.nombre} ${est.apellido}`,
+        valores: notasGuardadas[est.cedula] || {}
+      }, { merge: true });
+    }
+
+    await registrarLog(usuario, rol, "Guardó notas", `Corte ${typeof corteActivoIndex === "number" ? corteActivoIndex + 1 : ""} — ${estudiantesActuales.length} estudiante(s)`);
+
+    aviso.style.color = "#2E6E4E";
+    aviso.textContent = "Notas guardadas correctamente.";
+  }
+
+  await cargarGrupos();
 </script>
 </body>
 </html>

@@ -53,6 +53,7 @@ const MENU_POR_ROL = {
     ["Carga masiva (CSV)", "carga-masiva.html"],
     ["Programas", "programas.html"],
     ["Períodos", "periodos.html"],
+    ["Notas (revisión)", "notas.html"],
     ["Accesos y usuarios", "usuarios.html"],
     ["Log de cambios", "logs.html"]
   ],
@@ -64,6 +65,7 @@ const MENU_POR_ROL = {
     ["Carga masiva (CSV)", "carga-masiva.html"],
     ["Programas", "programas.html"],
     ["Períodos", "periodos.html"],
+    ["Notas (revisión)", "notas.html"],
     ["Accesos y usuarios", "usuarios.html"]
   ],
   coordinador: [

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tweetalig — Estudiantes</title>
+<link rel="stylesheet" href="../css/styles.css?v=2">
+<style>
+  .tabla-simple { width: 100%; border-collapse: collapse; max-width: 900px; }
+  .tabla-simple th, .tabla-simple td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--linea); font-size: 14px; }
+  .tabla-simple th { color: var(--tinta-suave); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .tabla-simple button { background: none; border: none; color: var(--error); font-size: 13px; cursor: pointer; text-decoration: underline; padding: 0; }
+  .filtros { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+  .filtros input, .filtros select { font-family: var(--fuente-cuerpo); font-size: 13px; padding: 8px 10px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
+  .contador { font-size: 13px; color: var(--tinta-suave); margin-bottom: 14px; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <nav class="app-nav">
+    <div class="logo-nav-wrap"><img src="../assets/logo-tweetalig.png" alt="Tweetalig"></div>
+    <h1>Portal de notas</h1>
+    <div id="menu-rol"></div>
+    <a href="#" id="link-salir">Cerrar sesión</a>
+  </nav>
+  <main class="app-contenido">
+    <span class="etiqueta-rol">Estudiantes</span>
+    <h2>Estudiantes matriculados</h2>
+
+    <div class="filtros">
+      <input type="text" id="filtro-texto" placeholder="Buscar por nombre o cédula...">
+      <select id="filtro-sede"><option value="">Todas las sedes</option></select>
+      <select id="filtro-clase"><option value="">Todas las clases</option></select>
+    </div>
+
+    <p class="contador" id="contador"></p>
+
+    <table class="tabla-simple">
+      <thead><tr><th>Nombre</th><th>Cédula</th><th>Correo</th><th>Clase</th><th>Sede</th><th></th></tr></thead>
+      <tbody id="lista-estudiantes"></tbody>
+    </table>
+  </main>
+</div>
+
+<script type="module">
+  import { requireAuth, registrarLog } from "../js/auth.js?v=3";
+  import { db } from "../js/firebase-config.js?v=3";
+  import { collection, getDocs, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+  const { usuario, rol } = await requireAuth(["master", "admin", "coordinador", "secretaria"]);
+
+  let todos = [];
+
+  async function cargarFiltros() {
+    const snapSedes = await getDocs(collection(db, "ciudades"));
+    const selectSede = document.getElementById("filtro-sede");
+    snapSedes.forEach((d) => {
+      const opt = document.createElement("option");
+      opt.value = d.data().nombre;
+      opt.textContent = d.data().nombre;
+      selectSede.appendChild(opt);
+    });
+
+    const snapClases = await getDocs(collection(db, "clases"));
+    const selectClase = document.getElementById("filtro-clase");
+    snapClases.forEach((d) => {
+      const c = d.data();
+      const opt = document.createElement("option");
+      opt.value = d.id;
+      opt.textContent = `${c.nivel} - ${c.grupo} (${c.ciudadNombre || "—"})`;
+      selectClase.appendChild(opt);
+    });
+  }
+
+  async function cargarEstudiantes() {
+    const snap = await getDocs(collection(db, "estudiantes"));
+    todos = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    pintarLista();
+  }
+
+  function pintarLista() {
+    const texto = document.getElementById("filtro-texto").value.trim().toLowerCase();
+    const sede = document.getElementById("filtro-sede").value;
+    const claseId = document.getElementById("filtro-clase").value;
+
+    const filtrados = todos.filter((e) => {
+      const coincideTexto = !texto ||
+        (e.nombre || "").toLowerCase().includes(texto) ||
+        (e.apellido || "").toLowerCase().includes(texto) ||
+        (e.cedula || "").includes(texto);
+      const coincideSede = !sede || e.ciudadNombre === sede;
+      const coincideClase = !claseId || e.claseId === claseId;
+      return coincideTexto && coincideSede && coincideClase;
+    });
+
+    document.getElementById("contador").textContent = `${filtrados.length} estudiante(s) encontrados de ${todos.length} en total.`;
+
+    const cuerpo = document.getElementById("lista-estudiantes");
+    cuerpo.innerHTML = "";
+    filtrados.forEach((e) => {
+      const fila = document.createElement("tr");
+      fila.innerHTML = `
+        <td>${e.nombre || ""} ${e.apellido || ""}</td>
+        <td>${e.cedula || "—"}</td>
+        <td>${e.correo || "—"}</td>
+        <td>${e.claseTexto || "—"}</td>
+        <td>${e.ciudadNombre || "—"}</td>
+        <td><button class="btn-borrar" data-id="${e.id}" data-nombre="${e.nombre} ${e.apellido}">Quitar</button></td>
+      `;
+      cuerpo.appendChild(fila);
+    });
+
+    cuerpo.querySelectorAll(".btn-borrar").forEach((b) => b.addEventListener("click", async () => {
+      if (confirm(`¿Quitar a ${b.dataset.nombre} de esta clase?`)) {
+        await deleteDoc(doc(db, "estudiantes", b.dataset.id));
+        await registrarLog(usuario, rol, "Quitó estudiante", `${b.dataset.nombre} (${b.dataset.id})`);
+        await cargarEstudiantes();
+      }
+    }));
+  }
+
+  document.getElementById("filtro-texto").addEventListener("input", pintarLista);
+  document.getElementById("filtro-sede").addEventListener("change", pintarLista);
+  document.getElementById("filtro-clase").addEventListener("change", pintarLista);
+
+  await cargarFiltros();
+  await cargarEstudiantes();
+</script>
+</body>
+</html>
