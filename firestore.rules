@@ -82,8 +82,15 @@ service cloud.firestore {
     }
 
     // Colección "estudiantes": nombre, apellido, cédula, correo, clase asignada
+    // Compartimentado por rol: profesor solo ve estudiantes de SUS clases;
+    // coordinador/secretaria solo ven estudiantes de SU sede asignada;
+    // admin/master ven todo.
     match /estudiantes/{id} {
-      allow read: if estaLogueado();
+      allow read: if estaLogueado() && (
+        esAdminOMaster() ||
+        (miRol() in ['coordinador', 'secretaria'] && resource.data.ciudadId == miPerfil().ciudadId) ||
+        (miRol() == 'profesor' && get(/databases/$(database)/documents/clases/$(resource.data.claseId)).data.docenteCorreo == miCorreo())
+      );
       allow write: if esGestor();
     }
 
