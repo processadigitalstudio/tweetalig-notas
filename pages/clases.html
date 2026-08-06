@@ -297,6 +297,9 @@
         <td>
           <button class="btn-reasignar" data-id="${d.id}">Cambiar profesor</button>
           <button class="btn-editar-grupo" data-id="${d.id}">Editar grupo</button>
+          <a href="notas.html?correo=${encodeURIComponent(c.docenteCorreo)}&grupo=${encodeURIComponent(c.grupoDistanciaId || d.id)}" style="font-size:12px; margin-left:6px;">Ver notas</a>
+          ·
+          <a href="asistencia.html?correo=${encodeURIComponent(c.docenteCorreo)}&grupo=${encodeURIComponent(c.grupoDistanciaId || d.id)}" style="font-size:12px;">Ver asistencia</a>
         </td>
       `;
       cuerpo.appendChild(fila);

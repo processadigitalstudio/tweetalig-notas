@@ -31,12 +31,16 @@
       <input type="text" id="filtro-texto" placeholder="Buscar por nombre o cédula...">
       <select id="filtro-sede"><option value="">Todas las sedes</option></select>
       <select id="filtro-clase"><option value="">Todas las clases</option></select>
+      <select id="filtro-periodo"><option value="">Todos los períodos</option></select>
     </div>
 
     <p class="contador" id="contador"></p>
+    <p style="font-size:12.5px; color:var(--tinta-suave); margin-top:-10px; margin-bottom:16px;">
+      Si buscas por cédula, verás todas las matrículas de ese estudiante a lo largo del tiempo (cada ciclo/período es un registro separado).
+    </p>
 
     <table class="tabla-simple">
-      <thead><tr><th>Nombre</th><th>Cédula</th><th>Correo</th><th>Clase</th><th>Sede</th><th></th></tr></thead>
+      <thead><tr><th>No.</th><th>Nombre</th><th>Cédula</th><th>Período</th><th>Correo</th><th>Clase</th><th>Sede</th><th></th></tr></thead>
       <tbody id="lista-estudiantes"></tbody>
     </table>
   </main>
@@ -75,6 +79,18 @@
   async function cargarEstudiantes() {
     const snap = await getDocs(collection(db, "estudiantes"));
     todos = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    const periodos = [...new Set(todos.filter((e) => e.anio).map((e) => `${e.anio}-${e.periodo}-${e.ciclo}`))].sort().reverse();
+    const selectPeriodo = document.getElementById("filtro-periodo");
+    selectPeriodo.innerHTML = '<option value="">Todos los períodos</option>';
+    periodos.forEach((p) => {
+      const [anio, periodo, ciclo] = p.split("-");
+      const opt = document.createElement("option");
+      opt.value = p;
+      opt.textContent = `${anio}-${periodo} / Ciclo ${ciclo}`;
+      selectPeriodo.appendChild(opt);
+    });
+
     pintarLista();
   }
 
@@ -82,6 +98,7 @@
     const texto = document.getElementById("filtro-texto").value.trim().toLowerCase();
     const sede = document.getElementById("filtro-sede").value;
     const claseId = document.getElementById("filtro-clase").value;
+    const periodo = document.getElementById("filtro-periodo").value;
 
     const filtrados = todos.filter((e) => {
       const coincideTexto = !texto ||
@@ -90,7 +107,8 @@
         (e.cedula || "").includes(texto);
       const coincideSede = !sede || e.ciudadNombre === sede;
       const coincideClase = !claseId || e.claseId === claseId;
-      return coincideTexto && coincideSede && coincideClase;
+      const coincidePeriodo = !periodo || `${e.anio}-${e.periodo}-${e.ciclo}` === periodo;
+      return coincideTexto && coincideSede && coincideClase && coincidePeriodo;
     });
 
     document.getElementById("contador").textContent = `${filtrados.length} estudiante(s) encontrados de ${todos.length} en total.`;
@@ -99,11 +117,13 @@
 
     const cuerpo = document.getElementById("lista-estudiantes");
     cuerpo.innerHTML = "";
-    filtrados.forEach((e) => {
+    filtrados.forEach((e, idx) => {
       const fila = document.createElement("tr");
       fila.innerHTML = `
+        <td>${idx + 1}</td>
         <td>${e.apellido || ""} ${e.nombre || ""}</td>
         <td>${e.cedula || "—"}</td>
+        <td>${e.anio ? `${e.anio}-${e.periodo} / Ciclo ${e.ciclo}` : "—"}</td>
         <td>${e.correo || "—"}</td>
         <td>${e.claseTexto || "—"}</td>
         <td>${e.ciudadNombre || "—"}</td>
@@ -124,6 +144,7 @@
   document.getElementById("filtro-texto").addEventListener("input", pintarLista);
   document.getElementById("filtro-sede").addEventListener("change", pintarLista);
   document.getElementById("filtro-clase").addEventListener("change", pintarLista);
+  document.getElementById("filtro-periodo").addEventListener("change", pintarLista);
 
   await cargarFiltros();
   await cargarEstudiantes();

@@ -67,6 +67,11 @@
       <select id="selector-clase"></select>
     </div>
 
+    <div id="candado-edicion" style="display:none; margin-bottom:16px;">
+      <span id="estado-candado" style="font-size:13px; color:var(--tinta-suave);">🔒 Modo solo lectura — solo el profesor puede registrar asistencia.</span>
+      <button type="button" class="boton-secundario" id="boton-desbloquear" style="margin-left:10px;">Desbloquear edición</button>
+    </div>
+
     <div id="contenido-asistencia"></div>
   </main>
 </div>
@@ -77,6 +82,30 @@
   import { collection, getDocs, getDoc, doc, setDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
   const { usuario, rol } = await requireAuth(["profesor", "master", "admin"]);
+
+  let edicionDesbloqueada = (rol === "profesor");
+
+  if (rol === "master" || rol === "admin") {
+    document.getElementById("candado-edicion").style.display = "block";
+    document.getElementById("boton-desbloquear").addEventListener("click", async () => {
+      const intento = prompt("Escribe la contraseña de edición:");
+      if (intento === null) return;
+      const snapClave = await getDoc(doc(db, "configuracion", "claveEdicion"));
+      const claveReal = snapClave.exists() ? snapClave.data().clave : null;
+      if (!claveReal) {
+        alert("Todavía no se ha configurado una contraseña de edición. Pídele a Master que la configure en 'Accesos y usuarios'.");
+        return;
+      }
+      if (intento === claveReal) {
+        edicionDesbloqueada = true;
+        document.getElementById("estado-candado").textContent = "🔓 Edición desbloqueada — los cambios que hagas se guardan igual que si fueran del profesor.";
+        document.getElementById("boton-desbloquear").style.display = "none";
+        pintarDia();
+      } else {
+        alert("Contraseña incorrecta.");
+      }
+    });
+  }
 
   const DIAS_SEMANA = { "Domingo": 0, "Lunes": 1, "Martes": 2, "Miércoles": 3, "Jueves": 4, "Viernes": 5, "Sábado": 6 };
   const DIAS_CORTOS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
@@ -95,7 +124,16 @@
       opt.textContent = d.data().nombre;
       selectProf.appendChild(opt);
     });
-    if (!snapProf.empty) correoActivo = selectProf.options[0].value;
+
+    const params = new URLSearchParams(window.location.search);
+    const correoDesdeUrl = params.get("correo");
+    if (correoDesdeUrl && [...selectProf.options].some((o) => o.value === correoDesdeUrl)) {
+      selectProf.value = correoDesdeUrl;
+      correoActivo = correoDesdeUrl;
+    } else if (!snapProf.empty) {
+      correoActivo = selectProf.options[0].value;
+    }
+
     selectProf.addEventListener("change", async () => {
       correoActivo = selectProf.value;
       await cargarGrupos();
@@ -141,7 +179,12 @@
       select.appendChild(opt);
     });
 
-    await cargarCalendario(gruposClase[0].key);
+    const params = new URLSearchParams(window.location.search);
+    const grupoDesdeUrl = params.get("grupo");
+    const claveInicial = (grupoDesdeUrl && gruposClase.some((g) => g.key === grupoDesdeUrl)) ? grupoDesdeUrl : gruposClase[0].key;
+    select.value = claveInicial;
+
+    await cargarCalendario(claveInicial);
   }
 
   document.getElementById("selector-clase").addEventListener("change", (e) => cargarCalendario(e.target.value));
@@ -206,10 +249,7 @@
       estudiantesActuales = estudiantes;
 
       pintarFechas();
-      if (fechasSesion.length > 0) {
-        fechaActivaTexto = formatoFecha(fechasSesion[0].fecha);
-        pintarDia();
-      }
+      pintarResumenAsistencia();
     } catch (error) {
       console.error("Error cargando asistencia:", error);
       contenedor.innerHTML = `<p style="color:var(--error);">No se pudo cargar (${error.code || error.message}).</p>`;
@@ -283,7 +323,7 @@
     cuerpo.innerHTML = `
       <p class="info-bloques">${numBloques} bloque(s) de ${bloqueMin} min ese día.</p>
       <label class="toggle-festivo">
-        <input type="checkbox" id="chk-festivo" ${guardada.festivo ? "checked" : ""}>
+        <input type="checkbox" id="chk-festivo" ${guardada.festivo ? "checked" : ""} ${edicionDesbloqueada ? "" : "disabled"}>
         Marcar este día como festivo (no hay clase / no se toma asistencia)
       </label>
       <div id="zona-estudiantes"></div>
@@ -297,17 +337,17 @@
 
       const tabla = document.createElement("table");
       tabla.className = "tabla-asistencia";
-      let theadHtml = `<tr><th>ID</th><th>Estudiante</th>`;
+      let theadHtml = `<tr><th>No.</th><th>ID</th><th>Estudiante</th>`;
       for (let b = 1; b <= numBloques; b++) theadHtml += `<th>Bloque ${b}</th>`;
       theadHtml += `<th>Horas ausente</th></tr>`;
       tabla.innerHTML = `<thead>${theadHtml}</thead><tbody></tbody>`;
       const tbody = tabla.querySelector("tbody");
 
-      estudiantesActuales.forEach((est) => {
+      estudiantesActuales.forEach((est, idx) => {
         const marcados = guardada.ausencias?.[est.cedula] || [];
-        let celdas = `<td>${est.cedula}</td><td>${est.apellido} ${est.nombre}</td>`;
+        let celdas = `<td>${idx + 1}</td><td>${est.cedula}</td><td>${est.apellido} ${est.nombre}</td>`;
         for (let b = 0; b < numBloques; b++) {
-          celdas += `<td class="celda-bloque"><input type="checkbox" class="chk-bloque" data-cedula="${est.cedula}" data-bloque="${b}" ${marcados[b] ? "checked" : ""}></td>`;
+          celdas += `<td class="celda-bloque"><input type="checkbox" class="chk-bloque" data-cedula="${est.cedula}" data-bloque="${b}" ${marcados[b] ? "checked" : ""} ${edicionDesbloqueada ? "" : "disabled"}></td>`;
         }
         celdas += `<td class="col-horas" id="horas-${est.cedula}">${((marcados.filter(Boolean).length) * bloqueMin / 60).toFixed(2)}</td>`;
         const fila = document.createElement("tr");
@@ -337,6 +377,7 @@
     const botonGuardar = document.createElement("button");
     botonGuardar.className = "boton-primario";
     botonGuardar.textContent = "Guardar asistencia de este día";
+    botonGuardar.style.display = edicionDesbloqueada ? "block" : "none";
     botonGuardar.addEventListener("click", async () => {
       const aviso = document.getElementById("aviso-asistencia");
       aviso.textContent = "Guardando...";
@@ -364,7 +405,7 @@
   function pintarResumenAsistencia() {
     const cuerpo = document.getElementById("cuerpo-dia");
     const horasTotales = {};
-    estudiantesActuales.forEach((est) => { horasTotales[est.cedula] = 0; });
+    estudiantesActuales.forEach((est, idx) => { horasTotales[est.cedula] = 0; });
 
     Object.values(sesionesGuardadas).forEach((sesion) => {
       if (sesion.festivo) return;
@@ -378,14 +419,14 @@
 
     const tabla = document.createElement("table");
     tabla.className = "tabla-asistencia";
-    tabla.innerHTML = `<thead><tr><th>ID</th><th>Estudiante</th><th>Horas de inasistencia</th></tr></thead><tbody></tbody>`;
+    tabla.innerHTML = `<thead><tr><th>No.</th><th>ID</th><th>Estudiante</th><th>Horas de inasistencia</th></tr></thead><tbody></tbody>`;
     const tbody = tabla.querySelector("tbody");
 
-    estudiantesActuales.forEach((est) => {
+    estudiantesActuales.forEach((est, idx) => {
       const horas = horasTotales[est.cedula] || 0;
       const alerta = horas >= 2 ? ` style="color:var(--error); font-weight:600;"` : "";
       const fila = document.createElement("tr");
-      fila.innerHTML = `<td>${est.cedula}</td><td>${est.apellido} ${est.nombre}</td><td${alerta}>${horas.toFixed(2)}${horas >= 2 ? " ⚠" : ""}</td>`;
+      fila.innerHTML = `<td>${idx + 1}</td><td>${est.cedula}</td><td>${est.apellido} ${est.nombre}</td><td${alerta}>${horas.toFixed(2)}${horas >= 2 ? " ⚠" : ""}</td>`;
       tbody.appendChild(fila);
     });
 

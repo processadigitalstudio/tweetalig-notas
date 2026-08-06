@@ -72,13 +72,24 @@
       <button id="boton-guardar" class="boton-primario">Registrar acceso</button>
       <p class="aviso" id="aviso"></p>
     </div>
+    <div class="form-tarjeta" style="margin-top:24px;">
+      <h3 style="font-family: var(--fuente-display); color: var(--azul-profundo); margin: 0;">Contraseña para editar notas/asistencia</h3>
+      <p style="font-size:13px; color:var(--tinta-suave); margin: 6px 0 10px;">
+        Master y Admin ven las notas y asistencia de cualquier clase en modo solo lectura.
+        Esta contraseña es el candado adicional que deben escribir si necesitan corregir algo directamente.
+      </p>
+      <label for="clave-edicion">Contraseña actual</label>
+      <input type="text" id="clave-edicion" placeholder="Ej. tweetalig2026">
+      <button id="boton-guardar-clave" class="boton-primario">Guardar contraseña</button>
+      <p class="aviso" id="aviso-clave"></p>
+    </div>
   </main>
 </div>
 
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { db, DOMINIO_PERMITIDO } from "../js/firebase-config.js?v=3";
-  import { collection, doc, setDoc, deleteDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { collection, doc, setDoc, deleteDoc, getDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
   const { usuario, rol: miRol } = await requireAuth(["master", "admin"]);
 
@@ -195,6 +206,25 @@
 
   await cargarSedes();
   await cargarLista();
+
+  // Contraseña de edición para revisión de notas/asistencia
+  const refClave = doc(db, "configuracion", "claveEdicion");
+  const snapClave = await getDoc(refClave);
+  if (snapClave.exists()) document.getElementById("clave-edicion").value = snapClave.data().clave || "";
+
+  document.getElementById("boton-guardar-clave").addEventListener("click", async () => {
+    const clave = document.getElementById("clave-edicion").value.trim();
+    const aviso = document.getElementById("aviso-clave");
+    if (!clave) {
+      aviso.style.color = "var(--error)";
+      aviso.textContent = "Escribe una contraseña.";
+      return;
+    }
+    await setDoc(refClave, { clave });
+    await registrarLog(usuario, miRol, "Actualizó la contraseña de edición", "");
+    aviso.style.color = "#2E6E4E";
+    aviso.textContent = "Contraseña actualizada.";
+  });
 </script>
 </body>
 </html>

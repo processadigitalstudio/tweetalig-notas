@@ -419,10 +419,11 @@ Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo`;
       }
 
       try {
-        await setDoc(doc(db, "estudiantes", cedula), {
+        await setDoc(doc(db, "estudiantes", `${clase.id}_${cedula}`), {
           nombre, apellido, cedula, correo,
           claseId: clase.id,
           claseTexto: `${clase.nivel} - ${clase.grupo} (${clase.anio}-${clase.periodo}, ciclo ${clase.ciclo})`,
+          anio: clase.anio, periodo: clase.periodo, ciclo: clase.ciclo,
           ciudadId: clase.ciudadId, ciudadNombre: clase.ciudadNombre
         });
         resultados.push({ ok: true, texto: `${nombre} ${apellido} (${cedula}): matriculado en ${clase.nivel} - ${clase.grupo}.` });
