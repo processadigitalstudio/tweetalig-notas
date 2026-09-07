@@ -154,8 +154,7 @@
     cargarProfesores();
   });
 
-  await cargarSedes();
-  await cargarProfesores();
+  await Promise.all([cargarSedes(), cargarProfesores()]);
 </script>
 </body>
 </html>

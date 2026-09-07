@@ -6,8 +6,9 @@
 <title>Tweetalig — Habilitación</title>
 <link rel="stylesheet" href="../css/styles.css?v=2">
 <style>
-  .selector-periodo { display: grid; grid-template-columns: 1fr 1fr 1fr 1.6fr; gap: 10px; max-width: 620px; margin-bottom: 20px; }
-  .selector-periodo select { font-family: var(--fuente-cuerpo); font-size: 14px; padding: 9px 11px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
+  .selector-periodo { display: grid; grid-template-columns: 1fr 1fr 1fr 1.6fr; gap: 10px; max-width: 620px; margin-bottom: 20px; align-items: end; }
+  .selector-periodo select { width: 100%; font-family: var(--fuente-cuerpo); font-size: 14px; padding: 9px 11px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
+  .etiqueta-campo { display: block; font-size: 12px; font-weight: 500; color: var(--tinta-suave); margin-bottom: 4px; }
 
   .tabla-hab { width: 100%; border-collapse: collapse; max-width: 1050px; }
   .tabla-hab th, .tabla-hab td { padding: 9px 10px; border-bottom: 1px solid var(--linea); font-size: 13.5px; text-align: left; }
@@ -41,10 +42,10 @@
     </p>
 
     <div class="selector-periodo">
-      <select id="anio"></select>
-      <select id="periodo"><option value="1">1</option><option value="2">2</option></select>
-      <select id="ciclo"></select>
-      <select id="programa"><option value="">Todos los programas</option></select>
+      <div><label class="etiqueta-campo">Año</label><select id="anio"></select></div>
+      <div><label class="etiqueta-campo">Periodo</label><select id="periodo"><option value="1">1</option><option value="2">2</option></select></div>
+      <div><label class="etiqueta-campo">Ciclo</label><select id="ciclo"></select></div>
+      <div><label class="etiqueta-campo">Programa</label><select id="programa"><option value="">Todos los programas</option></select></div>
     </div>
 
     <div class="nota-script">
@@ -159,18 +160,29 @@
 
       candidatosActuales = [];
 
-      for (const clase of clases) {
-        if (!cachePrograma[clase.programaId]) {
-          const snapPrograma = await getDoc(doc(db, "programas", clase.programaId));
-          cachePrograma[clase.programaId] = snapPrograma.exists() ? snapPrograma.data() : null;
-        }
+      // Cargar el programa de cada clase (una sola vez por programa, en paralelo)
+      const idsProgramaUnicos = [...new Set(clases.map((c) => c.programaId))];
+      await Promise.all(idsProgramaUnicos.map(async (pid) => {
+        const snapPrograma = await getDoc(doc(db, "programas", pid));
+        cachePrograma[pid] = snapPrograma.exists() ? snapPrograma.data() : null;
+      }));
+
+      // Procesar todas las clases EN PARALELO (antes era una por una, por eso tardaba)
+      await Promise.all(clases.map(async (clase) => {
         const programa = cachePrograma[clase.programaId];
-        if (!programa) continue;
+        if (!programa) return;
 
         const snapEst = await getDocs(query(collection(db, "estudiantes"), where("claseId", "==", clase.id)));
-        for (const dEst of snapEst.docs) {
+        if (snapEst.empty) return;
+
+        // Las notas de todos los estudiantes de esta clase, también en paralelo
+        const notasPorEstudiante = await Promise.all(
+          snapEst.docs.map((dEst) => getDoc(doc(db, "notas", `${clase.id}_${dEst.data().cedula}`)))
+        );
+
+        snapEst.docs.forEach((dEst, i) => {
           const est = dEst.data();
-          const snapNota = await getDoc(doc(db, "notas", `${clase.id}_${est.cedula}`));
+          const snapNota = notasPorEstudiante[i];
           const valores = snapNota.exists() ? snapNota.data().valores || {} : {};
           const notaFinal = calcularNotaFinal(programa, valores);
           if (notaFinal !== null && notaFinal >= 2.5 && notaFinal <= 2.9) {
@@ -182,8 +194,9 @@
               notaFinal, notificado: yaNotificados.has(est.cedula + "_" + clase.id)
             });
           }
-        }
-      }
+        });
+      }));
+
 
       pintarTabla();
     } catch (error) {

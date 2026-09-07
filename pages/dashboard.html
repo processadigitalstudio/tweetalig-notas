@@ -62,7 +62,9 @@
     if (snapPeriodos.empty) {
       contenedor.innerHTML = "<p style='color: var(--tinta-suave); margin-top: 24px;'>No hay períodos marcados como activos todavía. Ve a \"Períodos académicos\" para crear/activar uno.</p>";
     } else {
-      for (const dPeriodo of snapPeriodos.docs) {
+      // Pedir las clases de todos los períodos activos AL MISMO TIEMPO,
+      // en vez de uno por uno, y luego armar los bloques en orden.
+      const bloques = await Promise.all(snapPeriodos.docs.map(async (dPeriodo) => {
         const per = dPeriodo.data();
         const q = query(
           collection(db, "clases"),
@@ -97,8 +99,10 @@
           bloque.appendChild(tabla);
         }
 
-        contenedor.appendChild(bloque);
-      }
+        return bloque;
+      }));
+
+      bloques.forEach((bloque) => contenedor.appendChild(bloque));
     }
   } else if (rol === "profesor") {
     const contenedor = document.getElementById("contenedor-periodos");

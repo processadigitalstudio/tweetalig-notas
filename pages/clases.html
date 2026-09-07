@@ -441,9 +441,7 @@
   document.getElementById("ciclo").addEventListener("change", cargarProgramas);
   document.getElementById("programa").addEventListener("change", actualizarModoSede);
 
-  await cargarSedes();
-  await cargarProfesores();
-  await cargarProgramas();
+  await Promise.all([cargarSedes(), cargarProfesores(), cargarProgramas()]);
   actualizarModoSede();
   await cargarClases();
 </script>

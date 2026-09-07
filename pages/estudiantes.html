@@ -151,8 +151,7 @@
   document.getElementById("filtro-clase").addEventListener("change", pintarLista);
   document.getElementById("filtro-periodo").addEventListener("change", pintarLista);
 
-  await cargarFiltros();
-  await cargarEstudiantes();
+  await Promise.all([cargarFiltros(), cargarEstudiantes()]);
 </script>
 </body>
 </html>
