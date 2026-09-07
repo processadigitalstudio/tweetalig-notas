@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tweetalig — Habilitación</title>
+<link rel="stylesheet" href="../css/styles.css?v=2">
+<style>
+  .selector-periodo { display: grid; grid-template-columns: 1fr 1fr 1fr 1.6fr; gap: 10px; max-width: 620px; margin-bottom: 20px; }
+  .selector-periodo select { font-family: var(--fuente-cuerpo); font-size: 14px; padding: 9px 11px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
+
+  .tabla-hab { width: 100%; border-collapse: collapse; max-width: 1050px; }
+  .tabla-hab th, .tabla-hab td { padding: 9px 10px; border-bottom: 1px solid var(--linea); font-size: 13.5px; text-align: left; }
+  .tabla-hab th { color: var(--tinta-suave); font-weight: 500; font-size: 11px; text-transform: uppercase; }
+  .col-final { font-weight: 700; color: var(--terracota); }
+  .estado-pendiente { color: var(--oro); font-weight: 600; }
+  .estado-enviado { color: var(--verde-marca); font-weight: 600; }
+
+  .boton-primario { max-width: 340px; margin-top: 18px; }
+  .aviso { font-size: 13px; margin-top: 10px; min-height: 18px; max-width: 600px; }
+  .nota-script {
+    font-size: 12.5px; color: var(--tinta-suave); background: var(--oro-suave);
+    border: 1px solid var(--oro); border-radius: 8px; padding: 12px 14px; max-width: 640px; margin-bottom: 18px;
+  }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <nav class="app-nav">
+    <div class="logo-nav-wrap"><img src="../assets/logo-tweetalig.png" alt="Tweetalig"></div>
+    <h1>Portal de notas</h1>
+    <div id="menu-rol"></div>
+    <a href="#" id="link-salir">Cerrar sesión</a>
+  </nav>
+  <main class="app-contenido">
+    <span class="etiqueta-rol">Habilitación</span>
+    <h2>Estudiantes que deben habilitar</h2>
+    <p style="color: var(--tinta-suave); max-width: 640px; margin-top: -8px;">
+      Nota final entre 2.5 y 2.9. Se agrupan por ciclo <b>y por programa</b> — cada programa
+      puede tener su propio criterio, así que revisa uno a la vez antes de enviar el aviso.
+    </p>
+
+    <div class="selector-periodo">
+      <select id="anio"></select>
+      <select id="periodo"><option value="1">1</option><option value="2">2</option></select>
+      <select id="ciclo"></select>
+      <select id="programa"><option value="">Todos los programas</option></select>
+    </div>
+
+    <div class="nota-script">
+      ⚠ El envío real de correo todavía no está conectado (falta el script de Apps Script por sede).
+      Por ahora, este botón <b>registra el aviso</b> — queda guardado quién habilita, cuándo se marcó como
+      notificado y quién lo hizo, listo para que el script se conecte después sin perder nada.
+    </div>
+
+    <div id="contenido-habilitacion"></div>
+  </main>
+</div>
+
+<script type="module">
+  import { requireAuth, registrarLog } from "../js/auth.js?v=3";
+  import { db } from "../js/firebase-config.js?v=3";
+  import { collection, getDocs, getDoc, doc, setDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+  const { usuario, rol, perfil } = await requireAuth(["coordinador", "secretaria", "admin", "master"]);
+
+  function cargarSelectoresPeriodo() {
+    const anioActual = new Date().getFullYear();
+    const anioBase = Math.min(2026, anioActual);
+    const selectAnio = document.getElementById("anio");
+    selectAnio.innerHTML = "";
+    for (let a = anioBase; a <= anioBase + 9; a++) {
+      const opt = document.createElement("option");
+      opt.value = a; opt.textContent = a;
+      if (a === anioActual) opt.selected = true;
+      selectAnio.appendChild(opt);
+    }
+    const selectCiclo = document.getElementById("ciclo");
+    selectCiclo.innerHTML = "";
+    for (let c = 1; c <= 15; c++) {
+      const opt = document.createElement("option");
+      opt.value = c; opt.textContent = c;
+      selectCiclo.appendChild(opt);
+    }
+  }
+
+  async function cargarProgramasDelPeriodo() {
+    const anio = Number(document.getElementById("anio").value);
+    const periodo = Number(document.getElementById("periodo").value);
+    const ciclo = Number(document.getElementById("ciclo").value);
+    const selectPrograma = document.getElementById("programa");
+    const valorPrevio = selectPrograma.value;
+
+    const snap = await getDocs(query(
+      collection(db, "programas"),
+      where("anio", "==", anio), where("periodo", "==", periodo), where("ciclo", "==", ciclo)
+    ));
+
+    selectPrograma.innerHTML = '<option value="">Todos los programas</option>';
+    snap.forEach((d) => {
+      const opt = document.createElement("option");
+      opt.value = d.id;
+      opt.textContent = d.data().nombre;
+      selectPrograma.appendChild(opt);
+    });
+    if ([...selectPrograma.options].some((o) => o.value === valorPrevio)) selectPrograma.value = valorPrevio;
+  }
+
+  function calcularPromedioCorte(programa, valores, corteIndex) {
+    const corte = programa.cortes[corteIndex];
+    let suma = 0;
+    for (let n = 0; n < corte.notas.length; n++) {
+      const clave = `c${corteIndex}n${n}`;
+      const val = Number(valores[clave]);
+      if (isNaN(val) || valores[clave] === undefined) return null;
+      suma += val * (corte.notas[n].porcentaje / 100);
+    }
+    return suma;
+  }
+
+  function calcularNotaFinal(programa, valores) {
+    let total = 0;
+    for (let c = 0; c < programa.cortes.length; c++) {
+      const prom = calcularPromedioCorte(programa, valores, c);
+      if (prom === null) return null;
+      total += prom * (programa.cortes[c].peso / 100);
+    }
+    return total;
+  }
+
+  let candidatosActuales = [];
+  let idPeriodoActual = "";
+
+  async function cargarHabilitacion() {
+    const anio = Number(document.getElementById("anio").value);
+    const periodo = Number(document.getElementById("periodo").value);
+    const ciclo = Number(document.getElementById("ciclo").value);
+    const programaFiltro = document.getElementById("programa").value;
+    idPeriodoActual = `${anio}-${periodo}-${ciclo}`;
+
+    const contenedor = document.getElementById("contenido-habilitacion");
+    contenedor.innerHTML = "<p style='color:var(--tinta-suave);'>Buscando estudiantes en habilitación...</p>";
+
+    try {
+      let qClases = query(
+        collection(db, "clases"),
+        where("anio", "==", anio), where("periodo", "==", periodo), where("ciclo", "==", ciclo)
+      );
+      const snapClases = await getDocs(qClases);
+      let clases = snapClases.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      const restringidoPorSede = (rol === "coordinador" || rol === "secretaria") && perfil?.ciudadId;
+      if (restringidoPorSede) clases = clases.filter((c) => c.ciudadId === perfil.ciudadId);
+      if (programaFiltro) clases = clases.filter((c) => c.programaId === programaFiltro);
+
+      const cachePrograma = {};
+      const snapAvisos = await getDocs(query(collection(db, "avisos_habilitacion"), where("periodoId", "==", idPeriodoActual)));
+      const yaNotificados = new Set(snapAvisos.docs.map((d) => d.data().cedula + "_" + d.data().claseId));
+
+      candidatosActuales = [];
+
+      for (const clase of clases) {
+        if (!cachePrograma[clase.programaId]) {
+          const snapPrograma = await getDoc(doc(db, "programas", clase.programaId));
+          cachePrograma[clase.programaId] = snapPrograma.exists() ? snapPrograma.data() : null;
+        }
+        const programa = cachePrograma[clase.programaId];
+        if (!programa) continue;
+
+        const snapEst = await getDocs(query(collection(db, "estudiantes"), where("claseId", "==", clase.id)));
+        for (const dEst of snapEst.docs) {
+          const est = dEst.data();
+          const snapNota = await getDoc(doc(db, "notas", `${clase.id}_${est.cedula}`));
+          const valores = snapNota.exists() ? snapNota.data().valores || {} : {};
+          const notaFinal = calcularNotaFinal(programa, valores);
+          if (notaFinal !== null && notaFinal >= 2.5 && notaFinal <= 2.9) {
+            candidatosActuales.push({
+              cedula: est.cedula, nombre: est.nombre, apellido: est.apellido, correo: est.correo,
+              claseId: clase.id, claseTexto: `${clase.nivel} - ${clase.grupo}`,
+              programaNombre: clase.programaNombre,
+              ciudadNombre: clase.ciudadNombre, docenteNombre: clase.docenteNombre,
+              notaFinal, notificado: yaNotificados.has(est.cedula + "_" + clase.id)
+            });
+          }
+        }
+      }
+
+      pintarTabla();
+    } catch (error) {
+      console.error("Error cargando habilitación:", error);
+      contenedor.innerHTML = `<p style="color:var(--error);">No se pudo cargar (${error.code || error.message}).</p>`;
+    }
+  }
+
+  function pintarTabla() {
+    const contenedor = document.getElementById("contenido-habilitacion");
+    contenedor.innerHTML = "";
+
+    if (candidatosActuales.length === 0) {
+      contenedor.innerHTML = "<p style='color:var(--tinta-suave);'>Ningún estudiante en habilitación para este ciclo/programa.</p>";
+      return;
+    }
+
+    const tabla = document.createElement("table");
+    tabla.className = "tabla-hab";
+    tabla.innerHTML = `
+      <thead><tr><th>No.</th><th>ID</th><th>Estudiante</th><th>Clase</th><th>Programa</th><th>Sede</th><th>Profesor</th><th>Nota final</th><th>Aviso</th></tr></thead>
+      <tbody></tbody>
+    `;
+    const tbody = tabla.querySelector("tbody");
+    candidatosActuales.forEach((c, idx) => {
+      const fila = document.createElement("tr");
+      fila.innerHTML = `
+        <td>${idx + 1}</td>
+        <td>${c.cedula}</td>
+        <td>${c.apellido} ${c.nombre}</td>
+        <td>${c.claseTexto}</td>
+        <td>${c.programaNombre || "—"}</td>
+        <td>${c.ciudadNombre || "—"}</td>
+        <td>${c.docenteNombre || "—"}</td>
+        <td class="col-final">${c.notaFinal.toFixed(2)}</td>
+        <td class="${c.notificado ? "estado-enviado" : "estado-pendiente"}">${c.notificado ? "Enviado" : "Pendiente"}</td>
+      `;
+      tbody.appendChild(fila);
+    });
+
+    contenedor.appendChild(tabla);
+
+    const pendientes = candidatosActuales.filter((c) => !c.notificado).length;
+    const boton = document.createElement("button");
+    boton.className = "boton-primario";
+    boton.textContent = pendientes > 0
+      ? `Registrar aviso de habilitación para ${pendientes} estudiante(s) pendiente(s)`
+      : "Todos ya tienen aviso registrado";
+    boton.disabled = pendientes === 0;
+    boton.addEventListener("click", registrarAvisos);
+    contenedor.appendChild(boton);
+
+    const aviso = document.createElement("p");
+    aviso.className = "aviso";
+    aviso.id = "aviso-envio";
+    contenedor.appendChild(aviso);
+  }
+
+  async function registrarAvisos() {
+    const aviso = document.getElementById("aviso-envio");
+    aviso.textContent = "Registrando...";
+    aviso.style.color = "var(--tinta-suave)";
+
+    const pendientes = candidatosActuales.filter((c) => !c.notificado);
+    for (const c of pendientes) {
+      await setDoc(doc(db, "avisos_habilitacion", `${idPeriodoActual}_${c.cedula}_${c.claseId}`), {
+        periodoId: idPeriodoActual,
+        cedula: c.cedula,
+        nombreCompleto: `${c.apellido} ${c.nombre}`,
+        correo: c.correo || "",
+        claseId: c.claseId,
+        claseTexto: c.claseTexto,
+        programaNombre: c.programaNombre || "",
+        notaFinal: c.notaFinal,
+        registradoPor: usuario.email,
+        fechaRegistro: serverTimestamp(),
+        enviadoRealmente: false
+      });
+    }
+
+    await registrarLog(usuario, rol, "Registró avisos de habilitación", `${pendientes.length} estudiante(s) — ${idPeriodoActual}`);
+
+    aviso.style.color = "#2E6E4E";
+    aviso.textContent = `${pendientes.length} aviso(s) registrado(s). Recuerda: falta conectar el envío real de correo (Apps Script).`;
+    await cargarHabilitacion();
+  }
+
+  document.getElementById("anio").addEventListener("change", async () => { await cargarProgramasDelPeriodo(); await cargarHabilitacion(); });
+  document.getElementById("periodo").addEventListener("change", async () => { await cargarProgramasDelPeriodo(); await cargarHabilitacion(); });
+  document.getElementById("ciclo").addEventListener("change", async () => { await cargarProgramasDelPeriodo(); await cargarHabilitacion(); });
+  document.getElementById("programa").addEventListener("change", cargarHabilitacion);
+
+  cargarSelectoresPeriodo();
+  await cargarProgramasDelPeriodo();
+  await cargarHabilitacion();
+</script>
+</body>
+</html>

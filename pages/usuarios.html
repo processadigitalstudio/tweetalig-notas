@@ -72,7 +72,7 @@
       <button id="boton-guardar" class="boton-primario">Registrar acceso</button>
       <p class="aviso" id="aviso"></p>
     </div>
-    <div class="form-tarjeta" style="margin-top:24px;">
+    <div class="form-tarjeta" id="tarjeta-clave" style="margin-top:24px;">
       <h3 style="font-family: var(--fuente-display); color: var(--azul-profundo); margin: 0;">Contraseña para editar notas/asistencia</h3>
       <p style="font-size:13px; color:var(--tinta-suave); margin: 6px 0 10px;">
         Master y Admin ven las notas y asistencia de cualquier clase en modo solo lectura.
@@ -91,7 +91,8 @@
   import { db, DOMINIO_PERMITIDO } from "../js/firebase-config.js?v=3";
   import { collection, doc, setDoc, deleteDoc, getDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-  const { usuario, rol: miRol } = await requireAuth(["master", "admin"]);
+  const { usuario, rol: miRol, perfil } = await requireAuth(["master", "admin", "coordinador", "secretaria"]);
+  const esCoordinacion = (miRol === "coordinador" || miRol === "secretaria");
 
   const NOMBRE_ROL = { coordinador: "Coordinador académico", secretaria: "Secretaria académica", admin: "Admin", master: "Master" };
   const CLASE_ROL = { coordinador: "rol-coordinador", secretaria: "rol-secretaria", admin: "rol-secretaria", master: "rol-secretaria" };
@@ -99,6 +100,13 @@
   const selectRol = document.getElementById("rol");
   const campoCargo = document.getElementById("campo-cargo");
   const campoSede = document.getElementById("campo-sede");
+
+  if (esCoordinacion) {
+    // Coordinación no puede crear cuentas Admin, y su sede queda fija (la suya).
+    document.getElementById("tarjeta-clave").style.display = "none";
+    const opcionAdmin = [...selectRol.options].find((o) => o.value === "admin");
+    if (opcionAdmin) opcionAdmin.remove();
+  }
 
   function actualizarCamposSegunRol() {
     const esAdmin = selectRol.value === "admin";
@@ -117,17 +125,22 @@
       return;
     }
     snap.forEach((d) => {
+      if (esCoordinacion && d.id !== perfil.ciudadId) return; // solo su propia sede
       const opt = document.createElement("option");
       opt.value = d.id;
       opt.textContent = d.data().nombre;
       select.appendChild(opt);
     });
+    if (esCoordinacion) select.disabled = true;
   }
 
   async function cargarLista() {
     const cuerpo = document.getElementById("lista-usuarios");
     cuerpo.innerHTML = "";
-    const q = query(collection(db, "usuarios"), where("rol", "in", ["coordinador", "secretaria", "admin", "master"]));
+    // Coordinación solo ve accesos de su propia sede (nunca admin/master)
+    const q = esCoordinacion
+      ? query(collection(db, "usuarios"), where("rol", "in", ["coordinador", "secretaria"]), where("ciudadId", "==", perfil.ciudadId))
+      : query(collection(db, "usuarios"), where("rol", "in", ["coordinador", "secretaria", "admin", "master"]));
     const snap = await getDocs(q);
     snap.forEach((d) => {
       const u = d.data();

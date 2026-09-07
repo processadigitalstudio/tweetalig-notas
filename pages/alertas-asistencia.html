@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tweetalig — Alertas de inasistencia</title>
+<link rel="stylesheet" href="../css/styles.css?v=2">
+<style>
+  .selector-periodo { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; max-width: 520px; margin-bottom: 20px; }
+  .selector-periodo select, .selector-periodo input { font-family: var(--fuente-cuerpo); font-size: 14px; padding: 9px 11px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
+
+  .tabla-al { width: 100%; border-collapse: collapse; max-width: 1000px; }
+  .tabla-al th, .tabla-al td { padding: 9px 10px; border-bottom: 1px solid var(--linea); font-size: 13.5px; text-align: left; }
+  .tabla-al th { color: var(--tinta-suave); font-weight: 500; font-size: 11px; text-transform: uppercase; }
+  .col-horas { font-weight: 700; color: var(--terracota); }
+  .estado-pendiente { color: var(--oro); font-weight: 600; }
+  .estado-enviado { color: var(--verde-marca); font-weight: 600; }
+
+  .boton-primario { max-width: 340px; margin-top: 18px; }
+  .aviso { font-size: 13px; margin-top: 10px; min-height: 18px; max-width: 600px; }
+  .nota-script {
+    font-size: 12.5px; color: var(--tinta-suave); background: var(--oro-suave);
+    border: 1px solid var(--oro); border-radius: 8px; padding: 12px 14px; max-width: 640px; margin-bottom: 18px;
+  }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <nav class="app-nav">
+    <div class="logo-nav-wrap"><img src="../assets/logo-tweetalig.png" alt="Tweetalig"></div>
+    <h1>Portal de notas</h1>
+    <div id="menu-rol"></div>
+    <a href="#" id="link-salir">Cerrar sesión</a>
+  </nav>
+  <main class="app-contenido">
+    <span class="etiqueta-rol">Alertas de inasistencia</span>
+    <h2>Estudiantes con horas de inasistencia</h2>
+    <p style="color: var(--tinta-suave); max-width: 640px; margin-top: -8px;">
+      Se agrupan todos los estudiantes del ciclo que llegaron o superaron el umbral de horas ausentes,
+      sin importar la clase o el profesor, para enviar el aviso una sola vez.
+    </p>
+
+    <div class="selector-periodo">
+      <select id="anio"></select>
+      <select id="periodo"><option value="1">1</option><option value="2">2</option></select>
+      <select id="ciclo"></select>
+      <input type="number" id="umbral" value="2" min="0.5" step="0.5" title="Horas mínimas para alertar">
+    </div>
+    <p style="font-size:12px; color:var(--tinta-suave); margin-top:-14px;">Umbral actual: horas de inasistencia ≥ <span id="umbral-texto">2</span></p>
+
+    <div class="nota-script">
+      ⚠ El envío real de correo todavía no está conectado (falta el script de Apps Script por sede,
+      y definir el umbral final por programa con Dirección Académica). Por ahora, este botón
+      <b>registra el aviso</b> — queda guardado quién debe recibirlo, cuándo y quién lo marcó.
+    </div>
+
+    <div id="contenido-alertas"></div>
+  </main>
+</div>
+
+<script type="module">
+  import { requireAuth, registrarLog } from "../js/auth.js?v=3";
+  import { db } from "../js/firebase-config.js?v=3";
+  import { collection, getDocs, doc, setDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+  const { usuario, rol, perfil } = await requireAuth(["coordinador", "secretaria", "admin", "master"]);
+
+  function cargarSelectoresPeriodo() {
+    const anioActual = new Date().getFullYear();
+    const anioBase = Math.min(2026, anioActual);
+    const selectAnio = document.getElementById("anio");
+    selectAnio.innerHTML = "";
+    for (let a = anioBase; a <= anioBase + 9; a++) {
+      const opt = document.createElement("option");
+      opt.value = a; opt.textContent = a;
+      if (a === anioActual) opt.selected = true;
+      selectAnio.appendChild(opt);
+    }
+    const selectCiclo = document.getElementById("ciclo");
+    selectCiclo.innerHTML = "";
+    for (let c = 1; c <= 15; c++) {
+      const opt = document.createElement("option");
+      opt.value = c; opt.textContent = c;
+      selectCiclo.appendChild(opt);
+    }
+  }
+
+  let candidatosActuales = [];
+  let idPeriodoActual = "";
+
+  async function cargarAlertas() {
+    const anio = Number(document.getElementById("anio").value);
+    const periodo = Number(document.getElementById("periodo").value);
+    const ciclo = Number(document.getElementById("ciclo").value);
+    const umbral = Number(document.getElementById("umbral").value) || 2;
+    document.getElementById("umbral-texto").textContent = umbral;
+    idPeriodoActual = `${anio}-${periodo}-${ciclo}`;
+
+    const contenedor = document.getElementById("contenido-alertas");
+    contenedor.innerHTML = "<p style='color:var(--tinta-suave);'>Calculando horas de inasistencia...</p>";
+
+    try {
+      let qClases = query(
+        collection(db, "clases"),
+        where("anio", "==", anio), where("periodo", "==", periodo), where("ciclo", "==", ciclo)
+      );
+      const snapClases = await getDocs(qClases);
+      let clases = snapClases.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      const restringidoPorSede = (rol === "coordinador" || rol === "secretaria") && perfil?.ciudadId;
+      if (restringidoPorSede) clases = clases.filter((c) => c.ciudadId === perfil.ciudadId);
+
+      // Agrupar por grupoDistanciaId (misma clase real repartida en varias sedes)
+      const porGrupo = {};
+      clases.forEach((c) => {
+        const clave = c.grupoDistanciaId || c.id;
+        if (!porGrupo[clave]) porGrupo[clave] = [];
+        porGrupo[clave].push(c);
+      });
+
+      const snapAvisos = await getDocs(query(collection(db, "avisos_inasistencia"), where("periodoId", "==", idPeriodoActual)));
+      const yaNotificados = new Set(snapAvisos.docs.map((d) => d.data().cedula));
+
+      candidatosActuales = [];
+
+      for (const grupo of Object.values(porGrupo)) {
+        grupo.sort((a, b) => (a.id < b.id ? -1 : 1));
+        const claseAncla = grupo[0].id;
+
+        const idsClases = grupo.map((c) => c.id);
+        let estudiantes = [];
+        for (let i = 0; i < idsClases.length; i += 10) {
+          const lote = idsClases.slice(i, i + 10);
+          const snapEst = await getDocs(query(collection(db, "estudiantes"), where("claseId", "in", lote)));
+          snapEst.forEach((d) => estudiantes.push(d.data()));
+        }
+        if (estudiantes.length === 0) continue;
+
+        const snapSesiones = await getDocs(collection(db, "clases", claseAncla, "sesiones"));
+        const horasTotales = {};
+        snapSesiones.forEach((d) => {
+          const sesion = d.data();
+          if (sesion.festivo) return;
+          const bloqueMin = sesion.bloqueMin || 60;
+          Object.entries(sesion.ausencias || {}).forEach(([cedula, marcados]) => {
+            const bloquesMarcados = (marcados || []).filter(Boolean).length;
+            horasTotales[cedula] = (horasTotales[cedula] || 0) + bloquesMarcados * bloqueMin / 60;
+          });
+        });
+
+        estudiantes.forEach((est) => {
+          const horas = horasTotales[est.cedula] || 0;
+          if (horas >= umbral) {
+            candidatosActuales.push({
+              cedula: est.cedula, nombre: est.nombre, apellido: est.apellido, correo: est.correo,
+              claseTexto: `${grupo[0].nivel} - ${grupo[0].grupo}`,
+              ciudadNombre: est.ciudadNombre || grupo[0].ciudadNombre,
+              docenteNombre: grupo[0].docenteNombre,
+              horas, notificado: yaNotificados.has(est.cedula)
+            });
+          }
+        });
+      }
+
+      pintarTabla();
+    } catch (error) {
+      console.error("Error cargando alertas:", error);
+      contenedor.innerHTML = `<p style="color:var(--error);">No se pudo cargar (${error.code || error.message}).</p>`;
+    }
+  }
+
+  function pintarTabla() {
+    const contenedor = document.getElementById("contenido-alertas");
+    contenedor.innerHTML = "";
+
+    if (candidatosActuales.length === 0) {
+      contenedor.innerHTML = "<p style='color:var(--tinta-suave);'>Ningún estudiante supera el umbral de horas ausentes en este ciclo.</p>";
+      return;
+    }
+
+    const tabla = document.createElement("table");
+    tabla.className = "tabla-al";
+    tabla.innerHTML = `
+      <thead><tr><th>No.</th><th>ID</th><th>Estudiante</th><th>Clase</th><th>Sede</th><th>Profesor</th><th>Horas ausente</th><th>Aviso</th></tr></thead>
+      <tbody></tbody>
+    `;
+    const tbody = tabla.querySelector("tbody");
+    candidatosActuales.forEach((c, idx) => {
+      const fila = document.createElement("tr");
+      fila.innerHTML = `
+        <td>${idx + 1}</td>
+        <td>${c.cedula}</td>
+        <td>${c.apellido} ${c.nombre}</td>
+        <td>${c.claseTexto}</td>
+        <td>${c.ciudadNombre || "—"}</td>
+        <td>${c.docenteNombre || "—"}</td>
+        <td class="col-horas">${c.horas.toFixed(2)}</td>
+        <td class="${c.notificado ? "estado-enviado" : "estado-pendiente"}">${c.notificado ? "Enviado" : "Pendiente"}</td>
+      `;
+      tbody.appendChild(fila);
+    });
+
+    contenedor.appendChild(tabla);
+
+    const pendientes = candidatosActuales.filter((c) => !c.notificado).length;
+    const boton = document.createElement("button");
+    boton.className = "boton-primario";
+    boton.textContent = pendientes > 0
+      ? `Registrar alerta de inasistencia para ${pendientes} estudiante(s) pendiente(s)`
+      : "Todos ya tienen alerta registrada";
+    boton.disabled = pendientes === 0;
+    boton.addEventListener("click", registrarAlertas);
+    contenedor.appendChild(boton);
+
+    const aviso = document.createElement("p");
+    aviso.className = "aviso";
+    aviso.id = "aviso-envio";
+    contenedor.appendChild(aviso);
+  }
+
+  async function registrarAlertas() {
+    const aviso = document.getElementById("aviso-envio");
+    aviso.textContent = "Registrando...";
+    aviso.style.color = "var(--tinta-suave)";
+
+    const pendientes = candidatosActuales.filter((c) => !c.notificado);
+    for (const c of pendientes) {
+      await setDoc(doc(db, "avisos_inasistencia", `${idPeriodoActual}_${c.cedula}`), {
+        periodoId: idPeriodoActual,
+        cedula: c.cedula,
+        nombreCompleto: `${c.apellido} ${c.nombre}`,
+        correo: c.correo || "",
+        claseTexto: c.claseTexto,
+        horas: c.horas,
+        registradoPor: usuario.email,
+        fechaRegistro: serverTimestamp(),
+        enviadoRealmente: false
+      });
+    }
+
+    await registrarLog(usuario, rol, "Registró alertas de inasistencia", `${pendientes.length} estudiante(s) — ${idPeriodoActual}`);
+
+    aviso.style.color = "#2E6E4E";
+    aviso.textContent = `${pendientes.length} alerta(s) registrada(s). Recuerda: falta conectar el envío real de correo (Apps Script).`;
+    await cargarAlertas();
+  }
+
+  document.getElementById("anio").addEventListener("change", cargarAlertas);
+  document.getElementById("periodo").addEventListener("change", cargarAlertas);
+  document.getElementById("ciclo").addEventListener("change", cargarAlertas);
+  document.getElementById("umbral").addEventListener("change", cargarAlertas);
+
+  cargarSelectoresPeriodo();
+  await cargarAlertas();
+</script>
+</body>
+</html>

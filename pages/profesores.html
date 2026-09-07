@@ -64,7 +64,7 @@
   import { db, DOMINIO_PERMITIDO } from "../js/firebase-config.js?v=3";
   import { collection, doc, setDoc, deleteDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-  const { usuario, rol } = await requireAuth(["master", "admin", "coordinador", "secretaria"]);
+  const { usuario, rol, perfil } = await requireAuth(["master", "admin", "coordinador", "secretaria"]);
 
   let sedes = [];
 
@@ -87,7 +87,10 @@
   async function cargarProfesores() {
     const cuerpo = document.getElementById("lista-profesores");
     cuerpo.innerHTML = "";
-    const q = query(collection(db, "usuarios"), where("rol", "==", "profesor"));
+    const restringidoPorSede = (rol === "coordinador" || rol === "secretaria") && perfil?.ciudadId;
+    const q = restringidoPorSede
+      ? query(collection(db, "usuarios"), where("rol", "==", "profesor"), where("ciudadIds", "array-contains", perfil.ciudadId))
+      : query(collection(db, "usuarios"), where("rol", "==", "profesor"));
     const snap = await getDocs(q);
     snap.forEach((d) => {
       const p = d.data();

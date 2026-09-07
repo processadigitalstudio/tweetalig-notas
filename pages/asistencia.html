@@ -81,9 +81,12 @@
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, getDoc, doc, setDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-  const { usuario, rol } = await requireAuth(["profesor", "master", "admin"]);
+  const { usuario, rol, perfil } = await requireAuth(["profesor", "master", "admin", "coordinador", "secretaria"]);
 
-  let edicionDesbloqueada = (rol === "profesor");
+  // Coordinador y secretaria SÍ pueden editar asistencia directamente,
+  // igual que el profesor — solo Master/Admin necesitan contraseña, y
+  // solo porque están revisando el trabajo de otros.
+  let edicionDesbloqueada = (rol === "profesor" || rol === "coordinador" || rol === "secretaria");
 
   if (rol === "master" || rol === "admin") {
     document.getElementById("candado-edicion").style.display = "block";
@@ -113,12 +116,19 @@
   let correoActivo = usuario.email.toLowerCase();
   let gruposClase = [];
 
-  if (rol === "master" || rol === "admin") {
+  if (rol === "master" || rol === "admin" || rol === "coordinador" || rol === "secretaria") {
     document.getElementById("selector-profesor").style.display = "block";
     const selectProf = document.getElementById("profesor-vista");
-    const snapProf = await getDocs(query(collection(db, "usuarios"), where("rol", "==", "profesor")));
+
+    const snapProf = await getDocs(
+      (rol === "coordinador" || rol === "secretaria") && perfil?.ciudadId
+        ? query(collection(db, "usuarios"), where("rol", "==", "profesor"), where("ciudadIds", "array-contains", perfil.ciudadId))
+        : query(collection(db, "usuarios"), where("rol", "==", "profesor"))
+    );
+    let profesores = snapProf.docs;
+
     selectProf.innerHTML = "";
-    snapProf.forEach((d) => {
+    profesores.forEach((d) => {
       const opt = document.createElement("option");
       opt.value = d.id;
       opt.textContent = d.data().nombre;
@@ -130,8 +140,10 @@
     if (correoDesdeUrl && [...selectProf.options].some((o) => o.value === correoDesdeUrl)) {
       selectProf.value = correoDesdeUrl;
       correoActivo = correoDesdeUrl;
-    } else if (!snapProf.empty) {
+    } else if (selectProf.options.length > 0) {
       correoActivo = selectProf.options[0].value;
+    } else {
+      correoActivo = null;
     }
 
     selectProf.addEventListener("change", async () => {
@@ -141,6 +153,11 @@
   }
 
   async function cargarGrupos() {
+    if (!correoActivo) {
+      document.getElementById("selector-clase").innerHTML = "<option value=''>No hay profesores en tu sede</option>";
+      document.getElementById("contenido-asistencia").innerHTML = "<p style='color:var(--tinta-suave);'>No hay profesores registrados en tu sede todavía.</p>";
+      return;
+    }
     const q = query(collection(db, "clases"), where("docenteCorreo", "==", correoActivo));
     const snap = await getDocs(q);
     const clases = snap.docs.map((d) => ({ id: d.id, ...d.data() }));

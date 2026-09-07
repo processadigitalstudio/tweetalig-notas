@@ -73,9 +73,12 @@
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, getDoc, doc, setDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-  const { usuario, rol } = await requireAuth(["profesor", "master", "admin"]);
+  const { usuario, rol, perfil } = await requireAuth(["profesor", "master", "admin", "coordinador", "secretaria"]);
 
-  let edicionDesbloqueada = (rol === "profesor"); // el profesor siempre puede editar sus propias notas
+  // El profesor siempre puede editar sus propias notas. Coordinador/secretaria
+  // NUNCA pueden editar notas (solo revisan) — solo master/admin pueden
+  // desbloquear la edición con la contraseña.
+  let edicionDesbloqueada = (rol === "profesor");
 
   if (rol === "master" || rol === "admin") {
     document.getElementById("candado-edicion").style.display = "block";
@@ -97,17 +100,30 @@
         alert("Contraseña incorrecta.");
       }
     });
+  } else if (rol === "coordinador" || rol === "secretaria") {
+    // Solo un aviso de solo-lectura, SIN botón de desbloquear — las notas
+    // solo las edita Master/Admin, nunca coordinación.
+    document.getElementById("candado-edicion").style.display = "block";
+    document.getElementById("estado-candado").textContent = "🔒 Solo lectura — las notas las edita únicamente el profesor o Master.";
+    document.getElementById("boton-desbloquear").style.display = "none";
   }
 
   let correoActivo = usuario.email.toLowerCase();
   let gruposClase = [];
 
-  if (rol === "master" || rol === "admin") {
+  if (rol === "master" || rol === "admin" || rol === "coordinador" || rol === "secretaria") {
     document.getElementById("selector-profesor").style.display = "block";
     const selectProf = document.getElementById("profesor-vista");
-    const snapProf = await getDocs(query(collection(db, "usuarios"), where("rol", "==", "profesor")));
+
+    let qProfesores = query(collection(db, "usuarios"), where("rol", "==", "profesor"));
+    if ((rol === "coordinador" || rol === "secretaria") && perfil?.ciudadId) {
+      qProfesores = query(collection(db, "usuarios"), where("rol", "==", "profesor"), where("ciudadIds", "array-contains", perfil.ciudadId));
+    }
+    const snapProf = await getDocs(qProfesores);
+    let profesores = snapProf.docs;
+
     selectProf.innerHTML = "";
-    snapProf.forEach((d) => {
+    profesores.forEach((d) => {
       const opt = document.createElement("option");
       opt.value = d.id;
       opt.textContent = d.data().nombre;
@@ -119,8 +135,10 @@
     if (correoDesdeUrl && [...selectProf.options].some((o) => o.value === correoDesdeUrl)) {
       selectProf.value = correoDesdeUrl;
       correoActivo = correoDesdeUrl;
-    } else if (!snapProf.empty) {
+    } else if (selectProf.options.length > 0) {
       correoActivo = selectProf.options[0].value;
+    } else {
+      correoActivo = null;
     }
 
     selectProf.addEventListener("change", async () => {
@@ -130,6 +148,11 @@
   }
 
   async function cargarGrupos() {
+    if (!correoActivo) {
+      document.getElementById("selector-clase").innerHTML = "<option value=''>No hay profesores en tu sede</option>";
+      document.getElementById("contenido-notas").innerHTML = "<p style='color:var(--tinta-suave);'>No hay profesores registrados en tu sede todavía.</p>";
+      return;
+    }
     const q = query(collection(db, "clases"), where("docenteCorreo", "==", correoActivo));
     const snap = await getDocs(q);
     const clases = snap.docs.map((d) => ({ id: d.id, ...d.data() }));

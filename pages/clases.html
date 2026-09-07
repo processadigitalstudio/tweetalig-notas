@@ -197,7 +197,10 @@
   async function cargarProfesores() {
     const select = document.getElementById("docente");
     select.innerHTML = "";
-    const q = query(collection(db, "usuarios"), where("rol", "==", "profesor"));
+    const restringidoPorSede = (rol === "coordinador" || rol === "secretaria") && perfil?.ciudadId;
+    const q = restringidoPorSede
+      ? query(collection(db, "usuarios"), where("rol", "==", "profesor"), where("ciudadIds", "array-contains", perfil.ciudadId))
+      : query(collection(db, "usuarios"), where("rol", "==", "profesor"));
     const snap = await getDocs(q);
     listaProfesores = snap.docs.map((d) => ({ correo: d.id, nombre: d.data().nombre }));
     if (listaProfesores.length === 0) {

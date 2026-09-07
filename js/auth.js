@@ -54,6 +54,9 @@ const MENU_POR_ROL = {
     ["Programas", "programas.html"],
     ["Períodos", "periodos.html"],
     ["Notas (revisión)", "notas.html"],
+    ["Asistencia (revisión)", "asistencia.html"],
+    ["Habilitación", "habilitacion.html"],
+    ["Alertas de inasistencia", "alertas-asistencia.html"],
     ["Accesos y usuarios", "usuarios.html"],
     ["Log de cambios", "logs.html"]
   ],
@@ -66,6 +69,9 @@ const MENU_POR_ROL = {
     ["Programas", "programas.html"],
     ["Períodos", "periodos.html"],
     ["Notas (revisión)", "notas.html"],
+    ["Asistencia (revisión)", "asistencia.html"],
+    ["Habilitación", "habilitacion.html"],
+    ["Alertas de inasistencia", "alertas-asistencia.html"],
     ["Accesos y usuarios", "usuarios.html"]
   ],
   coordinador: [
@@ -73,13 +79,23 @@ const MENU_POR_ROL = {
     ["Clases", "clases.html"],
     ["Estudiantes", "estudiantes.html"],
     ["Carga masiva (CSV)", "carga-masiva.html"],
-    ["Períodos", "periodos.html"]
+    ["Períodos", "periodos.html"],
+    ["Notas (revisión)", "notas.html"],
+    ["Asistencia (revisión)", "asistencia.html"],
+    ["Habilitación", "habilitacion.html"],
+    ["Alertas de inasistencia", "alertas-asistencia.html"],
+    ["Accesos y usuarios", "usuarios.html"]
   ],
   secretaria: [
     ["Profesores", "profesores.html"],
     ["Clases", "clases.html"],
     ["Estudiantes", "estudiantes.html"],
-    ["Carga masiva (CSV)", "carga-masiva.html"]
+    ["Carga masiva (CSV)", "carga-masiva.html"],
+    ["Notas (revisión)", "notas.html"],
+    ["Asistencia (revisión)", "asistencia.html"],
+    ["Habilitación", "habilitacion.html"],
+    ["Alertas de inasistencia", "alertas-asistencia.html"],
+    ["Accesos y usuarios", "usuarios.html"]
   ],
   profesor: [
     ["Notas", "notas.html"],

@@ -1,22 +1,29 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Roboto+Condensed:wght@400;600;700&display=swap');
 
 :root {
-  --tinta: #1B2A33;
-  --tinta-suave: #4C5D66;
+  /* Colores oficiales de marca — Manual de identidad Tweetalig */
+  --verde-marca: #5DB69C;        /* Pantone 7466 C — color dominante */
+  --verde-marca-hover: #4A9A83;
+  --verde-marca-suave: #E7F5F0;
+  --azul-profundo: #2C3D4D;      /* Pantone 7546 C — acento secundario */
+  --azul-profundo-hover: #1F2C38;
+  --oro: #E6C14F;                /* Pantone 7406 C — acento terciario */
+  --oro-suave: #FBF3DE;
+  --terracota: #D48167;          /* color complementario — se usa para error/alerta */
+
+  --tinta: #2C3D4D;
+  --tinta-suave: #5C6B78;
   --linea: #DDE3E1;
   --superficie: #FFFFFF;
-  --fondo: #F5F4EF;
-  --azul-profundo: #2B3A4A;
-  --azul-profundo-hover: #1F2C38;
-  --verde-marca: #3CB99A;
-  --verde-marca-suave: #E4F5F0;
-  --oro: #F0B429;
-  --oro-suave: #FCF0D6;
-  --error: #B23A34;
-  --error-fondo: #FBEAE9;
+  --fondo: #F6F5F1;
+
+  --error: #D48167;
+  --error-fondo: #FBEDE8;
+
   --radio: 10px;
-  --fuente-display: 'Fraunces', serif;
-  --fuente-cuerpo: 'Inter', sans-serif;
+  --fuente-display: 'Montserrat', sans-serif;
+  --fuente-cuerpo: 'Montserrat', sans-serif;
+  --fuente-secundaria: 'Roboto Condensed', sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -69,14 +76,14 @@ body {
   font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--verde-marca);
+  color: var(--verde-marca-hover);
   font-weight: 600;
   margin-bottom: 6px;
 }
 
 .marca h1 {
   font-family: var(--fuente-display);
-  font-weight: 600;
+  font-weight: 700;
   font-size: 28px;
   margin: 0;
   color: var(--azul-profundo);
@@ -106,13 +113,13 @@ body {
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.boton-google:hover { border-color: var(--azul-profundo); background: var(--fondo); }
+.boton-google:hover { border-color: var(--verde-marca); background: var(--fondo); }
 .boton-google:disabled { opacity: 0.6; cursor: default; }
 
 .mensaje-error {
   min-height: 18px;
   font-size: 13px;
-  color: var(--error);
+  color: var(--terracota);
   margin: 10px 0 0;
 }
 
@@ -122,13 +129,14 @@ body {
   border-radius: 6px;
 }
 
+/* Botón principal — verde de marca, texto blanco */
 .boton-primario {
   margin-top: 20px;
   font-family: var(--fuente-cuerpo);
   font-size: 15px;
   font-weight: 600;
   color: #fff;
-  background: var(--azul-profundo);
+  background: var(--verde-marca);
   border: none;
   border-radius: 8px;
   padding: 12px;
@@ -136,8 +144,22 @@ body {
   transition: background 0.15s ease;
 }
 
-.boton-primario:hover { background: var(--azul-profundo-hover); }
+.boton-primario:hover { background: var(--verde-marca-hover); }
 .boton-primario:disabled { opacity: 0.6; cursor: default; }
+
+/* Botón secundario — contorno azul, para acciones de apoyo */
+.boton-secundario {
+  font-family: var(--fuente-cuerpo);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--azul-profundo);
+  background: none;
+  border: 1px dashed var(--azul-profundo);
+  border-radius: 6px;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+.boton-secundario:hover { background: var(--fondo); }
 
 /* ---------- Layout de páginas internas ---------- */
 
@@ -146,16 +168,18 @@ body {
   display: flex;
 }
 
+/* Barra lateral — VERDE dominante, texto blanco (identidad de marca) */
 .app-nav {
   width: 220px;
-  background: var(--azul-profundo);
+  background: var(--verde-marca);
   color: #fff;
   padding: 24px 18px;
   flex-shrink: 0;
 }
 
-.app-nav .marca-eyebrow { color: var(--verde-marca); }
-.app-nav h1 { font-size: 18px; color: #fff; margin: 0 0 24px; }
+.app-nav .marca-eyebrow { color: #fff; opacity: 0.85; }
+.app-nav h1 { font-size: 18px; color: #fff; margin: 0 0 24px; font-weight: 700; }
+
 .logo-nav-wrap {
   background: #fff;
   border-radius: 8px;
@@ -167,15 +191,16 @@ body {
 
 .app-nav a {
   display: block;
-  color: #E4EBEF;
+  color: #fff;
   text-decoration: none;
   font-size: 14px;
+  font-weight: 500;
   padding: 9px 10px;
   border-radius: 6px;
   margin-bottom: 2px;
 }
 
-.app-nav a:hover { background: rgba(255,255,255,0.08); }
+.app-nav a:hover { background: rgba(255,255,255,0.18); }
 
 .app-contenido {
   flex: 1;
@@ -184,20 +209,32 @@ body {
 
 .app-contenido h2 {
   font-family: var(--fuente-display);
+  font-weight: 700;
   font-size: 24px;
   color: var(--azul-profundo);
   margin-top: 0;
 }
 
+.app-contenido h3 {
+  font-family: var(--fuente-display);
+  font-weight: 600;
+  color: var(--azul-profundo);
+}
+
+/* Etiqueta de rol — fondo AZUL (segundo color de marca), texto blanco */
 .etiqueta-rol {
   display: inline-block;
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--azul-profundo);
-  background: var(--oro-suave);
+  color: #fff;
+  background: var(--azul-profundo);
   padding: 4px 10px;
   border-radius: 20px;
   margin-bottom: 20px;
 }
+
+/* Acentos dorados — usar con moderación (subrayados, íconos, badges pequeños) */
+.acento-oro { color: var(--oro); }
+.fondo-oro-suave { background: var(--oro-suave); }
