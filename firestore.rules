@@ -47,10 +47,30 @@ service cloud.firestore {
     // - Crear/editar: admin o master, pero SOLO master puede asignar el rol "master".
     // - Borrar: admin o master, pero NUNCA se puede borrar una cuenta con rol "master".
     match /usuarios/{correoId} {
-      allow read: if estaLogueado() && (miCorreo() == correoId || esAdminOMaster());
-      allow create, update: if esAdminOMaster() &&
-        (request.resource.data.rol != 'master' || esMaster());
-      allow delete: if esAdminOMaster() && resource.data.rol != 'master';
+      function tieneMiSede(datos) {
+        return (datos.ciudadId == miPerfil().ciudadId) ||
+               (datos.ciudadIds != null && miPerfil().ciudadId in datos.ciudadIds);
+      }
+
+      allow read: if estaLogueado() && (
+        miCorreo() == correoId ||
+        esAdminOMaster() ||
+        (miRol() in ['coordinador', 'secretaria'] && tieneMiSede(resource.data))
+      );
+
+      allow create, update: if estaLogueado() && (
+        (esAdminOMaster() && (request.resource.data.rol != 'master' || esMaster())) ||
+        (miRol() in ['coordinador', 'secretaria'] &&
+         request.resource.data.rol in ['coordinador', 'secretaria', 'profesor'] &&
+         tieneMiSede(request.resource.data))
+      );
+
+      allow delete: if estaLogueado() && (
+        (esAdminOMaster() && resource.data.rol != 'master') ||
+        (miRol() in ['coordinador', 'secretaria'] &&
+         resource.data.rol in ['coordinador', 'secretaria', 'profesor'] &&
+         tieneMiSede(resource.data))
+      );
     }
 
     // Colección "ciudades": sedes con su correo de coordinación y URL de alertas.
@@ -75,7 +95,8 @@ service cloud.firestore {
       match /sesiones/{fecha} {
         allow read: if estaLogueado();
         allow write: if estaLogueado() && (
-          esGestor() ||
+          esAdminOMaster() ||
+          (miRol() in ['coordinador', 'secretaria'] && get(/databases/$(database)/documents/clases/$(claseId)).data.ciudadId == miPerfil().ciudadId) ||
           (miRol() == 'profesor' && get(/databases/$(database)/documents/clases/$(claseId)).data.docenteCorreo == miCorreo())
         );
       }
@@ -108,6 +129,39 @@ service cloud.firestore {
       allow write: if esAdminOMaster();
     }
 
+    // Colección "avisos_habilitacion": registro de a quién se le notificó
+    // que debe habilitar (2.5-2.9). Es la base de datos que usará el
+    // futuro script de envío de correos.
+    match /avisos_habilitacion/{id} {
+      allow read: if esGestor();
+      allow write: if esGestor();
+    }
+
+    match /avisos_perdida/{id} {
+      allow read: if esGestor();
+      allow write: if esGestor();
+    }
+
+    // Colección "avisos_inasistencia": registro de a quién se le alertó
+    // por exceder el umbral de horas ausentes en un ciclo.
+    match /avisos_inasistencia/{id} {
+      allow read: if esGestor();
+      allow write: if esGestor();
+    }
+
+    match /avisos_perdida_inasistencia/{id} {
+      allow read: if esGestor();
+      allow write: if esGestor();
+    }
+
+    // Colección "plantillas_correo": el texto de cada tipo de aviso
+    // (alerta_habilitacion, perdida_habilitacion, alerta_inasistencia,
+    // perdida_inasistencia), con marcadores {nombre}, {nivel}, {grupo}.
+    match /plantillas_correo/{id} {
+      allow read: if esGestor();
+      allow write: if esGestor();
+    }
+
     // Colección "configuracion": legado, ya no se usa activamente.
     match /configuracion/{id} {
       allow read: if estaLogueado();
@@ -121,14 +175,22 @@ service cloud.firestore {
       function claseIdDelDocumento() {
         return id.split('_')[0];
       }
+      function claseReferenciada() {
+        return get(/databases/$(database)/documents/clases/$(claseIdDelDocumento())).data;
+      }
       function esMiPropiaClase() {
-        return miRol() == 'profesor' &&
-          get(/databases/$(database)/documents/clases/$(claseIdDelDocumento())).data.docenteCorreo == miCorreo();
+        return miRol() == 'profesor' && claseReferenciada().docenteCorreo == miCorreo();
+      }
+      function esMiSedeComoCoordinacion() {
+        return miRol() in ['coordinador', 'secretaria'] && claseReferenciada().ciudadId == miPerfil().ciudadId;
       }
 
-      allow read: if estaLogueado() && (esGestor() || esMiPropiaClase());
-      allow create, update: if estaLogueado() && (esGestor() || esMiPropiaClase());
-      allow delete: if esGestor();
+      // Leer: admin/master (todo), coordinación (solo su sede), profesor (solo sus clases).
+      allow read: if estaLogueado() && (esAdminOMaster() || esMiSedeComoCoordinacion() || esMiPropiaClase());
+      // Escribir: SOLO admin/master o el profesor dueño de la clase.
+      // Coordinador/secretaria NUNCA pueden modificar notas.
+      allow create, update: if estaLogueado() && (esAdminOMaster() || esMiPropiaClase());
+      allow delete: if esAdminOMaster();
     }
   }
 }

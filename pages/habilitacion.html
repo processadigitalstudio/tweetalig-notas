@@ -6,22 +6,33 @@
 <title>Tweetalig — Habilitación</title>
 <link rel="stylesheet" href="../css/styles.css?v=2">
 <style>
-  .selector-periodo { display: grid; grid-template-columns: 1fr 1fr 1fr 1.6fr; gap: 10px; max-width: 620px; margin-bottom: 20px; align-items: end; }
+  .selector-periodo { display: grid; grid-template-columns: 1fr 1fr 1fr 1.4fr 1.4fr; gap: 10px; max-width: 780px; margin-bottom: 20px; align-items: end; }
   .selector-periodo select { width: 100%; font-family: var(--fuente-cuerpo); font-size: 14px; padding: 9px 11px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
   .etiqueta-campo { display: block; font-size: 12px; font-weight: 500; color: var(--tinta-suave); margin-bottom: 4px; }
 
-  .tabla-hab { width: 100%; border-collapse: collapse; max-width: 1050px; }
+  .seccion-tipo { margin-top: 32px; padding-top: 24px; border-top: 2px solid var(--linea); }
+  .seccion-tipo h3 { font-family: var(--fuente-display); color: var(--azul-profundo); margin: 0 0 4px; }
+  .badge-tipo-alerta { display:inline-block; background: var(--oro-suave); color:#8A5A12; font-size:11px; font-weight:700; text-transform:uppercase; padding:3px 9px; border-radius:12px; margin-left:8px; }
+  .badge-tipo-perdida { display:inline-block; background: var(--error-fondo); color: var(--terracota); font-size:11px; font-weight:700; text-transform:uppercase; padding:3px 9px; border-radius:12px; margin-left:8px; }
+
+  .tabla-hab { width: 100%; border-collapse: collapse; max-width: 1100px; }
   .tabla-hab th, .tabla-hab td { padding: 9px 10px; border-bottom: 1px solid var(--linea); font-size: 13.5px; text-align: left; }
   .tabla-hab th { color: var(--tinta-suave); font-weight: 500; font-size: 11px; text-transform: uppercase; }
   .col-final { font-weight: 700; color: var(--terracota); }
   .estado-pendiente { color: var(--oro); font-weight: 600; }
   .estado-enviado { color: var(--verde-marca); font-weight: 600; }
 
-  .boton-primario { max-width: 340px; margin-top: 18px; }
+  .editor-plantilla { background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio); padding: 18px 20px; max-width: 700px; margin: 14px 0 20px; }
+  .editor-plantilla textarea { width: 100%; min-height: 110px; font-family: var(--fuente-cuerpo); font-size: 13.5px; padding: 10px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); resize: vertical; }
+  .botones-marcador { display: flex; gap: 6px; margin: 8px 0; flex-wrap: wrap; }
+  .boton-marcador { font-size: 12px; font-weight: 500; color: var(--verde-marca-hover); background: var(--verde-marca-suave); border: none; border-radius: 14px; padding: 5px 11px; cursor: pointer; }
+
+  .boton-primario { max-width: 380px; margin-top: 12px; }
+  .boton-secundario { font-family: var(--fuente-cuerpo); font-size: 12.5px; font-weight: 500; color: var(--azul-profundo); background: none; border: 1px dashed var(--azul-profundo); border-radius: 6px; padding: 7px 12px; cursor: pointer; }
   .aviso { font-size: 13px; margin-top: 10px; min-height: 18px; max-width: 600px; }
   .nota-script {
     font-size: 12.5px; color: var(--tinta-suave); background: var(--oro-suave);
-    border: 1px solid var(--oro); border-radius: 8px; padding: 12px 14px; max-width: 640px; margin-bottom: 18px;
+    border: 1px solid var(--oro); border-radius: 8px; padding: 12px 14px; max-width: 700px; margin-bottom: 10px;
   }
 </style>
 </head>
@@ -35,26 +46,63 @@
   </nav>
   <main class="app-contenido">
     <span class="etiqueta-rol">Habilitación</span>
-    <h2>Estudiantes que deben habilitar</h2>
-    <p style="color: var(--tinta-suave); max-width: 640px; margin-top: -8px;">
-      Nota final entre 2.5 y 2.9. Se agrupan por ciclo <b>y por programa</b> — cada programa
-      puede tener su propio criterio, así que revisa uno a la vez antes de enviar el aviso.
+    <h2>Estudiantes en habilitación o pérdida</h2>
+    <p style="color: var(--tinta-suave); max-width: 700px; margin-top: -8px;">
+      Habilitación: nota final entre 2.5 y 2.9. Pérdida: nota final menor a 2.5.
+      Se agrupan por ciclo, sede y programa para enviar el aviso correcto a cada quien.
     </p>
 
     <div class="selector-periodo">
       <div><label class="etiqueta-campo">Año</label><select id="anio"></select></div>
       <div><label class="etiqueta-campo">Periodo</label><select id="periodo"><option value="1">1</option><option value="2">2</option></select></div>
       <div><label class="etiqueta-campo">Ciclo</label><select id="ciclo"></select></div>
+      <div><label class="etiqueta-campo">Sede</label><select id="sede"><option value="">Todas las sedes</option></select></div>
       <div><label class="etiqueta-campo">Programa</label><select id="programa"><option value="">Todos los programas</option></select></div>
     </div>
 
     <div class="nota-script">
       ⚠ El envío real de correo todavía no está conectado (falta el script de Apps Script por sede).
-      Por ahora, este botón <b>registra el aviso</b> — queda guardado quién habilita, cuándo se marcó como
-      notificado y quién lo hizo, listo para que el script se conecte después sin perder nada.
+      Los botones de abajo <b>registran el aviso y el mensaje ya armado</b> — queda todo listo (a quién,
+      con qué texto exacto) para que el script se conecte después y lo envíe, sin perder nada.
     </div>
 
-    <div id="contenido-habilitacion"></div>
+    <!-- ========== HABILITACIÓN ========== -->
+    <div class="seccion-tipo">
+      <h3>Habilitación <span class="badge-tipo-alerta">Alerta</span></h3>
+      <p style="color:var(--tinta-suave); font-size:13px; margin-top:0;">Nota final entre 2.5 y 2.9 — deben presentar habilitación.</p>
+
+      <button type="button" class="boton-secundario" id="boton-editar-plantilla-hab">✎ Editar mensaje de habilitación</button>
+      <div class="editor-plantilla" id="editor-hab" style="display:none;">
+        <div class="botones-marcador">
+          <button type="button" class="boton-marcador" data-campo="hab" data-insertar="{nombre}">{nombre}</button>
+          <button type="button" class="boton-marcador" data-campo="hab" data-insertar="{nivel}">{nivel}</button>
+          <button type="button" class="boton-marcador" data-campo="hab" data-insertar="{grupo}">{grupo}</button>
+        </div>
+        <textarea id="texto-plantilla-hab"></textarea>
+        <button type="button" class="boton-primario" id="boton-guardar-plantilla-hab" style="max-width:220px;">Guardar mensaje</button>
+      </div>
+
+      <div id="contenido-habilitacion"></div>
+    </div>
+
+    <!-- ========== PÉRDIDA ========== -->
+    <div class="seccion-tipo">
+      <h3>Pérdida por notas <span class="badge-tipo-perdida">Pérdida</span></h3>
+      <p style="color:var(--tinta-suave); font-size:13px; margin-top:0;">Nota final menor a 2.5 — perdieron la asignatura, no aplica habilitación.</p>
+
+      <button type="button" class="boton-secundario" id="boton-editar-plantilla-perd">✎ Editar mensaje de pérdida</button>
+      <div class="editor-plantilla" id="editor-perd" style="display:none;">
+        <div class="botones-marcador">
+          <button type="button" class="boton-marcador" data-campo="perd" data-insertar="{nombre}">{nombre}</button>
+          <button type="button" class="boton-marcador" data-campo="perd" data-insertar="{nivel}">{nivel}</button>
+          <button type="button" class="boton-marcador" data-campo="perd" data-insertar="{grupo}">{grupo}</button>
+        </div>
+        <textarea id="texto-plantilla-perd"></textarea>
+        <button type="button" class="boton-primario" id="boton-guardar-plantilla-perd" style="max-width:220px;">Guardar mensaje</button>
+      </div>
+
+      <div id="contenido-perdida"></div>
+    </div>
   </main>
 </div>
 
@@ -64,6 +112,22 @@
   import { collection, getDocs, getDoc, doc, setDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
   const { usuario, rol, perfil } = await requireAuth(["coordinador", "secretaria", "admin", "master"]);
+
+  const PLANTILLA_HAB_DEFECTO = `Estimado/a {nombre},
+
+Te informamos que en el nivel {nivel}, grupo {grupo}, tu nota final quedó en rango de HABILITACIÓN.
+
+Por favor comunícate con la oficina de coordinación académica lo antes posible para conocer el proceso a seguir.
+
+Tweetalig Centro de Idiomas`;
+
+  const PLANTILLA_PERD_DEFECTO = `Estimado/a {nombre},
+
+Te informamos que en el nivel {nivel}, grupo {grupo}, tu nota final no alcanzó el mínimo aprobatorio.
+
+Por favor comunícate con la oficina de coordinación académica para conocer las opciones disponibles.
+
+Tweetalig Centro de Idiomas`;
 
   function cargarSelectoresPeriodo() {
     const anioActual = new Date().getFullYear();
@@ -83,6 +147,22 @@
       opt.value = c; opt.textContent = c;
       selectCiclo.appendChild(opt);
     }
+  }
+
+  async function cargarSedesFiltro() {
+    const selectSede = document.getElementById("sede");
+    if (rol === "coordinador" || rol === "secretaria") {
+      // Su sede ya está fija — no tiene sentido dejarla elegir otra.
+      selectSede.parentElement.style.display = "none";
+      return;
+    }
+    const snap = await getDocs(collection(db, "ciudades"));
+    snap.forEach((d) => {
+      const opt = document.createElement("option");
+      opt.value = d.id;
+      opt.textContent = d.data().nombre;
+      selectSede.appendChild(opt);
+    });
   }
 
   async function cargarProgramasDelPeriodo() {
@@ -129,18 +209,20 @@
     return total;
   }
 
-  let candidatosActuales = [];
+  let habilitacionActuales = [];
+  let perdidaActuales = [];
   let idPeriodoActual = "";
 
-  async function cargarHabilitacion() {
+  async function cargarDatos() {
     const anio = Number(document.getElementById("anio").value);
     const periodo = Number(document.getElementById("periodo").value);
     const ciclo = Number(document.getElementById("ciclo").value);
     const programaFiltro = document.getElementById("programa").value;
+    const sedeFiltro = document.getElementById("sede").value;
     idPeriodoActual = `${anio}-${periodo}-${ciclo}`;
 
-    const contenedor = document.getElementById("contenido-habilitacion");
-    contenedor.innerHTML = "<p style='color:var(--tinta-suave);'>Buscando estudiantes en habilitación...</p>";
+    document.getElementById("contenido-habilitacion").innerHTML = "<p style='color:var(--tinta-suave);'>Buscando...</p>";
+    document.getElementById("contenido-perdida").innerHTML = "";
 
     try {
       let qClases = query(
@@ -152,22 +234,26 @@
 
       const restringidoPorSede = (rol === "coordinador" || rol === "secretaria") && perfil?.ciudadId;
       if (restringidoPorSede) clases = clases.filter((c) => c.ciudadId === perfil.ciudadId);
+      else if (sedeFiltro) clases = clases.filter((c) => c.ciudadId === sedeFiltro);
       if (programaFiltro) clases = clases.filter((c) => c.programaId === programaFiltro);
 
       const cachePrograma = {};
-      const snapAvisos = await getDocs(query(collection(db, "avisos_habilitacion"), where("periodoId", "==", idPeriodoActual)));
-      const yaNotificados = new Set(snapAvisos.docs.map((d) => d.data().cedula + "_" + d.data().claseId));
+      const [snapAvisosHab, snapAvisosPerd] = await Promise.all([
+        getDocs(query(collection(db, "avisos_habilitacion"), where("periodoId", "==", idPeriodoActual))),
+        getDocs(query(collection(db, "avisos_perdida"), where("periodoId", "==", idPeriodoActual)))
+      ]);
+      const notificadosHab = new Set(snapAvisosHab.docs.map((d) => d.data().cedula + "_" + d.data().claseId));
+      const notificadosPerd = new Set(snapAvisosPerd.docs.map((d) => d.data().cedula + "_" + d.data().claseId));
 
-      candidatosActuales = [];
+      habilitacionActuales = [];
+      perdidaActuales = [];
 
-      // Cargar el programa de cada clase (una sola vez por programa, en paralelo)
       const idsProgramaUnicos = [...new Set(clases.map((c) => c.programaId))];
       await Promise.all(idsProgramaUnicos.map(async (pid) => {
         const snapPrograma = await getDoc(doc(db, "programas", pid));
         cachePrograma[pid] = snapPrograma.exists() ? snapPrograma.data() : null;
       }));
 
-      // Procesar todas las clases EN PARALELO (antes era una por una, por eso tardaba)
       await Promise.all(clases.map(async (clase) => {
         const programa = cachePrograma[clase.programaId];
         if (!programa) return;
@@ -175,7 +261,6 @@
         const snapEst = await getDocs(query(collection(db, "estudiantes"), where("claseId", "==", clase.id)));
         if (snapEst.empty) return;
 
-        // Las notas de todos los estudiantes de esta clase, también en paralelo
         const notasPorEstudiante = await Promise.all(
           snapEst.docs.map((dEst) => getDoc(doc(db, "notas", `${clase.id}_${dEst.data().cedula}`)))
         );
@@ -185,48 +270,56 @@
           const snapNota = notasPorEstudiante[i];
           const valores = snapNota.exists() ? snapNota.data().valores || {} : {};
           const notaFinal = calcularNotaFinal(programa, valores);
-          if (notaFinal !== null && notaFinal >= 2.5 && notaFinal <= 2.9) {
-            candidatosActuales.push({
-              cedula: est.cedula, nombre: est.nombre, apellido: est.apellido, correo: est.correo,
-              claseId: clase.id, claseTexto: `${clase.nivel} - ${clase.grupo}`,
-              programaNombre: clase.programaNombre,
-              ciudadNombre: clase.ciudadNombre, docenteNombre: clase.docenteNombre,
-              notaFinal, notificado: yaNotificados.has(est.cedula + "_" + clase.id)
-            });
+          if (notaFinal === null) return;
+
+          const registro = {
+            cedula: est.cedula, nombre: est.nombre, apellido: est.apellido, correo: est.correo || "",
+            claseId: clase.id, nivel: clase.nivel, grupo: clase.grupo,
+            claseTexto: `${clase.nivel} - ${clase.grupo}`,
+            programaNombre: clase.programaNombre,
+            ciudadNombre: clase.ciudadNombre, docenteNombre: clase.docenteNombre,
+            notaFinal
+          };
+
+          if (notaFinal >= 2.5 && notaFinal <= 2.9) {
+            habilitacionActuales.push({ ...registro, notificado: notificadosHab.has(est.cedula + "_" + clase.id) });
+          } else if (notaFinal < 2.5) {
+            perdidaActuales.push({ ...registro, notificado: notificadosPerd.has(est.cedula + "_" + clase.id) });
           }
         });
       }));
 
-
-      pintarTabla();
+      pintarTabla("contenido-habilitacion", habilitacionActuales, "Registrar aviso de habilitación", registrarAvisosHabilitacion);
+      pintarTabla("contenido-perdida", perdidaActuales, "Registrar aviso de pérdida", registrarAvisosPerdida);
     } catch (error) {
       console.error("Error cargando habilitación:", error);
-      contenedor.innerHTML = `<p style="color:var(--error);">No se pudo cargar (${error.code || error.message}).</p>`;
+      document.getElementById("contenido-habilitacion").innerHTML = `<p style="color:var(--error);">No se pudo cargar (${error.code || error.message}).</p>`;
     }
   }
 
-  function pintarTabla() {
-    const contenedor = document.getElementById("contenido-habilitacion");
+  function pintarTabla(idContenedor, lista, textoBoton, funcionRegistrar) {
+    const contenedor = document.getElementById(idContenedor);
     contenedor.innerHTML = "";
 
-    if (candidatosActuales.length === 0) {
-      contenedor.innerHTML = "<p style='color:var(--tinta-suave);'>Ningún estudiante en habilitación para este ciclo/programa.</p>";
+    if (lista.length === 0) {
+      contenedor.innerHTML = "<p style='color:var(--tinta-suave);'>Ningún estudiante en esta categoría para este ciclo/sede/programa.</p>";
       return;
     }
 
     const tabla = document.createElement("table");
     tabla.className = "tabla-hab";
     tabla.innerHTML = `
-      <thead><tr><th>No.</th><th>ID</th><th>Estudiante</th><th>Clase</th><th>Programa</th><th>Sede</th><th>Profesor</th><th>Nota final</th><th>Aviso</th></tr></thead>
+      <thead><tr><th>No.</th><th>ID</th><th>Estudiante</th><th>Correo</th><th>Clase</th><th>Programa</th><th>Sede</th><th>Profesor</th><th>Nota final</th><th>Aviso</th></tr></thead>
       <tbody></tbody>
     `;
     const tbody = tabla.querySelector("tbody");
-    candidatosActuales.forEach((c, idx) => {
+    lista.forEach((c, idx) => {
       const fila = document.createElement("tr");
       fila.innerHTML = `
         <td>${idx + 1}</td>
         <td>${c.cedula}</td>
         <td>${c.apellido} ${c.nombre}</td>
+        <td>${c.correo || "—"}</td>
         <td>${c.claseTexto}</td>
         <td>${c.programaNombre || "—"}</td>
         <td>${c.ciudadNombre || "—"}</td>
@@ -236,33 +329,44 @@
       `;
       tbody.appendChild(fila);
     });
-
     contenedor.appendChild(tabla);
 
-    const pendientes = candidatosActuales.filter((c) => !c.notificado).length;
+    const pendientes = lista.filter((c) => !c.notificado).length;
     const boton = document.createElement("button");
     boton.className = "boton-primario";
-    boton.textContent = pendientes > 0
-      ? `Registrar aviso de habilitación para ${pendientes} estudiante(s) pendiente(s)`
-      : "Todos ya tienen aviso registrado";
+    boton.textContent = pendientes > 0 ? `${textoBoton} — ${pendientes} pendiente(s)` : "Todos ya tienen aviso registrado";
     boton.disabled = pendientes === 0;
-    boton.addEventListener("click", registrarAvisos);
+    boton.addEventListener("click", funcionRegistrar);
     contenedor.appendChild(boton);
 
     const aviso = document.createElement("p");
     aviso.className = "aviso";
-    aviso.id = "aviso-envio";
+    aviso.id = idContenedor + "-aviso";
     contenedor.appendChild(aviso);
   }
 
-  async function registrarAvisos() {
-    const aviso = document.getElementById("aviso-envio");
+  function resolverPlantilla(plantilla, c) {
+    return plantilla
+      .replaceAll("{nombre}", `${c.nombre} ${c.apellido}`)
+      .replaceAll("{nivel}", c.nivel || "")
+      .replaceAll("{grupo}", c.grupo || "");
+  }
+
+  async function registrarAvisosHabilitacion() {
+    await registrarLote("avisos_habilitacion", habilitacionActuales, document.getElementById("texto-plantilla-hab").value, "contenido-habilitacion-aviso", "Registró avisos de habilitación");
+  }
+  async function registrarAvisosPerdida() {
+    await registrarLote("avisos_perdida", perdidaActuales, document.getElementById("texto-plantilla-perd").value, "contenido-perdida-aviso", "Registró avisos de pérdida");
+  }
+
+  async function registrarLote(coleccion, lista, plantilla, idAviso, textoLog) {
+    const aviso = document.getElementById(idAviso);
     aviso.textContent = "Registrando...";
     aviso.style.color = "var(--tinta-suave)";
 
-    const pendientes = candidatosActuales.filter((c) => !c.notificado);
+    const pendientes = lista.filter((c) => !c.notificado);
     for (const c of pendientes) {
-      await setDoc(doc(db, "avisos_habilitacion", `${idPeriodoActual}_${c.cedula}_${c.claseId}`), {
+      await setDoc(doc(db, coleccion, `${idPeriodoActual}_${c.cedula}_${c.claseId}`), {
         periodoId: idPeriodoActual,
         cedula: c.cedula,
         nombreCompleto: `${c.apellido} ${c.nombre}`,
@@ -271,27 +375,65 @@
         claseTexto: c.claseTexto,
         programaNombre: c.programaNombre || "",
         notaFinal: c.notaFinal,
+        mensaje: resolverPlantilla(plantilla, c),
         registradoPor: usuario.email,
         fechaRegistro: serverTimestamp(),
         enviadoRealmente: false
       });
     }
 
-    await registrarLog(usuario, rol, "Registró avisos de habilitación", `${pendientes.length} estudiante(s) — ${idPeriodoActual}`);
-
+    await registrarLog(usuario, rol, textoLog, `${pendientes.length} estudiante(s) — ${idPeriodoActual}`);
     aviso.style.color = "#2E6E4E";
-    aviso.textContent = `${pendientes.length} aviso(s) registrado(s). Recuerda: falta conectar el envío real de correo (Apps Script).`;
-    await cargarHabilitacion();
+    aviso.textContent = `${pendientes.length} aviso(s) registrado(s) con su mensaje ya armado. Falta conectar el envío real (Apps Script).`;
+    await cargarDatos();
   }
 
-  document.getElementById("anio").addEventListener("change", async () => { await cargarProgramasDelPeriodo(); await cargarHabilitacion(); });
-  document.getElementById("periodo").addEventListener("change", async () => { await cargarProgramasDelPeriodo(); await cargarHabilitacion(); });
-  document.getElementById("ciclo").addEventListener("change", async () => { await cargarProgramasDelPeriodo(); await cargarHabilitacion(); });
-  document.getElementById("programa").addEventListener("change", cargarHabilitacion);
+  // ---------- Editor de plantillas ----------
+  async function cargarPlantilla(tipo, idTextarea) {
+    const snap = await getDoc(doc(db, "plantillas_correo", tipo));
+    const textarea = document.getElementById(idTextarea);
+    textarea.value = snap.exists() ? snap.data().texto : (tipo === "alerta_habilitacion" ? PLANTILLA_HAB_DEFECTO : PLANTILLA_PERD_DEFECTO);
+  }
+
+  function configurarEditor(botonEditarId, editorId, botonGuardarId, textareaId, tipo) {
+    document.getElementById(botonEditarId).addEventListener("click", () => {
+      const editor = document.getElementById(editorId);
+      editor.style.display = editor.style.display === "none" ? "block" : "none";
+    });
+    document.getElementById(botonGuardarId).addEventListener("click", async () => {
+      const texto = document.getElementById(textareaId).value;
+      await setDoc(doc(db, "plantillas_correo", tipo), { texto, actualizadoPor: usuario.email, fecha: serverTimestamp() });
+      await registrarLog(usuario, rol, "Actualizó plantilla de correo", tipo);
+      alert("Mensaje guardado.");
+    });
+  }
+
+  document.querySelectorAll(".boton-marcador").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idTextarea = btn.dataset.campo === "hab" ? "texto-plantilla-hab" : "texto-plantilla-perd";
+      const textarea = document.getElementById(idTextarea);
+      const inicio = textarea.selectionStart;
+      const fin = textarea.selectionEnd;
+      textarea.value = textarea.value.slice(0, inicio) + btn.dataset.insertar + textarea.value.slice(fin);
+      textarea.focus();
+    });
+  });
+
+  configurarEditor("boton-editar-plantilla-hab", "editor-hab", "boton-guardar-plantilla-hab", "texto-plantilla-hab", "alerta_habilitacion");
+  configurarEditor("boton-editar-plantilla-perd", "editor-perd", "boton-guardar-plantilla-perd", "texto-plantilla-perd", "perdida_habilitacion");
+
+  document.getElementById("anio").addEventListener("change", async () => { await cargarProgramasDelPeriodo(); await cargarDatos(); });
+  document.getElementById("periodo").addEventListener("change", async () => { await cargarProgramasDelPeriodo(); await cargarDatos(); });
+  document.getElementById("ciclo").addEventListener("change", async () => { await cargarProgramasDelPeriodo(); await cargarDatos(); });
+  document.getElementById("programa").addEventListener("change", cargarDatos);
+  document.getElementById("sede").addEventListener("change", cargarDatos);
 
   cargarSelectoresPeriodo();
+  await cargarSedesFiltro();
+  await cargarPlantilla("alerta_habilitacion", "texto-plantilla-hab");
+  await cargarPlantilla("perdida_habilitacion", "texto-plantilla-perd");
   await cargarProgramasDelPeriodo();
-  await cargarHabilitacion();
+  await cargarDatos();
 </script>
 </body>
 </html>

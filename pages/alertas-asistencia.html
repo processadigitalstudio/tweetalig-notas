@@ -6,22 +6,35 @@
 <title>Tweetalig — Alertas de inasistencia</title>
 <link rel="stylesheet" href="../css/styles.css?v=2">
 <style>
-  .selector-periodo { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; max-width: 560px; margin-bottom: 20px; align-items: end; }
+  .selector-periodo { display: grid; grid-template-columns: 1fr 1fr 1fr 1.4fr 1.4fr; gap: 10px; max-width: 780px; margin-bottom: 8px; align-items: end; }
   .selector-periodo select, .selector-periodo input { width: 100%; font-family: var(--fuente-cuerpo); font-size: 14px; padding: 9px 11px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
   .etiqueta-campo { display: block; font-size: 12px; font-weight: 500; color: var(--tinta-suave); margin-bottom: 4px; }
 
-  .tabla-al { width: 100%; border-collapse: collapse; max-width: 1000px; }
+  .fila-umbrales { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 420px; margin-bottom: 20px; }
+
+  .seccion-tipo { margin-top: 32px; padding-top: 24px; border-top: 2px solid var(--linea); }
+  .seccion-tipo h3 { font-family: var(--fuente-display); color: var(--azul-profundo); margin: 0 0 4px; }
+  .badge-tipo-alerta { display:inline-block; background: var(--oro-suave); color:#8A5A12; font-size:11px; font-weight:700; text-transform:uppercase; padding:3px 9px; border-radius:12px; margin-left:8px; }
+  .badge-tipo-perdida { display:inline-block; background: var(--error-fondo); color: var(--terracota); font-size:11px; font-weight:700; text-transform:uppercase; padding:3px 9px; border-radius:12px; margin-left:8px; }
+
+  .tabla-al { width: 100%; border-collapse: collapse; max-width: 1050px; }
   .tabla-al th, .tabla-al td { padding: 9px 10px; border-bottom: 1px solid var(--linea); font-size: 13.5px; text-align: left; }
   .tabla-al th { color: var(--tinta-suave); font-weight: 500; font-size: 11px; text-transform: uppercase; }
   .col-horas { font-weight: 700; color: var(--terracota); }
   .estado-pendiente { color: var(--oro); font-weight: 600; }
   .estado-enviado { color: var(--verde-marca); font-weight: 600; }
 
-  .boton-primario { max-width: 340px; margin-top: 18px; }
+  .editor-plantilla { background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio); padding: 18px 20px; max-width: 700px; margin: 14px 0 20px; }
+  .editor-plantilla textarea { width: 100%; min-height: 110px; font-family: var(--fuente-cuerpo); font-size: 13.5px; padding: 10px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); resize: vertical; }
+  .botones-marcador { display: flex; gap: 6px; margin: 8px 0; flex-wrap: wrap; }
+  .boton-marcador { font-size: 12px; font-weight: 500; color: var(--verde-marca-hover); background: var(--verde-marca-suave); border: none; border-radius: 14px; padding: 5px 11px; cursor: pointer; }
+
+  .boton-primario { max-width: 380px; margin-top: 12px; }
+  .boton-secundario { font-family: var(--fuente-cuerpo); font-size: 12.5px; font-weight: 500; color: var(--azul-profundo); background: none; border: 1px dashed var(--azul-profundo); border-radius: 6px; padding: 7px 12px; cursor: pointer; }
   .aviso { font-size: 13px; margin-top: 10px; min-height: 18px; max-width: 600px; }
   .nota-script {
     font-size: 12.5px; color: var(--tinta-suave); background: var(--oro-suave);
-    border: 1px solid var(--oro); border-radius: 8px; padding: 12px 14px; max-width: 640px; margin-bottom: 18px;
+    border: 1px solid var(--oro); border-radius: 8px; padding: 12px 14px; max-width: 700px; margin-bottom: 18px;
   }
 </style>
 </head>
@@ -36,35 +49,92 @@
   <main class="app-contenido">
     <span class="etiqueta-rol">Alertas de inasistencia</span>
     <h2>Estudiantes con horas de inasistencia</h2>
-    <p style="color: var(--tinta-suave); max-width: 640px; margin-top: -8px;">
-      Se agrupan todos los estudiantes del ciclo que llegaron o superaron el umbral de horas ausentes,
-      sin importar la clase o el profesor, para enviar el aviso una sola vez.
+    <p style="color: var(--tinta-suave); max-width: 700px; margin-top: -8px;">
+      Se agrupan por ciclo, sede y programa. Define abajo desde cuántas horas se manda la
+      alerta de advertencia, y desde cuántas se considera pérdida por inasistencia.
     </p>
 
     <div class="selector-periodo">
       <div><label class="etiqueta-campo">Año</label><select id="anio"></select></div>
       <div><label class="etiqueta-campo">Periodo</label><select id="periodo"><option value="1">1</option><option value="2">2</option></select></div>
       <div><label class="etiqueta-campo">Ciclo</label><select id="ciclo"></select></div>
-      <div><label class="etiqueta-campo">Horas mínimas para alertar</label><input type="number" id="umbral" value="2" min="0.5" step="0.5"></div>
+      <div><label class="etiqueta-campo">Sede</label><select id="sede"><option value="">Todas las sedes</option></select></div>
+      <div><label class="etiqueta-campo">Programa</label><select id="programa"><option value="">Todos los programas</option></select></div>
     </div>
-    <p style="font-size:12px; color:var(--tinta-suave); margin-top:-14px;">Umbral actual: horas de inasistencia ≥ <span id="umbral-texto">2</span></p>
+
+    <div class="fila-umbrales">
+      <div><label class="etiqueta-campo">Horas para Alerta</label><input type="number" id="umbral-alerta" value="2" min="0.5" step="0.5"></div>
+      <div><label class="etiqueta-campo">Horas para Pérdida</label><input type="number" id="umbral-perdida" value="6" min="0.5" step="0.5"></div>
+    </div>
 
     <div class="nota-script">
       ⚠ El envío real de correo todavía no está conectado (falta el script de Apps Script por sede,
-      y definir el umbral final por programa con Dirección Académica). Por ahora, este botón
-      <b>registra el aviso</b> — queda guardado quién debe recibirlo, cuándo y quién lo marcó.
+      y confirmar el umbral final de pérdida con Dirección Académica). Los botones de abajo
+      <b>registran el aviso y el mensaje ya armado</b>, listos para cuando se conecte el envío real.
     </div>
 
-    <div id="contenido-alertas"></div>
+    <!-- ========== ALERTA ========== -->
+    <div class="seccion-tipo">
+      <h3>Alerta de inasistencia <span class="badge-tipo-alerta">Alerta</span></h3>
+      <p style="color:var(--tinta-suave); font-size:13px; margin-top:0;">Llegó o superó el umbral de alerta, pero no el de pérdida.</p>
+
+      <button type="button" class="boton-secundario" id="boton-editar-plantilla-alerta">✎ Editar mensaje de alerta</button>
+      <div class="editor-plantilla" id="editor-alerta" style="display:none;">
+        <div class="botones-marcador">
+          <button type="button" class="boton-marcador" data-campo="alerta" data-insertar="{nombre}">{nombre}</button>
+          <button type="button" class="boton-marcador" data-campo="alerta" data-insertar="{nivel}">{nivel}</button>
+          <button type="button" class="boton-marcador" data-campo="alerta" data-insertar="{grupo}">{grupo}</button>
+        </div>
+        <textarea id="texto-plantilla-alerta"></textarea>
+        <button type="button" class="boton-primario" id="boton-guardar-plantilla-alerta" style="max-width:220px;">Guardar mensaje</button>
+      </div>
+
+      <div id="contenido-alerta"></div>
+    </div>
+
+    <!-- ========== PÉRDIDA ========== -->
+    <div class="seccion-tipo">
+      <h3>Pérdida por inasistencia <span class="badge-tipo-perdida">Pérdida</span></h3>
+      <p style="color:var(--tinta-suave); font-size:13px; margin-top:0;">Superó el umbral de pérdida por inasistencia.</p>
+
+      <button type="button" class="boton-secundario" id="boton-editar-plantilla-perdida">✎ Editar mensaje de pérdida</button>
+      <div class="editor-plantilla" id="editor-perdida" style="display:none;">
+        <div class="botones-marcador">
+          <button type="button" class="boton-marcador" data-campo="perdida" data-insertar="{nombre}">{nombre}</button>
+          <button type="button" class="boton-marcador" data-campo="perdida" data-insertar="{nivel}">{nivel}</button>
+          <button type="button" class="boton-marcador" data-campo="perdida" data-insertar="{grupo}">{grupo}</button>
+        </div>
+        <textarea id="texto-plantilla-perdida"></textarea>
+        <button type="button" class="boton-primario" id="boton-guardar-plantilla-perdida" style="max-width:220px;">Guardar mensaje</button>
+      </div>
+
+      <div id="contenido-perdida"></div>
+    </div>
   </main>
 </div>
 
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { db } from "../js/firebase-config.js?v=3";
-  import { collection, getDocs, doc, setDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { collection, getDocs, getDoc, doc, setDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
   const { usuario, rol, perfil } = await requireAuth(["coordinador", "secretaria", "admin", "master"]);
+
+  const PLANTILLA_ALERTA_DEFECTO = `Estimado/a {nombre},
+
+Te informamos que en el nivel {nivel}, grupo {grupo}, has acumulado inasistencias que requieren tu atención.
+
+Por favor comunícate con la oficina de coordinación académica para conocer los detalles.
+
+Tweetalig Centro de Idiomas`;
+
+  const PLANTILLA_PERDIDA_DEFECTO = `Estimado/a {nombre},
+
+Te informamos que en el nivel {nivel}, grupo {grupo}, tus horas de inasistencia superaron el límite permitido, lo cual implica pérdida de la asignatura por inasistencia.
+
+Por favor comunícate con la oficina de coordinación académica para conocer las opciones disponibles.
+
+Tweetalig Centro de Idiomas`;
 
   function cargarSelectoresPeriodo() {
     const anioActual = new Date().getFullYear();
@@ -86,19 +156,59 @@
     }
   }
 
-  let candidatosActuales = [];
+  async function cargarSedesFiltro() {
+    const selectSede = document.getElementById("sede");
+    if (rol === "coordinador" || rol === "secretaria") {
+      selectSede.parentElement.style.display = "none";
+      return;
+    }
+    const snap = await getDocs(collection(db, "ciudades"));
+    snap.forEach((d) => {
+      const opt = document.createElement("option");
+      opt.value = d.id;
+      opt.textContent = d.data().nombre;
+      selectSede.appendChild(opt);
+    });
+  }
+
+  async function cargarProgramasDelPeriodo() {
+    const anio = Number(document.getElementById("anio").value);
+    const periodo = Number(document.getElementById("periodo").value);
+    const ciclo = Number(document.getElementById("ciclo").value);
+    const selectPrograma = document.getElementById("programa");
+    const valorPrevio = selectPrograma.value;
+
+    const snap = await getDocs(query(
+      collection(db, "programas"),
+      where("anio", "==", anio), where("periodo", "==", periodo), where("ciclo", "==", ciclo)
+    ));
+
+    selectPrograma.innerHTML = '<option value="">Todos los programas</option>';
+    snap.forEach((d) => {
+      const opt = document.createElement("option");
+      opt.value = d.id;
+      opt.textContent = d.data().nombre;
+      selectPrograma.appendChild(opt);
+    });
+    if ([...selectPrograma.options].some((o) => o.value === valorPrevio)) selectPrograma.value = valorPrevio;
+  }
+
+  let alertaActuales = [];
+  let perdidaActuales = [];
   let idPeriodoActual = "";
 
   async function cargarAlertas() {
     const anio = Number(document.getElementById("anio").value);
     const periodo = Number(document.getElementById("periodo").value);
     const ciclo = Number(document.getElementById("ciclo").value);
-    const umbral = Number(document.getElementById("umbral").value) || 2;
-    document.getElementById("umbral-texto").textContent = umbral;
+    const sedeFiltro = document.getElementById("sede").value;
+    const programaFiltro = document.getElementById("programa").value;
+    const umbralAlerta = Number(document.getElementById("umbral-alerta").value) || 2;
+    const umbralPerdida = Number(document.getElementById("umbral-perdida").value) || 6;
     idPeriodoActual = `${anio}-${periodo}-${ciclo}`;
 
-    const contenedor = document.getElementById("contenido-alertas");
-    contenedor.innerHTML = "<p style='color:var(--tinta-suave);'>Calculando horas de inasistencia...</p>";
+    document.getElementById("contenido-alerta").innerHTML = "<p style='color:var(--tinta-suave);'>Calculando...</p>";
+    document.getElementById("contenido-perdida").innerHTML = "";
 
     try {
       let qClases = query(
@@ -110,8 +220,9 @@
 
       const restringidoPorSede = (rol === "coordinador" || rol === "secretaria") && perfil?.ciudadId;
       if (restringidoPorSede) clases = clases.filter((c) => c.ciudadId === perfil.ciudadId);
+      else if (sedeFiltro) clases = clases.filter((c) => c.ciudadId === sedeFiltro);
+      if (programaFiltro) clases = clases.filter((c) => c.programaId === programaFiltro);
 
-      // Agrupar por grupoDistanciaId (misma clase real repartida en varias sedes)
       const porGrupo = {};
       clases.forEach((c) => {
         const clave = c.grupoDistanciaId || c.id;
@@ -119,10 +230,15 @@
         porGrupo[clave].push(c);
       });
 
-      const snapAvisos = await getDocs(query(collection(db, "avisos_inasistencia"), where("periodoId", "==", idPeriodoActual)));
-      const yaNotificados = new Set(snapAvisos.docs.map((d) => d.data().cedula));
+      const [snapAvisosAlerta, snapAvisosPerdida] = await Promise.all([
+        getDocs(query(collection(db, "avisos_inasistencia"), where("periodoId", "==", idPeriodoActual))),
+        getDocs(query(collection(db, "avisos_perdida_inasistencia"), where("periodoId", "==", idPeriodoActual)))
+      ]);
+      const notificadosAlerta = new Set(snapAvisosAlerta.docs.map((d) => d.data().cedula));
+      const notificadosPerdida = new Set(snapAvisosPerdida.docs.map((d) => d.data().cedula));
 
-      candidatosActuales = [];
+      alertaActuales = [];
+      perdidaActuales = [];
 
       await Promise.all(Object.values(porGrupo).map(async (grupo) => {
         grupo.sort((a, b) => (a.id < b.id ? -1 : 1));
@@ -154,47 +270,56 @@
 
         estudiantes.forEach((est) => {
           const horas = horasTotales[est.cedula] || 0;
-          if (horas >= umbral) {
-            candidatosActuales.push({
-              cedula: est.cedula, nombre: est.nombre, apellido: est.apellido, correo: est.correo,
-              claseTexto: `${grupo[0].nivel} - ${grupo[0].grupo}`,
-              ciudadNombre: est.ciudadNombre || grupo[0].ciudadNombre,
-              docenteNombre: grupo[0].docenteNombre,
-              horas, notificado: yaNotificados.has(est.cedula)
-            });
+          if (horas < umbralAlerta) return;
+
+          const registro = {
+            cedula: est.cedula, nombre: est.nombre, apellido: est.apellido, correo: est.correo || "",
+            nivel: grupo[0].nivel, grupo: grupo[0].grupo,
+            claseTexto: `${grupo[0].nivel} - ${grupo[0].grupo}`,
+            ciudadNombre: est.ciudadNombre || grupo[0].ciudadNombre,
+            docenteNombre: grupo[0].docenteNombre,
+            horas
+          };
+
+          if (horas >= umbralPerdida) {
+            perdidaActuales.push({ ...registro, notificado: notificadosPerdida.has(est.cedula) });
+          } else {
+            alertaActuales.push({ ...registro, notificado: notificadosAlerta.has(est.cedula) });
           }
         });
       }));
 
-      pintarTabla();
+      pintarTabla("contenido-alerta", alertaActuales, "Registrar alerta de inasistencia", registrarAlertasNormales);
+      pintarTabla("contenido-perdida", perdidaActuales, "Registrar aviso de pérdida", registrarAvisosPerdida);
     } catch (error) {
       console.error("Error cargando alertas:", error);
-      contenedor.innerHTML = `<p style="color:var(--error);">No se pudo cargar (${error.code || error.message}).</p>`;
+      document.getElementById("contenido-alerta").innerHTML = `<p style="color:var(--error);">No se pudo cargar (${error.code || error.message}).</p>`;
     }
   }
 
-  function pintarTabla() {
-    const contenedor = document.getElementById("contenido-alertas");
+  function pintarTabla(idContenedor, lista, textoBoton, funcionRegistrar) {
+    const contenedor = document.getElementById(idContenedor);
     contenedor.innerHTML = "";
 
-    if (candidatosActuales.length === 0) {
-      contenedor.innerHTML = "<p style='color:var(--tinta-suave);'>Ningún estudiante supera el umbral de horas ausentes en este ciclo.</p>";
+    if (lista.length === 0) {
+      contenedor.innerHTML = "<p style='color:var(--tinta-suave);'>Ningún estudiante en esta categoría para este ciclo/sede/programa.</p>";
       return;
     }
 
     const tabla = document.createElement("table");
     tabla.className = "tabla-al";
     tabla.innerHTML = `
-      <thead><tr><th>No.</th><th>ID</th><th>Estudiante</th><th>Clase</th><th>Sede</th><th>Profesor</th><th>Horas ausente</th><th>Aviso</th></tr></thead>
+      <thead><tr><th>No.</th><th>ID</th><th>Estudiante</th><th>Correo</th><th>Clase</th><th>Sede</th><th>Profesor</th><th>Horas ausente</th><th>Aviso</th></tr></thead>
       <tbody></tbody>
     `;
     const tbody = tabla.querySelector("tbody");
-    candidatosActuales.forEach((c, idx) => {
+    lista.forEach((c, idx) => {
       const fila = document.createElement("tr");
       fila.innerHTML = `
         <td>${idx + 1}</td>
         <td>${c.cedula}</td>
         <td>${c.apellido} ${c.nombre}</td>
+        <td>${c.correo || "—"}</td>
         <td>${c.claseTexto}</td>
         <td>${c.ciudadNombre || "—"}</td>
         <td>${c.docenteNombre || "—"}</td>
@@ -203,58 +328,110 @@
       `;
       tbody.appendChild(fila);
     });
-
     contenedor.appendChild(tabla);
 
-    const pendientes = candidatosActuales.filter((c) => !c.notificado).length;
+    const pendientes = lista.filter((c) => !c.notificado).length;
     const boton = document.createElement("button");
     boton.className = "boton-primario";
-    boton.textContent = pendientes > 0
-      ? `Registrar alerta de inasistencia para ${pendientes} estudiante(s) pendiente(s)`
-      : "Todos ya tienen alerta registrada";
+    boton.textContent = pendientes > 0 ? `${textoBoton} — ${pendientes} pendiente(s)` : "Todos ya tienen aviso registrado";
     boton.disabled = pendientes === 0;
-    boton.addEventListener("click", registrarAlertas);
+    boton.addEventListener("click", funcionRegistrar);
     contenedor.appendChild(boton);
 
     const aviso = document.createElement("p");
     aviso.className = "aviso";
-    aviso.id = "aviso-envio";
+    aviso.id = idContenedor + "-aviso";
     contenedor.appendChild(aviso);
   }
 
-  async function registrarAlertas() {
-    const aviso = document.getElementById("aviso-envio");
+  function resolverPlantilla(plantilla, c) {
+    return plantilla
+      .replaceAll("{nombre}", `${c.nombre} ${c.apellido}`)
+      .replaceAll("{nivel}", c.nivel || "")
+      .replaceAll("{grupo}", c.grupo || "");
+  }
+
+  async function registrarAlertasNormales() {
+    await registrarLote("avisos_inasistencia", alertaActuales, document.getElementById("texto-plantilla-alerta").value, "contenido-alerta-aviso", "Registró alertas de inasistencia", (c) => `${idPeriodoActual}_${c.cedula}`);
+  }
+  async function registrarAvisosPerdida() {
+    await registrarLote("avisos_perdida_inasistencia", perdidaActuales, document.getElementById("texto-plantilla-perdida").value, "contenido-perdida-aviso", "Registró avisos de pérdida por inasistencia", (c) => `${idPeriodoActual}_${c.cedula}`);
+  }
+
+  async function registrarLote(coleccion, lista, plantilla, idAviso, textoLog, idDoc) {
+    const aviso = document.getElementById(idAviso);
     aviso.textContent = "Registrando...";
     aviso.style.color = "var(--tinta-suave)";
 
-    const pendientes = candidatosActuales.filter((c) => !c.notificado);
+    const pendientes = lista.filter((c) => !c.notificado);
     for (const c of pendientes) {
-      await setDoc(doc(db, "avisos_inasistencia", `${idPeriodoActual}_${c.cedula}`), {
+      await setDoc(doc(db, coleccion, idDoc(c)), {
         periodoId: idPeriodoActual,
         cedula: c.cedula,
         nombreCompleto: `${c.apellido} ${c.nombre}`,
         correo: c.correo || "",
         claseTexto: c.claseTexto,
         horas: c.horas,
+        mensaje: resolverPlantilla(plantilla, c),
         registradoPor: usuario.email,
         fechaRegistro: serverTimestamp(),
         enviadoRealmente: false
       });
     }
 
-    await registrarLog(usuario, rol, "Registró alertas de inasistencia", `${pendientes.length} estudiante(s) — ${idPeriodoActual}`);
-
+    await registrarLog(usuario, rol, textoLog, `${pendientes.length} estudiante(s) — ${idPeriodoActual}`);
     aviso.style.color = "#2E6E4E";
-    aviso.textContent = `${pendientes.length} alerta(s) registrada(s). Recuerda: falta conectar el envío real de correo (Apps Script).`;
+    aviso.textContent = `${pendientes.length} aviso(s) registrado(s) con su mensaje ya armado. Falta conectar el envío real (Apps Script).`;
     await cargarAlertas();
   }
 
-  document.getElementById("anio").addEventListener("change", cargarAlertas);
-  document.getElementById("periodo").addEventListener("change", cargarAlertas);
-  document.getElementById("ciclo").addEventListener("change", cargarAlertas);
-  document.getElementById("umbral").addEventListener("change", cargarAlertas);
+  // ---------- Editor de plantillas ----------
+  async function cargarPlantilla(tipo, idTextarea, defecto) {
+    const snap = await getDoc(doc(db, "plantillas_correo", tipo));
+    const textarea = document.getElementById(idTextarea);
+    textarea.value = snap.exists() ? snap.data().texto : defecto;
+  }
+
+  function configurarEditor(botonEditarId, editorId, botonGuardarId, textareaId, tipo) {
+    document.getElementById(botonEditarId).addEventListener("click", () => {
+      const editor = document.getElementById(editorId);
+      editor.style.display = editor.style.display === "none" ? "block" : "none";
+    });
+    document.getElementById(botonGuardarId).addEventListener("click", async () => {
+      const texto = document.getElementById(textareaId).value;
+      await setDoc(doc(db, "plantillas_correo", tipo), { texto, actualizadoPor: usuario.email, fecha: serverTimestamp() });
+      await registrarLog(usuario, rol, "Actualizó plantilla de correo", tipo);
+      alert("Mensaje guardado.");
+    });
+  }
+
+  document.querySelectorAll(".boton-marcador").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idTextarea = btn.dataset.campo === "alerta" ? "texto-plantilla-alerta" : "texto-plantilla-perdida";
+      const textarea = document.getElementById(idTextarea);
+      const inicio = textarea.selectionStart;
+      const fin = textarea.selectionEnd;
+      textarea.value = textarea.value.slice(0, inicio) + btn.dataset.insertar + textarea.value.slice(fin);
+      textarea.focus();
+    });
+  });
+
+  configurarEditor("boton-editar-plantilla-alerta", "editor-alerta", "boton-guardar-plantilla-alerta", "texto-plantilla-alerta", "alerta_inasistencia");
+  configurarEditor("boton-editar-plantilla-perdida", "editor-perdida", "boton-guardar-plantilla-perdida", "texto-plantilla-perdida", "perdida_inasistencia");
+
+  document.getElementById("anio").addEventListener("change", async () => { await cargarProgramasDelPeriodo(); await cargarAlertas(); });
+  document.getElementById("periodo").addEventListener("change", async () => { await cargarProgramasDelPeriodo(); await cargarAlertas(); });
+  document.getElementById("ciclo").addEventListener("change", async () => { await cargarProgramasDelPeriodo(); await cargarAlertas(); });
+  document.getElementById("sede").addEventListener("change", cargarAlertas);
+  document.getElementById("programa").addEventListener("change", cargarAlertas);
+  document.getElementById("umbral-alerta").addEventListener("change", cargarAlertas);
+  document.getElementById("umbral-perdida").addEventListener("change", cargarAlertas);
 
   cargarSelectoresPeriodo();
+  await cargarSedesFiltro();
+  await cargarPlantilla("alerta_inasistencia", "texto-plantilla-alerta", PLANTILLA_ALERTA_DEFECTO);
+  await cargarPlantilla("perdida_inasistencia", "texto-plantilla-perdida", PLANTILLA_PERDIDA_DEFECTO);
+  await cargarProgramasDelPeriodo();
   await cargarAlertas();
 </script>
 </body>
