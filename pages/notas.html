@@ -75,20 +75,19 @@
 
   const { usuario, rol, perfil } = await requireAuth(["profesor", "master", "admin", "coordinador", "secretaria"]);
 
-  // El profesor siempre puede editar sus propias notas. Coordinador/secretaria
-  // NUNCA pueden editar notas (solo revisan) — solo master/admin pueden
-  // desbloquear la edición con la contraseña.
-  let edicionDesbloqueada = (rol === "profesor");
+  // Master (Registro y Control) siempre puede editar directamente — es quien
+  // tiene el control total real. Admin necesita su propia contraseña, guardada
+  // en su perfil (cada Admin tiene la suya, no se comparte).
+  let edicionDesbloqueada = (rol === "profesor" || rol === "master");
 
-  if (rol === "master" || rol === "admin") {
+  if (rol === "admin") {
     document.getElementById("candado-edicion").style.display = "block";
-    document.getElementById("boton-desbloquear").addEventListener("click", async () => {
-      const intento = prompt("Escribe la contraseña de edición:");
+    document.getElementById("boton-desbloquear").addEventListener("click", () => {
+      const intento = prompt("Escribe tu contraseña de edición:");
       if (intento === null) return;
-      const snapClave = await getDoc(doc(db, "configuracion", "claveEdicion"));
-      const claveReal = snapClave.exists() ? snapClave.data().clave : null;
+      const claveReal = perfil?.claveEdicion || null;
       if (!claveReal) {
-        alert("Todavía no se ha configurado una contraseña de edición. Pídele a Master que la configure en 'Accesos y usuarios'.");
+        alert("Tu cuenta Admin todavía no tiene una contraseña de edición configurada. Pídele a Master que te la asigne en 'Accesos y usuarios'.");
         return;
       }
       if (intento === claveReal) {
@@ -390,10 +389,13 @@
     const cuerpo = document.getElementById("cuerpo-planilla");
     const tabla = document.createElement("table");
     tabla.className = "tabla-notas";
+    const verHistorial = (rol === "master" || rol === "admin");
 
     let theadHtml = `<tr><th style="text-align:left;">No.</th><th style="text-align:left;">ID</th><th style="text-align:left;">Estudiante</th>`;
     programaActual.cortes.forEach((c) => { theadHtml += `<th>${c.nombre} (${c.peso}%)</th>`; });
-    theadHtml += `<th class="col-final">Nota final</th></tr>`;
+    theadHtml += `<th class="col-final">Nota final</th>`;
+    if (verHistorial) theadHtml += `<th>Historial</th>`;
+    theadHtml += `</tr>`;
     tabla.innerHTML = `<thead>${theadHtml}</thead><tbody></tbody>`;
 
     const tbody = tabla.querySelector("tbody");
@@ -403,6 +405,9 @@
         celdas += `<td>${formatear(calcularPromedioCorte(est.cedula, i))}</td>`;
       });
       celdas += `<td class="col-final">${formatear(calcularNotaFinal(est.cedula))}</td>`;
+      if (verHistorial) {
+        celdas += `<td><button type="button" class="boton-secundario btn-ver-historial" data-cedula="${est.cedula}" data-clase="${est.claseId}">Ver</button></td>`;
+      }
       const fila = document.createElement("tr");
       fila.innerHTML = celdas;
       tbody.appendChild(fila);
@@ -410,6 +415,23 @@
 
     cuerpo.innerHTML = "";
     cuerpo.appendChild(tabla);
+
+    if (verHistorial) {
+      tabla.querySelectorAll(".btn-ver-historial").forEach((b) => b.addEventListener("click", async () => {
+        const idNota = `${b.dataset.clase}_${b.dataset.cedula}`;
+        const snap = await getDocs(collection(db, "notas", idNota, "historial"));
+        if (snap.empty) {
+          alert("No hay cambios anteriores registrados para este estudiante.");
+          return;
+        }
+        const entradas = snap.docs
+          .map((d) => d.data())
+          .sort((a, b2) => new Date(b2.fecha) - new Date(a.fecha))
+          .map((h) => `${new Date(h.fecha).toLocaleString("es-CO")} — guardado por ${h.guardadoPor}\nValores: ${JSON.stringify(h.valores)}`)
+          .join("\n\n");
+        alert(`Historial de cambios:\n\n${entradas}`);
+      }));
+    }
   }
 
   function formatear(valor) {
@@ -421,20 +443,46 @@
     aviso.textContent = "Guardando...";
     aviso.style.color = "var(--tinta-suave)";
 
-    for (const est of estudiantesActuales) {
-      const idNota = `${est.claseId}_${est.cedula}`;
-      await setDoc(doc(db, "notas", idNota), {
-        claseId: est.claseId,
-        cedula: est.cedula,
-        estudianteNombre: `${est.apellido} ${est.nombre}`,
-        valores: notasGuardadas[est.cedula] || {}
-      }, { merge: true });
+    try {
+      for (const est of estudiantesActuales) {
+        const idNota = `${est.claseId}_${est.cedula}`;
+        const refNota = doc(db, "notas", idNota);
+
+        // Archivar la versión anterior antes de sobrescribir (si existía y cambió)
+        const anterior = await getDoc(refNota);
+        if (anterior.exists()) {
+          const valoresAnteriores = anterior.data().valores || {};
+          const cambio = JSON.stringify(valoresAnteriores) !== JSON.stringify(notasGuardadas[est.cedula] || {});
+          if (cambio) {
+            await setDoc(doc(collection(db, "notas", idNota, "historial")), {
+              valores: valoresAnteriores,
+              guardadoPor: usuario.email,
+              fecha: new Date().toISOString()
+            });
+          }
+        }
+
+        await setDoc(refNota, {
+          claseId: est.claseId,
+          cedula: est.cedula,
+          estudianteNombre: `${est.apellido} ${est.nombre}`,
+          valores: notasGuardadas[est.cedula] || {}
+        }, { merge: true });
+      }
+
+      await registrarLog(usuario, rol, "Guardó notas", `Corte ${typeof corteActivoIndex === "number" ? corteActivoIndex + 1 : ""} — ${estudiantesActuales.length} estudiante(s)`);
+
+      aviso.style.color = "#2E6E4E";
+      aviso.textContent = "Notas guardadas correctamente.";
+    } catch (error) {
+      if (error.code === "permission-denied") {
+        aviso.style.color = "var(--error)";
+        aviso.textContent = "No se pudo guardar: este período académico ya está cerrado. Pide a Master que lo reabra si es necesario.";
+      } else {
+        aviso.style.color = "var(--error)";
+        aviso.textContent = `No se pudo guardar (${error.code || error.message}).`;
+      }
     }
-
-    await registrarLog(usuario, rol, "Guardó notas", `Corte ${typeof corteActivoIndex === "number" ? corteActivoIndex + 1 : ""} — ${estudiantesActuales.length} estudiante(s)`);
-
-    aviso.style.color = "#2E6E4E";
-    aviso.textContent = "Notas guardadas correctamente.";
   }
 
   await cargarGrupos();

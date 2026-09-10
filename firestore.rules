@@ -42,6 +42,18 @@ service cloud.firestore {
       return estaLogueado() && miRol() in ['master', 'admin', 'coordinador', 'secretaria'];
     }
 
+    // Bloqueo de períodos cerrados: una vez un período queda "inactivo" en
+    // /periodos, nadie (excepto Master) puede seguir editando clases, notas
+    // o asistencia que pertenezcan a ese año-periodo-ciclo. Si el período no
+    // tiene documento (nunca se creó), se trata como activo por defecto.
+    function periodoIdDeDatos(datos) {
+      return string(datos.anio) + '-' + string(datos.periodo) + '-' + string(datos.ciclo);
+    }
+    function periodoEstaActivo(datos) {
+      let ref = /databases/$(database)/documents/periodos/$(periodoIdDeDatos(datos));
+      return !exists(ref) || get(ref).data.activo != false;
+    }
+
     // Colección "usuarios": doc ID = correo en minúsculas.
     // - Leer: cada quien su propio perfil, o cualquier admin/master ve todos.
     // - Crear/editar: admin o master, pero SOLO master puede asignar el rol "master".
@@ -90,14 +102,22 @@ service cloud.firestore {
     // Colección "clases": nivel + grupo + docente + horario + ciudad + programa + periodo
     match /clases/{claseId} {
       allow read: if estaLogueado();
-      allow write: if esGestor();
+      allow create: if esGestor();
+      // Editar/borrar una clase: bloqueado si su período ya está cerrado
+      // (salvo Master, que siempre puede corregir cualquier cosa).
+      allow update, delete: if esGestor() && (esMaster() || periodoEstaActivo(resource.data));
 
       match /sesiones/{fecha} {
         allow read: if estaLogueado();
         allow write: if estaLogueado() && (
-          esAdminOMaster() ||
-          (miRol() in ['coordinador', 'secretaria'] && get(/databases/$(database)/documents/clases/$(claseId)).data.ciudadId == miPerfil().ciudadId) ||
-          (miRol() == 'profesor' && get(/databases/$(database)/documents/clases/$(claseId)).data.docenteCorreo == miCorreo())
+          esMaster() ||
+          (
+            (
+              esAdminOMaster() ||
+              (miRol() in ['coordinador', 'secretaria'] && get(/databases/$(database)/documents/clases/$(claseId)).data.ciudadId == miPerfil().ciudadId) ||
+              (miRol() == 'profesor' && get(/databases/$(database)/documents/clases/$(claseId)).data.docenteCorreo == miCorreo())
+            ) && periodoEstaActivo(get(/databases/$(database)/documents/clases/$(claseId)).data)
+          )
         );
       }
     }
@@ -187,10 +207,21 @@ service cloud.firestore {
 
       // Leer: admin/master (todo), coordinación (solo su sede), profesor (solo sus clases).
       allow read: if estaLogueado() && (esAdminOMaster() || esMiSedeComoCoordinacion() || esMiPropiaClase());
-      // Escribir: SOLO admin/master o el profesor dueño de la clase.
-      // Coordinador/secretaria NUNCA pueden modificar notas.
-      allow create, update: if estaLogueado() && (esAdminOMaster() || esMiPropiaClase());
+      // Escribir: SOLO admin/master o el profesor dueño de la clase, Y SOLO
+      // si el período de esa clase sigue activo (Master siempre puede, sin excepción).
+      allow create, update: if estaLogueado() && (
+        esMaster() ||
+        ((esAdminOMaster() || esMiPropiaClase()) && periodoEstaActivo(claseReferenciada()))
+      );
       allow delete: if esAdminOMaster();
+
+      // Historial: guarda versiones anteriores antes de cada sobrescritura.
+      // Mismo criterio de lectura que la nota; nunca se edita ni se borra.
+      match /historial/{historialId} {
+        allow read: if estaLogueado() && (esAdminOMaster() || esMiSedeComoCoordinacion() || esMiPropiaClase());
+        allow create: if estaLogueado() && (esMaster() || esAdminOMaster() || esMiPropiaClase());
+        allow update, delete: if false;
+      }
     }
   }
 }

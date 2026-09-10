@@ -83,20 +83,18 @@
 
   const { usuario, rol, perfil } = await requireAuth(["profesor", "master", "admin", "coordinador", "secretaria"]);
 
-  // Coordinador y secretaria SÍ pueden editar asistencia directamente,
-  // igual que el profesor — solo Master/Admin necesitan contraseña, y
-  // solo porque están revisando el trabajo de otros.
-  let edicionDesbloqueada = (rol === "profesor" || rol === "coordinador" || rol === "secretaria");
+  // Coordinador, secretaria y Master pueden editar asistencia directamente.
+  // Solo Admin necesita su propia contraseña (guardada en su perfil).
+  let edicionDesbloqueada = (rol === "profesor" || rol === "coordinador" || rol === "secretaria" || rol === "master");
 
-  if (rol === "master" || rol === "admin") {
+  if (rol === "admin") {
     document.getElementById("candado-edicion").style.display = "block";
-    document.getElementById("boton-desbloquear").addEventListener("click", async () => {
-      const intento = prompt("Escribe la contraseña de edición:");
+    document.getElementById("boton-desbloquear").addEventListener("click", () => {
+      const intento = prompt("Escribe tu contraseña de edición:");
       if (intento === null) return;
-      const snapClave = await getDoc(doc(db, "configuracion", "claveEdicion"));
-      const claveReal = snapClave.exists() ? snapClave.data().clave : null;
+      const claveReal = perfil?.claveEdicion || null;
       if (!claveReal) {
-        alert("Todavía no se ha configurado una contraseña de edición. Pídele a Master que la configure en 'Accesos y usuarios'.");
+        alert("Tu cuenta Admin todavía no tiene una contraseña de edición configurada. Pídele a Master que te la asigne en 'Accesos y usuarios'.");
         return;
       }
       if (intento === claveReal) {
@@ -398,18 +396,28 @@
     botonGuardar.addEventListener("click", async () => {
       const aviso = document.getElementById("aviso-asistencia");
       aviso.textContent = "Guardando...";
-      await setDoc(doc(db, "clases", grupoActual.claseAncla, "sesiones", fechaActivaTexto), {
-        fecha: fechaActivaTexto,
-        festivo: chkFestivo.checked,
-        numBloques, bloqueMin,
-        ausencias: chkFestivo.checked ? {} : (guardada.ausencias || {})
-      });
-      sesionesGuardadas[fechaActivaTexto] = { fecha: fechaActivaTexto, festivo: chkFestivo.checked, numBloques, bloqueMin, ausencias: guardada.ausencias || {} };
-      await registrarLog(usuario, rol, "Guardó asistencia", `${fechaActivaTexto} — ${grupoActual.etiqueta}`);
-      pintarFechas();
-      pintarDia();
-      document.getElementById("aviso-asistencia").textContent = "Asistencia guardada correctamente.";
-      document.getElementById("aviso-asistencia").style.color = "#2E6E4E";
+      try {
+        await setDoc(doc(db, "clases", grupoActual.claseAncla, "sesiones", fechaActivaTexto), {
+          fecha: fechaActivaTexto,
+          festivo: chkFestivo.checked,
+          numBloques, bloqueMin,
+          ausencias: chkFestivo.checked ? {} : (guardada.ausencias || {})
+        });
+        sesionesGuardadas[fechaActivaTexto] = { fecha: fechaActivaTexto, festivo: chkFestivo.checked, numBloques, bloqueMin, ausencias: guardada.ausencias || {} };
+        await registrarLog(usuario, rol, "Guardó asistencia", `${fechaActivaTexto} — ${grupoActual.etiqueta}`);
+        pintarFechas();
+        pintarDia();
+        document.getElementById("aviso-asistencia").textContent = "Asistencia guardada correctamente.";
+        document.getElementById("aviso-asistencia").style.color = "#2E6E4E";
+      } catch (error) {
+        if (error.code === "permission-denied") {
+          aviso.style.color = "var(--error)";
+          aviso.textContent = "No se pudo guardar: este período académico ya está cerrado. Pide a Master que lo reabra si es necesario.";
+        } else {
+          aviso.style.color = "var(--error)";
+          aviso.textContent = `No se pudo guardar (${error.code || error.message}).`;
+        }
+      }
     });
     cuerpo.appendChild(botonGuardar);
 

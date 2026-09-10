@@ -115,6 +115,27 @@
   const { usuario, rol, perfil } = await requireAuth(["master", "admin", "coordinador", "secretaria"]);
 
   let listaProfesores = [];
+  let clasesCache = {};
+
+  function agregarFilaHorarioEditor(contenedor, datos) {
+    const fila = document.createElement("div");
+    fila.className = "fila-horario-editor";
+    fila.style.cssText = "display:grid; grid-template-columns: 1fr 1fr 1fr 28px; gap:6px; margin-bottom:6px;";
+    fila.innerHTML = `
+      <select class="input-dia-editor" style="font-size:12px; padding:5px;">
+        <option>Lunes</option><option>Martes</option><option>Miércoles</option>
+        <option>Jueves</option><option>Viernes</option><option>Sábado</option>
+      </select>
+      <input type="time" class="input-inicio-editor" style="font-size:12px; padding:5px;">
+      <input type="time" class="input-fin-editor" style="font-size:12px; padding:5px;">
+      <button type="button" style="background:none;border:none;color:var(--error);cursor:pointer;">✕</button>
+    `;
+    if (datos?.dia) fila.querySelector(".input-dia-editor").value = datos.dia;
+    if (datos?.horaInicio) fila.querySelector(".input-inicio-editor").value = datos.horaInicio;
+    if (datos?.horaFin) fila.querySelector(".input-fin-editor").value = datos.horaFin;
+    fila.querySelector("button").addEventListener("click", () => fila.remove());
+    contenedor.appendChild(fila);
+  }
 
   let sedes = [];
 
@@ -278,16 +299,22 @@
   async function cargarClases() {
     const cuerpo = document.getElementById("lista-clases");
     cuerpo.innerHTML = "";
+    clasesCache = {};
     const snap = await getDocs(collection(db, "clases"));
     snap.forEach((d) => {
       const c = d.data();
+      clasesCache[d.id] = c;
       const periodoTexto = `${c.anio || "—"}-${c.periodo || "—"} / Ciclo ${c.ciclo || "—"}`;
       const opcionesProfesor = listaProfesores.map((p) =>
         `<option value="${p.correo}" ${p.correo === c.docenteCorreo ? "selected" : ""}>${p.nombre}</option>`
       ).join("");
       const fila = document.createElement("tr");
       fila.innerHTML = `
-        <td>${periodoTexto}</td><td>${c.nivel}</td>
+        <td>${periodoTexto}</td>
+        <td>
+          <span class="valor-nivel" data-id="${d.id}">${c.nivel}</span>
+          <input type="text" class="input-editar-nivel" data-id="${d.id}" value="${c.nivel}" style="display:none; width:70px; font-size:13px; padding:3px 5px;">
+        </td>
         <td>
           <span class="valor-grupo" data-id="${d.id}">${c.grupo}</span>
           <input type="text" class="input-editar-grupo" data-id="${d.id}" value="${c.grupo}" style="display:none; width:70px; font-size:13px; padding:3px 5px;">
@@ -296,17 +323,98 @@
           <span class="nombre-docente" data-id="${d.id}">${c.docenteNombre || "—"}</span>
           <select class="select-reasignar" data-id="${d.id}" style="display:none; font-size:12px; padding:3px;">${opcionesProfesor}</select>
         </td>
-        <td>${textoHorarios(c.horarios)}</td><td>${c.ciudadNombre || "—"}${c.grupoDistanciaId ? ' <span style="font-size:11px; color: var(--verde-marca); font-weight:600;">(distancia)</span>' : ""}</td><td>${c.programaNombre || "—"}</td>
+        <td><span class="valor-horarios" data-id="${d.id}">${textoHorarios(c.horarios)}</span></td>
+        <td>${c.ciudadNombre || "—"}${c.grupoDistanciaId ? ' <span style="font-size:11px; color: var(--verde-marca); font-weight:600;">(distancia)</span>' : ""}</td>
+        <td>${c.programaNombre || "—"}</td>
         <td>
           <button class="btn-reasignar" data-id="${d.id}">Cambiar profesor</button>
+          <button class="btn-editar-nivel" data-id="${d.id}">Editar nivel</button>
           <button class="btn-editar-grupo" data-id="${d.id}">Editar grupo</button>
+          <button class="btn-editar-horarios" data-id="${d.id}">Editar horarios</button>
           <a href="notas.html?correo=${encodeURIComponent(c.docenteCorreo)}&grupo=${encodeURIComponent(c.grupoDistanciaId || d.id)}" style="font-size:12px; margin-left:6px;">Ver notas</a>
           ·
           <a href="asistencia.html?correo=${encodeURIComponent(c.docenteCorreo)}&grupo=${encodeURIComponent(c.grupoDistanciaId || d.id)}" style="font-size:12px;">Ver asistencia</a>
         </td>
       `;
       cuerpo.appendChild(fila);
+
+      const filaHorarios = document.createElement("tr");
+      filaHorarios.className = "fila-editor-horarios";
+      filaHorarios.style.display = "none";
+      filaHorarios.dataset.id = d.id;
+      filaHorarios.innerHTML = `<td colspan="8" style="background: var(--fondo); padding: 14px;">
+        <div class="lista-horarios-editor" data-id="${d.id}"></div>
+        <button type="button" class="boton-secundario btn-agregar-horario-editor" data-id="${d.id}">+ Agregar horario</button>
+        <button type="button" class="boton-primario btn-guardar-horarios" data-id="${d.id}" style="max-width:160px; margin-left:10px;">Guardar horarios</button>
+      </td>`;
+      cuerpo.appendChild(filaHorarios);
     });
+
+    cuerpo.querySelectorAll(".btn-editar-nivel").forEach((b) => b.addEventListener("click", async () => {
+      const id = b.dataset.id;
+      const span = cuerpo.querySelector(`.valor-nivel[data-id="${id}"]`);
+      const input = cuerpo.querySelector(`.input-editar-nivel[data-id="${id}"]`);
+
+      if (input.style.display === "none") {
+        span.style.display = "none";
+        input.style.display = "inline-block";
+        b.textContent = "Guardar";
+      } else {
+        const nuevoNivel = input.value.trim();
+        if (!nuevoNivel) {
+          alert("El nivel no puede quedar vacío.");
+          return;
+        }
+        try {
+          await updateDoc(doc(db, "clases", id), { nivel: nuevoNivel });
+          await registrarLog(usuario, rol, "Editó nivel de clase", `${id} → ${nuevoNivel}`);
+          cargarClases();
+        } catch (error) {
+          alert(error.code === "permission-denied" ? "No se puede editar: el período de esta clase ya está cerrado." : `Error: ${error.message}`);
+        }
+      }
+    }));
+
+    cuerpo.querySelectorAll(".btn-editar-horarios").forEach((b) => b.addEventListener("click", () => {
+      const id = b.dataset.id;
+      const filaEditor = cuerpo.querySelector(`.fila-editor-horarios[data-id="${id}"]`);
+      const abrir = filaEditor.style.display === "none";
+      filaEditor.style.display = abrir ? "table-row" : "none";
+      if (abrir && !filaEditor.dataset.cargado) {
+        const claseActual = clasesCache[id];
+        const contenedor = filaEditor.querySelector(".lista-horarios-editor");
+        (claseActual.horarios || []).forEach((h) => agregarFilaHorarioEditor(contenedor, h));
+        if ((claseActual.horarios || []).length === 0) agregarFilaHorarioEditor(contenedor, null);
+        filaEditor.dataset.cargado = "1";
+      }
+    }));
+
+    cuerpo.querySelectorAll(".btn-agregar-horario-editor").forEach((b) => b.addEventListener("click", () => {
+      const contenedor = cuerpo.querySelector(`.lista-horarios-editor[data-id="${b.dataset.id}"]`);
+      agregarFilaHorarioEditor(contenedor, null);
+    }));
+
+    cuerpo.querySelectorAll(".btn-guardar-horarios").forEach((b) => b.addEventListener("click", async () => {
+      const id = b.dataset.id;
+      const contenedor = cuerpo.querySelector(`.lista-horarios-editor[data-id="${id}"]`);
+      const nuevosHorarios = [...contenedor.querySelectorAll(".fila-horario-editor")].map((fila) => ({
+        dia: fila.querySelector(".input-dia-editor").value,
+        horaInicio: fila.querySelector(".input-inicio-editor").value,
+        horaFin: fila.querySelector(".input-fin-editor").value
+      })).filter((h) => h.horaInicio && h.horaFin);
+
+      if (nuevosHorarios.length === 0) {
+        alert("Agrega al menos un horario completo.");
+        return;
+      }
+      try {
+        await updateDoc(doc(db, "clases", id), { horarios: nuevosHorarios });
+        await registrarLog(usuario, rol, "Editó horarios de clase", id);
+        cargarClases();
+      } catch (error) {
+        alert(error.code === "permission-denied" ? "No se puede editar: el período de esta clase ya está cerrado." : `Error: ${error.message}`);
+      }
+    }));
 
     cuerpo.querySelectorAll(".btn-editar-grupo").forEach((b) => b.addEventListener("click", async () => {
       const id = b.dataset.id;
@@ -323,9 +431,13 @@
           alert("El grupo no puede quedar vacío.");
           return;
         }
-        await updateDoc(doc(db, "clases", id), { grupo: nuevoGrupo });
-        await registrarLog(usuario, rol, "Editó grupo de clase", `${id} → ${nuevoGrupo}`);
-        cargarClases();
+        try {
+          await updateDoc(doc(db, "clases", id), { grupo: nuevoGrupo });
+          await registrarLog(usuario, rol, "Editó grupo de clase", `${id} → ${nuevoGrupo}`);
+          cargarClases();
+        } catch (error) {
+          alert(error.code === "permission-denied" ? "No se puede editar: el período de esta clase ya está cerrado." : `Error: ${error.message}`);
+        }
       }
     }));
 
@@ -341,9 +453,13 @@
       } else {
         const nuevoCorreo = select.value;
         const nuevoNombre = select.options[select.selectedIndex].textContent;
-        await updateDoc(doc(db, "clases", id), { docenteCorreo: nuevoCorreo, docenteNombre: nuevoNombre });
-        await registrarLog(usuario, rol, "Reasignó profesor de clase", `${id} → ${nuevoNombre}`);
-        cargarClases();
+        try {
+          await updateDoc(doc(db, "clases", id), { docenteCorreo: nuevoCorreo, docenteNombre: nuevoNombre });
+          await registrarLog(usuario, rol, "Reasignó profesor de clase", `${id} → ${nuevoNombre}`);
+          cargarClases();
+        } catch (error) {
+          alert(error.code === "permission-denied" ? "No se puede editar: el período de esta clase ya está cerrado." : `Error: ${error.message}`);
+        }
       }
     }));
   }
