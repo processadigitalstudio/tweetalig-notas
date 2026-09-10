@@ -246,9 +246,10 @@ Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co`;
     const snapCiudades = await getDocs(collection(db, "ciudades"));
     const ciudades = snapCiudades.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-    const restringidoPorSede = (rol === "coordinador" || rol === "secretaria") && perfil?.ciudadId;
+    const misSedesCM = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
+    const restringidoPorSede = (rol === "coordinador" || rol === "secretaria") && misSedesCM.length > 0;
     const qProf = restringidoPorSede
-      ? query(collection(db, "usuarios"), where("rol", "==", "profesor"), where("ciudadIds", "array-contains", perfil.ciudadId))
+      ? query(collection(db, "usuarios"), where("rol", "==", "profesor"), where("ciudadIds", "array-contains-any", misSedesCM))
       : query(collection(db, "usuarios"), where("rol", "==", "profesor"));
     const snapProfesores = await getDocs(qProf);
     const profesores = snapProfesores.docs.map((d) => ({ correo: d.id, ...d.data() }));

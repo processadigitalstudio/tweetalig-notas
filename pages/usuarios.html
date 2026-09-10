@@ -19,6 +19,8 @@
   .etiqueta-rol-tabla { font-size: 11px; font-weight: 600; text-transform: uppercase; padding: 2px 8px; border-radius: 10px; }
   .rol-coordinador { background: var(--verde-marca-suave); color: #1E7A5F; }
   .rol-secretaria { background: var(--oro-suave); color: #8A5A12; }
+  .sedes-check { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; }
+  .sedes-check label { display: flex; align-items: center; gap: 6px; font-weight: 400; margin-top: 0; font-size: 14px; color: var(--tinta); }
 </style>
 </head>
 <body>
@@ -62,26 +64,21 @@
       <div id="campo-cargo" style="display:none;">
         <label for="cargo">Cargo</label>
         <input type="text" id="cargo" placeholder="Dirección Académica">
+        <label for="clave-admin">Contraseña de edición (propia de esta cuenta)</label>
+        <input type="text" id="clave-admin" placeholder="Ej. rc2026admin">
+        <p style="font-size:12px; color:var(--tinta-suave); margin: 4px 0 0;">
+          Esta es la contraseña que ESTA cuenta va a usar para desbloquear la edición de notas.
+          Cada Admin tiene la suya — no se comparte.
+        </p>
       </div>
 
       <div id="campo-sede">
-        <label for="ciudad">Sede</label>
-        <select id="ciudad"></select>
+        <label>Sede(s)</label>
+        <div class="sedes-check" id="sedes-check"></div>
       </div>
 
       <button id="boton-guardar" class="boton-primario">Registrar acceso</button>
       <p class="aviso" id="aviso"></p>
-    </div>
-    <div class="form-tarjeta" id="tarjeta-clave" style="margin-top:24px;">
-      <h3 style="font-family: var(--fuente-display); color: var(--azul-profundo); margin: 0;">Contraseña para editar notas/asistencia</h3>
-      <p style="font-size:13px; color:var(--tinta-suave); margin: 6px 0 10px;">
-        Master y Admin ven las notas y asistencia de cualquier clase en modo solo lectura.
-        Esta contraseña es el candado adicional que deben escribir si necesitan corregir algo directamente.
-      </p>
-      <label for="clave-edicion">Contraseña actual</label>
-      <input type="text" id="clave-edicion" placeholder="Ej. tweetalig2026">
-      <button id="boton-guardar-clave" class="boton-primario">Guardar contraseña</button>
-      <p class="aviso" id="aviso-clave"></p>
     </div>
   </main>
 </div>
@@ -103,7 +100,6 @@
 
   if (esCoordinacion) {
     // Coordinación no puede crear cuentas Admin, y su sede queda fija (la suya).
-    document.getElementById("tarjeta-clave").style.display = "none";
     const opcionAdmin = [...selectRol.options].find((o) => o.value === "admin");
     if (opcionAdmin) opcionAdmin.remove();
   }
@@ -117,37 +113,87 @@
   actualizarCamposSegunRol();
 
   async function cargarSedes() {
-    const select = document.getElementById("ciudad");
-    select.innerHTML = "";
+    const cont = document.getElementById("sedes-check");
+    cont.innerHTML = "";
     const snap = await getDocs(collection(db, "ciudades"));
     if (snap.empty) {
-      select.innerHTML = "<option value=''>Registra una sede primero</option>";
+      cont.innerHTML = "<p style='color:var(--error); font-size:13px;'>Registra una sede primero.</p>";
       return;
     }
+    const misSedes = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
     snap.forEach((d) => {
-      if (esCoordinacion && d.id !== perfil.ciudadId) return; // solo su propia sede
+      if (esCoordinacion && !misSedes.includes(d.id)) return; // solo mis propias sedes
+      const lbl = document.createElement("label");
+      lbl.innerHTML = `<input type="checkbox" value="${d.id}" data-nombre="${d.data().nombre}"> ${d.data().nombre}`;
+      cont.appendChild(lbl);
+    });
+  }
+
+  // Filtro de sede en la lista: "todas mis sedes" (junto) o una sola (separado)
+  let filtroSedeActual = "";
+  function agregarFiltroSedeEnTabla() {
+    const misSedes = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
+    if (!esCoordinacion || misSedes.length <= 1) return; // no hace falta filtro si solo tiene 1 sede
+    const contenedorFiltro = document.createElement("div");
+    contenedorFiltro.style.cssText = "margin-bottom:14px;";
+    contenedorFiltro.innerHTML = `
+      <label style="font-size:13px; font-weight:500; color:var(--tinta-suave); margin-right:8px;">Ver:</label>
+      <select id="filtro-sede-usuarios" style="font-size:13px; padding:6px 8px; border:1px solid var(--linea); border-radius:6px;">
+        <option value="">Todas mis sedes juntas</option>
+      </select>
+    `;
+    document.querySelector(".tabla-simple").before(contenedorFiltro);
+    const select = contenedorFiltro.querySelector("select");
+    misSedes.forEach((idSede) => {
+      const nombreSede = document.querySelector(`#sedes-check input[value="${idSede}"]`)?.dataset.nombre || idSede;
       const opt = document.createElement("option");
-      opt.value = d.id;
-      opt.textContent = d.data().nombre;
+      opt.value = idSede;
+      opt.textContent = `Solo ${nombreSede}`;
       select.appendChild(opt);
     });
-    if (esCoordinacion) select.disabled = true;
+    select.addEventListener("change", () => {
+      filtroSedeActual = select.value;
+      cargarLista();
+    });
   }
 
   async function cargarLista() {
     const cuerpo = document.getElementById("lista-usuarios");
     cuerpo.innerHTML = "";
-    // Coordinación solo ve accesos de su propia sede (nunca admin/master)
-    const q = esCoordinacion
-      ? query(collection(db, "usuarios"), where("rol", "in", ["coordinador", "secretaria"]), where("ciudadId", "==", perfil.ciudadId))
-      : query(collection(db, "usuarios"), where("rol", "in", ["coordinador", "secretaria", "admin", "master"]));
-    const snap = await getDocs(q);
-    snap.forEach((d) => {
+    const misSedes = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
+
+    let documentos = [];
+    if (esCoordinacion) {
+      // Compatibilidad: cuentas viejas solo tienen "ciudadId" (una sede),
+      // las nuevas tienen "ciudadIds" (varias) — se consultan las dos formas.
+      const [snapNuevas, snapViejas] = await Promise.all([
+        getDocs(query(collection(db, "usuarios"), where("rol", "in", ["coordinador", "secretaria"]), where("ciudadIds", "array-contains-any", misSedes.length ? misSedes : ["_ninguna_"]))),
+        getDocs(query(collection(db, "usuarios"), where("rol", "in", ["coordinador", "secretaria"]), where("ciudadId", "in", misSedes.length ? misSedes : ["_ninguna_"])))
+      ]);
+      const vistos = new Set();
+      [...snapNuevas.docs, ...snapViejas.docs].forEach((d) => {
+        if (!vistos.has(d.id)) { vistos.add(d.id); documentos.push(d); }
+      });
+    } else {
+      const snap = await getDocs(query(collection(db, "usuarios"), where("rol", "in", ["coordinador", "secretaria", "admin", "master"])));
+      documentos = snap.docs;
+    }
+
+    documentos.forEach((d) => {
       const u = d.data();
-      const cargoOSede = (u.rol === "admin" || u.rol === "master") ? (u.cargo || (u.rol === "master" ? "Master" : "Admin")) : (u.ciudadNombre || "—");
-      const botonAccion = u.rol === "master"
+      if (esCoordinacion && filtroSedeActual) {
+        const sedesDeEsteUsuario = u.ciudadIds || (u.ciudadId ? [u.ciudadId] : []);
+        if (!sedesDeEsteUsuario.includes(filtroSedeActual)) return;
+      }
+      const cargoOSede = (u.rol === "admin" || u.rol === "master")
+        ? (u.cargo || (u.rol === "master" ? "Master" : "Admin"))
+        : (u.ciudadNombres ? u.ciudadNombres.join(", ") : (u.ciudadNombre || "—"));
+      let botonAccion = u.rol === "master"
         ? `<span style="color: var(--tinta-suave); font-size: 12px;">Protegida</span>`
         : `<button class="btn-borrar" data-id="${d.id}">Quitar acceso</button>`;
+      if (u.rol === "admin") {
+        botonAccion += ` <button class="btn-cambiar-clave" data-id="${d.id}">Cambiar contraseña</button>`;
+      }
       const fila = document.createElement("tr");
       fila.innerHTML = `
         <td>${u.nombre || "—"}</td>
@@ -158,6 +204,14 @@
       `;
       cuerpo.appendChild(fila);
     });
+
+    cuerpo.querySelectorAll(".btn-cambiar-clave").forEach((b) => b.addEventListener("click", async () => {
+      const nueva = prompt(`Nueva contraseña de edición para ${b.dataset.id}:`);
+      if (!nueva) return;
+      await setDoc(doc(db, "usuarios", b.dataset.id), { claveEdicion: nueva.trim() }, { merge: true });
+      await registrarLog(usuario, miRol, "Cambió contraseña de edición de Admin", b.dataset.id);
+      alert("Contraseña actualizada.");
+    }));
 
     cuerpo.querySelectorAll(".btn-borrar").forEach((b) => b.addEventListener("click", async () => {
       if (confirm(`¿Quitar el acceso de ${b.dataset.id}? Ya no podrá iniciar sesión.`)) {
@@ -189,21 +243,31 @@
 
     if (rolNuevo === "admin") {
       const cargo = document.getElementById("cargo").value.trim();
+      const claveAdmin = document.getElementById("clave-admin").value.trim();
       if (!cargo) {
         aviso.style.color = "var(--error)";
         aviso.textContent = "Escribe el cargo (ej. Dirección Académica).";
         return;
       }
-      datos.cargo = cargo;
-    } else {
-      const selectCiudad = document.getElementById("ciudad");
-      if (!selectCiudad.value) {
+      if (!claveAdmin) {
         aviso.style.color = "var(--error)";
-        aviso.textContent = "Selecciona la sede.";
+        aviso.textContent = "Escribe una contraseña de edición para esta cuenta Admin.";
         return;
       }
-      datos.ciudadId = selectCiudad.value;
-      datos.ciudadNombre = selectCiudad.options[selectCiudad.selectedIndex].textContent;
+      datos.cargo = cargo;
+      datos.claveEdicion = claveAdmin;
+    } else {
+      const marcadas = [...document.querySelectorAll("#sedes-check input:checked")];
+      if (marcadas.length === 0) {
+        aviso.style.color = "var(--error)";
+        aviso.textContent = "Marca al menos una sede.";
+        return;
+      }
+      datos.ciudadIds = marcadas.map((i) => i.value);
+      datos.ciudadNombres = marcadas.map((i) => i.dataset.nombre);
+      // Se guarda también el formato viejo por compatibilidad con vistas que aún lo usan.
+      datos.ciudadId = marcadas[0].value;
+      datos.ciudadNombre = marcadas[0].dataset.nombre;
     }
 
     await setDoc(doc(db, "usuarios", correo), datos);
@@ -214,30 +278,14 @@
     document.getElementById("nombre").value = "";
     document.getElementById("correo").value = "";
     document.getElementById("cargo").value = "";
+    document.getElementById("clave-admin").value = "";
+    document.querySelectorAll("#sedes-check input").forEach((i) => (i.checked = false));
     cargarLista();
   });
 
   await cargarSedes();
+  agregarFiltroSedeEnTabla();
   await cargarLista();
-
-  // Contraseña de edición para revisión de notas/asistencia
-  const refClave = doc(db, "configuracion", "claveEdicion");
-  const snapClave = await getDoc(refClave);
-  if (snapClave.exists()) document.getElementById("clave-edicion").value = snapClave.data().clave || "";
-
-  document.getElementById("boton-guardar-clave").addEventListener("click", async () => {
-    const clave = document.getElementById("clave-edicion").value.trim();
-    const aviso = document.getElementById("aviso-clave");
-    if (!clave) {
-      aviso.style.color = "var(--error)";
-      aviso.textContent = "Escribe una contraseña.";
-      return;
-    }
-    await setDoc(refClave, { clave });
-    await registrarLog(usuario, miRol, "Actualizó la contraseña de edición", "");
-    aviso.style.color = "#2E6E4E";
-    aviso.textContent = "Contraseña actualizada.";
-  });
 </script>
 </body>
 </html>

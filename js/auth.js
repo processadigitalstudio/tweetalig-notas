@@ -120,6 +120,45 @@ function pintarMenu(rol) {
     a.textContent = etiqueta;
     menuEl.appendChild(a);
   });
+
+  configurarMenuMovil();
+}
+
+// Inserta el botón de hamburguesa y el fondo oscurecido, y conecta el
+// abrir/cerrar del menú en pantallas angostas. Se llama sola desde
+// pintarMenu(), así funciona igual en todas las páginas sin tocarlas.
+function configurarMenuMovil() {
+  const nav = document.querySelector(".app-nav");
+  if (!nav || document.querySelector(".boton-menu-movil")) return;
+
+  const boton = document.createElement("button");
+  boton.className = "boton-menu-movil";
+  boton.setAttribute("aria-label", "Abrir menú");
+  boton.textContent = "☰";
+  document.body.appendChild(boton);
+
+  const fondo = document.createElement("div");
+  fondo.className = "fondo-oscurecido-movil";
+  document.body.appendChild(fondo);
+
+  function abrir() {
+    nav.classList.add("abierto");
+    fondo.classList.add("abierto");
+    boton.textContent = "✕";
+  }
+  function cerrar() {
+    nav.classList.remove("abierto");
+    fondo.classList.remove("abierto");
+    boton.textContent = "☰";
+  }
+
+  boton.addEventListener("click", () => {
+    nav.classList.contains("abierto") ? cerrar() : abrir();
+  });
+  fondo.addEventListener("click", cerrar);
+
+  // Cerrar solo al elegir una opción del menú (no al tocar "Inicio" o los enlaces)
+  nav.querySelectorAll("a").forEach((a) => a.addEventListener("click", cerrar));
 }
 
 // Llamar al inicio de cualquier página protegida.

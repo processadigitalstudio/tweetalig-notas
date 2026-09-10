@@ -42,6 +42,15 @@ service cloud.firestore {
       return estaLogueado() && miRol() in ['master', 'admin', 'coordinador', 'secretaria'];
     }
 
+    // Las cuentas de coordinador/secretaria pueden tener una o varias sedes
+    // (campo "ciudadIds"). Si solo tienen la sede vieja de un solo valor
+    // ("ciudadId"), se trata como una lista de un elemento.
+    function misSedes() {
+      return miPerfil().ciudadIds != null
+        ? miPerfil().ciudadIds
+        : (miPerfil().ciudadId != null ? [miPerfil().ciudadId] : []);
+    }
+
     // Bloqueo de períodos cerrados: una vez un período queda "inactivo" en
     // /periodos, nadie (excepto Master) puede seguir editando clases, notas
     // o asistencia que pertenezcan a ese año-periodo-ciclo. Si el período no
@@ -60,8 +69,8 @@ service cloud.firestore {
     // - Borrar: admin o master, pero NUNCA se puede borrar una cuenta con rol "master".
     match /usuarios/{correoId} {
       function tieneMiSede(datos) {
-        return (datos.ciudadId == miPerfil().ciudadId) ||
-               (datos.ciudadIds != null && miPerfil().ciudadId in datos.ciudadIds);
+        return (datos.ciudadId != null && datos.ciudadId in misSedes()) ||
+               (datos.ciudadIds != null && datos.ciudadIds.hasAny(misSedes()));
       }
 
       allow read: if estaLogueado() && (
@@ -114,7 +123,7 @@ service cloud.firestore {
           (
             (
               esAdminOMaster() ||
-              (miRol() in ['coordinador', 'secretaria'] && get(/databases/$(database)/documents/clases/$(claseId)).data.ciudadId == miPerfil().ciudadId) ||
+              (miRol() in ['coordinador', 'secretaria'] && get(/databases/$(database)/documents/clases/$(claseId)).data.ciudadId in misSedes()) ||
               (miRol() == 'profesor' && get(/databases/$(database)/documents/clases/$(claseId)).data.docenteCorreo == miCorreo())
             ) && periodoEstaActivo(get(/databases/$(database)/documents/clases/$(claseId)).data)
           )
@@ -129,7 +138,7 @@ service cloud.firestore {
     match /estudiantes/{id} {
       allow read: if estaLogueado() && (
         esAdminOMaster() ||
-        (miRol() in ['coordinador', 'secretaria'] && resource.data.ciudadId == miPerfil().ciudadId) ||
+        (miRol() in ['coordinador', 'secretaria'] && resource.data.ciudadId in misSedes()) ||
         (miRol() == 'profesor' && get(/databases/$(database)/documents/clases/$(resource.data.claseId)).data.docenteCorreo == miCorreo())
       );
       allow write: if esGestor();
@@ -202,7 +211,7 @@ service cloud.firestore {
         return miRol() == 'profesor' && claseReferenciada().docenteCorreo == miCorreo();
       }
       function esMiSedeComoCoordinacion() {
-        return miRol() in ['coordinador', 'secretaria'] && claseReferenciada().ciudadId == miPerfil().ciudadId;
+        return miRol() in ['coordinador', 'secretaria'] && claseReferenciada().ciudadId in misSedes();
       }
 
       // Leer: admin/master (todo), coordinación (solo su sede), profesor (solo sus clases).

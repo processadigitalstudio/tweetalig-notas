@@ -77,9 +77,10 @@
   }
 
   async function cargarEstudiantes() {
-    const restringidoPorSede = (rol === "coordinador" || rol === "secretaria") && perfil?.ciudadId;
+    const misSedesEst = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
+    const restringidoPorSede = (rol === "coordinador" || rol === "secretaria") && misSedesEst.length > 0;
     const q = restringidoPorSede
-      ? query(collection(db, "estudiantes"), where("ciudadId", "==", perfil.ciudadId))
+      ? query(collection(db, "estudiantes"), where("ciudadId", "in", misSedesEst))
       : collection(db, "estudiantes");
 
     const snap = await getDocs(q);

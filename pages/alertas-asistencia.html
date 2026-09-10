@@ -158,10 +158,24 @@ Tweetalig Centro de Idiomas`;
 
   async function cargarSedesFiltro() {
     const selectSede = document.getElementById("sede");
+    const misSedesFiltro = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
+
     if (rol === "coordinador" || rol === "secretaria") {
-      selectSede.parentElement.style.display = "none";
+      if (misSedesFiltro.length <= 1) {
+        selectSede.parentElement.style.display = "none";
+        return;
+      }
+      const snapProp = await getDocs(collection(db, "ciudades"));
+      snapProp.forEach((d) => {
+        if (!misSedesFiltro.includes(d.id)) return;
+        const opt = document.createElement("option");
+        opt.value = d.id;
+        opt.textContent = d.data().nombre;
+        selectSede.appendChild(opt);
+      });
       return;
     }
+
     const snap = await getDocs(collection(db, "ciudades"));
     snap.forEach((d) => {
       const opt = document.createElement("option");
@@ -218,8 +232,9 @@ Tweetalig Centro de Idiomas`;
       const snapClases = await getDocs(qClases);
       let clases = snapClases.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-      const restringidoPorSede = (rol === "coordinador" || rol === "secretaria") && perfil?.ciudadId;
-      if (restringidoPorSede) clases = clases.filter((c) => c.ciudadId === perfil.ciudadId);
+      const misSedesAl = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
+      const restringidoPorSede = (rol === "coordinador" || rol === "secretaria") && misSedesAl.length > 0;
+      if (restringidoPorSede) clases = clases.filter((c) => misSedesAl.includes(c.ciudadId));
       else if (sedeFiltro) clases = clases.filter((c) => c.ciudadId === sedeFiltro);
       if (programaFiltro) clases = clases.filter((c) => c.programaId === programaFiltro);
 

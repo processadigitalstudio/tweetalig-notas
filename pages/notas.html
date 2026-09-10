@@ -115,8 +115,9 @@
     const selectProf = document.getElementById("profesor-vista");
 
     let qProfesores = query(collection(db, "usuarios"), where("rol", "==", "profesor"));
-    if ((rol === "coordinador" || rol === "secretaria") && perfil?.ciudadId) {
-      qProfesores = query(collection(db, "usuarios"), where("rol", "==", "profesor"), where("ciudadIds", "array-contains", perfil.ciudadId));
+    const misSedesN = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
+    if ((rol === "coordinador" || rol === "secretaria") && misSedesN.length > 0) {
+      qProfesores = query(collection(db, "usuarios"), where("rol", "==", "profesor"), where("ciudadIds", "array-contains-any", misSedesN));
     }
     const snapProf = await getDocs(qProfesores);
     let profesores = snapProf.docs;

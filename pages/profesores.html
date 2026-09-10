@@ -87,9 +87,10 @@
   async function cargarProfesores() {
     const cuerpo = document.getElementById("lista-profesores");
     cuerpo.innerHTML = "";
-    const restringidoPorSede = (rol === "coordinador" || rol === "secretaria") && perfil?.ciudadId;
+    const misSedes = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
+    const restringidoPorSede = (rol === "coordinador" || rol === "secretaria") && misSedes.length > 0;
     const q = restringidoPorSede
-      ? query(collection(db, "usuarios"), where("rol", "==", "profesor"), where("ciudadIds", "array-contains", perfil.ciudadId))
+      ? query(collection(db, "usuarios"), where("rol", "==", "profesor"), where("ciudadIds", "array-contains-any", misSedes))
       : query(collection(db, "usuarios"), where("rol", "==", "profesor"));
     const snap = await getDocs(q);
     snap.forEach((d) => {

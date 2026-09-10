@@ -33,6 +33,8 @@
       Una clase es la combinación de nivel + grupo + profesor + horario + sede. Los estudiantes se matriculan a una clase existente al subir el CSV.
     </p>
 
+    <div id="contenedor-filtro-sede-clases"></div>
+
     <table class="tabla-simple">
       <thead><tr><th>Período</th><th>Nivel</th><th>Grupo</th><th>Profesor</th><th>Horarios</th><th>Sede</th><th>Programa</th><th></th></tr></thead>
       <tbody id="lista-clases"></tbody>
@@ -116,6 +118,7 @@
 
   let listaProfesores = [];
   let clasesCache = {};
+  let filtroSedeClases = "";
 
   function agregarFilaHorarioEditor(contenedor, datos) {
     const fila = document.createElement("div");
@@ -218,9 +221,10 @@
   async function cargarProfesores() {
     const select = document.getElementById("docente");
     select.innerHTML = "";
-    const restringidoPorSede = (rol === "coordinador" || rol === "secretaria") && perfil?.ciudadId;
+    const misSedesCl = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
+    const restringidoPorSede = (rol === "coordinador" || rol === "secretaria") && misSedesCl.length > 0;
     const q = restringidoPorSede
-      ? query(collection(db, "usuarios"), where("rol", "==", "profesor"), where("ciudadIds", "array-contains", perfil.ciudadId))
+      ? query(collection(db, "usuarios"), where("rol", "==", "profesor"), where("ciudadIds", "array-contains-any", misSedesCl))
       : query(collection(db, "usuarios"), where("rol", "==", "profesor"));
     const snap = await getDocs(q);
     listaProfesores = snap.docs.map((d) => ({ correo: d.id, nombre: d.data().nombre }));
@@ -248,8 +252,8 @@
       return;
     }
 
-    const miSede = perfil?.ciudadId;
-    const restringirPorSede = (rol === "coordinador" || rol === "secretaria") && miSede;
+    const misSedesProg = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
+    const restringirPorSede = (rol === "coordinador" || rol === "secretaria") && misSedesProg.length > 0;
 
     const anioClase = Number(document.getElementById("anio").value);
     const periodoClase = Number(document.getElementById("periodo").value);
@@ -259,7 +263,7 @@
     snap.forEach((d) => {
       const p = d.data();
       const sedesPermitidas = p.sedes || [];
-      const aplicaAquiTambien = sedesPermitidas.length === 0 || !restringirPorSede || sedesPermitidas.includes(miSede);
+      const aplicaAquiTambien = sedesPermitidas.length === 0 || !restringirPorSede || sedesPermitidas.some((s) => misSedesProg.includes(s));
       const mismoPeriodo = p.anio === anioClase && p.periodo === periodoClase && p.ciclo === cicloClase;
       if (!aplicaAquiTambien || !mismoPeriodo) return;
       alguno = true;
@@ -300,8 +304,13 @@
     const cuerpo = document.getElementById("lista-clases");
     cuerpo.innerHTML = "";
     clasesCache = {};
+    const misSedesTabla = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
+    const esCoordinacion = (rol === "coordinador" || rol === "secretaria");
     const snap = await getDocs(collection(db, "clases"));
     snap.forEach((d) => {
+      const cTemp = d.data();
+      if (esCoordinacion && !misSedesTabla.includes(cTemp.ciudadId)) return;
+      if (esCoordinacion && filtroSedeClases && cTemp.ciudadId !== filtroSedeClases) return;
       const c = d.data();
       clasesCache[d.id] = c;
       const periodoTexto = `${c.anio || "—"}-${c.periodo || "—"} / Ciclo ${c.ciclo || "—"}`;
@@ -550,6 +559,29 @@
     cargarClases();
   });
 
+  function agregarFiltroSedeClases() {
+    const misSedesTabla = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
+    if (!(rol === "coordinador" || rol === "secretaria") || misSedesTabla.length <= 1) return;
+    const contenedor = document.getElementById("contenedor-filtro-sede-clases");
+    contenedor.innerHTML = `
+      <label style="font-size:13px; font-weight:500; color:var(--tinta-suave); margin-right:8px;">Ver:</label>
+      <select id="filtro-sede-clases-select" style="font-size:13px; padding:6px 8px; border:1px solid var(--linea); border-radius:6px; margin-bottom:14px;">
+        <option value="">Todas mis sedes juntas</option>
+      </select>
+    `;
+    misSedesTabla.forEach((idSede) => {
+      const nombreSede = clasesCache && Object.values(clasesCache).find((c) => c.ciudadId === idSede)?.ciudadNombre || idSede;
+      const opt = document.createElement("option");
+      opt.value = idSede;
+      opt.textContent = `Solo ${nombreSede}`;
+      contenedor.querySelector("select").appendChild(opt);
+    });
+    contenedor.querySelector("select").addEventListener("change", (e) => {
+      filtroSedeClases = e.target.value;
+      cargarClases();
+    });
+  }
+
   cargarPeriodoAcademico();
   agregarFilaHorario();
   document.getElementById("anio").addEventListener("change", cargarProgramas);
@@ -560,6 +592,7 @@
   await Promise.all([cargarSedes(), cargarProfesores(), cargarProgramas()]);
   actualizarModoSede();
   await cargarClases();
+  agregarFiltroSedeClases();
 </script>
 </body>
 </html>
