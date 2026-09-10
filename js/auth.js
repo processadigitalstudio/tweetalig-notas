@@ -124,41 +124,62 @@ function pintarMenu(rol) {
   configurarMenuMovil();
 }
 
-// Inserta el botón de hamburguesa y el fondo oscurecido, y conecta el
-// abrir/cerrar del menú en pantallas angostas. Se llama sola desde
-// pintarMenu(), así funciona igual en todas las páginas sin tocarlas.
+// Inserta el botón de hamburguesa (siempre visible) y conecta el
+// abrir/cerrar manual del menú — no depende del ancho de la ventana,
+// es decisión del usuario, y se recuerda para la próxima vez que entre.
+const CLAVE_PREFERENCIA_MENU = "tweetalig_menu_abierto";
+
 function configurarMenuMovil() {
   const nav = document.querySelector(".app-nav");
   if (!nav || document.querySelector(".boton-menu-movil")) return;
 
   const boton = document.createElement("button");
   boton.className = "boton-menu-movil";
-  boton.setAttribute("aria-label", "Abrir menú");
-  boton.textContent = "☰";
+  boton.setAttribute("aria-label", "Mostrar/ocultar menú");
   document.body.appendChild(boton);
 
   const fondo = document.createElement("div");
   fondo.className = "fondo-oscurecido-movil";
   document.body.appendChild(fondo);
 
-  function abrir() {
-    nav.classList.add("abierto");
-    fondo.classList.add("abierto");
-    boton.textContent = "✕";
+  function leerPreferencia() {
+    const guardada = localStorage.getItem(CLAVE_PREFERENCIA_MENU);
+    if (guardada !== null) return guardada === "1";
+    return window.innerWidth > 820; // primera vez: abierto en pantallas anchas, cerrado en angostas
   }
-  function cerrar() {
-    nav.classList.remove("abierto");
-    fondo.classList.remove("abierto");
-    boton.textContent = "☰";
+
+  function aplicar(abierto) {
+    nav.classList.toggle("oculto", !abierto);
+    boton.textContent = abierto ? "✕" : "☰";
+    const esAngosta = window.innerWidth <= 820;
+    fondo.classList.toggle("visible", abierto && esAngosta);
+    document.body.classList.toggle("menu-visible-movil", abierto && esAngosta);
   }
+
+  let abierto = leerPreferencia();
+  aplicar(abierto);
 
   boton.addEventListener("click", () => {
-    nav.classList.contains("abierto") ? cerrar() : abrir();
+    abierto = !abierto;
+    localStorage.setItem(CLAVE_PREFERENCIA_MENU, abierto ? "1" : "0");
+    aplicar(abierto);
   });
-  fondo.addEventListener("click", cerrar);
 
-  // Cerrar solo al elegir una opción del menú (no al tocar "Inicio" o los enlaces)
-  nav.querySelectorAll("a").forEach((a) => a.addEventListener("click", cerrar));
+  fondo.addEventListener("click", () => {
+    abierto = false;
+    localStorage.setItem(CLAVE_PREFERENCIA_MENU, "0");
+    aplicar(abierto);
+  });
+
+  // En pantallas angostas, elegir una opción cierra el menú solo
+  // (en pantallas anchas se queda abierto, porque ahí no estorba).
+  nav.querySelectorAll("a").forEach((a) => a.addEventListener("click", () => {
+    if (window.innerWidth <= 820) {
+      abierto = false;
+      localStorage.setItem(CLAVE_PREFERENCIA_MENU, "0");
+      aplicar(abierto);
+    }
+  }));
 }
 
 // Llamar al inicio de cualquier página protegida.
