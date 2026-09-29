@@ -37,7 +37,7 @@
 
     <div class="tarjeta">
       <h3>1. Elige lo que van a compartir todas estas clases</h3>
-      <p>Período, programa y horario(s) — se aplican igual a todas las filas del CSV.</p>
+      <p>Período y programa se aplican igual a todas las filas. <b>El horario ya NO se comparte</b> — cada fila trae el suyo propio en la columna "horarios" del CSV.</p>
 
       <label style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin:10px 0 4px;">Período académico</label>
       <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; max-width: 420px;">
@@ -48,16 +48,15 @@
 
       <label style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin:14px 0 4px;">Programa</label>
       <select id="cl-programa" style="max-width: 420px;"></select>
-
-      <label style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin:14px 0 4px;">Horarios</label>
-      <div id="cl-lista-horarios" style="max-width: 420px;"></div>
-      <button type="button" class="boton-secundario" id="cl-boton-agregar-horario">+ Agregar horario</button>
     </div>
 
     <div class="tarjeta">
       <h3>2. Descarga la plantilla</h3>
       <p>
-        Columnas requeridas, en este orden exacto: <code>ciudad, nivel, grupo, correoProfesor</code><br><br>
+        Columnas requeridas, en este orden exacto: <code>ciudad, nivel, grupo, correoProfesor, horarios</code><br><br>
+        <b>Formato de la columna "horarios":</b> <code>Día HH:MM-HH:MM</code>, y si la clase tiene varios días,
+        se separan con <code>;</code>. Ejemplo con dos días: <code>Martes 18:00-20:00;Miércoles 18:00-19:00</code>.
+        Ejemplo con un solo día: <code>Lunes 17:00-19:00</code>.<br><br>
         <b>Importante:</b> el correo del profesor debe ser uno ya registrado en "Profesores". Si el programa elegido arriba es de tipo Distancia, usa la misma ciudad/nivel/grupo en filas distintas por cada sede — cada fila crea una clase.
       </p>
       <button class="boton-secundario" id="cl-boton-plantilla">Descargar plantilla de ejemplo (.csv)</button>
@@ -161,39 +160,30 @@
     });
   }
 
-  function clAgregarFilaHorario() {
-    const cont = document.getElementById("cl-lista-horarios");
-    const fila = document.createElement("div");
-    fila.className = "fila-horario-masiva";
-    fila.style.cssText = "display:grid; grid-template-columns: 1fr 1fr 1fr 30px; gap:8px; margin-bottom:8px;";
-    fila.innerHTML = `
-      <select class="cl-input-dia" style="font-size:13px; padding:7px;">
-        <option>Lunes</option><option>Martes</option><option>Miércoles</option>
-        <option>Jueves</option><option>Viernes</option><option>Sábado</option>
-      </select>
-      <input type="time" class="cl-input-inicio" style="font-size:13px; padding:7px;">
-      <input type="time" class="cl-input-fin" style="font-size:13px; padding:7px;">
-      <button type="button" style="background:none;border:none;color:var(--error);cursor:pointer;">✕</button>
-    `;
-    fila.querySelector("button").addEventListener("click", () => fila.remove());
-    cont.appendChild(fila);
-  }
-  document.getElementById("cl-boton-agregar-horario").addEventListener("click", clAgregarFilaHorario);
+  const DIAS_VALIDOS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
-  function clLeerHorarios() {
-    return [...document.querySelectorAll(".fila-horario-masiva")]
-      .map((f) => ({
-        dia: f.querySelector(".cl-input-dia").value,
-        horaInicio: f.querySelector(".cl-input-inicio").value,
-        horaFin: f.querySelector(".cl-input-fin").value
-      }))
-      .filter((h) => h.horaInicio && h.horaFin);
+  // Convierte "Martes 18:00-20:00;Miércoles 18:00-19:00" en el arreglo
+  // [{dia, horaInicio, horaFin}, ...] que usa el resto del sistema.
+  // Devuelve null si el texto no tiene un formato válido.
+  function clParsearHorarios(texto) {
+    if (!texto || !texto.trim()) return null;
+    const bloques = texto.split(";").map((b) => b.trim()).filter(Boolean);
+    const horarios = [];
+    for (const bloque of bloques) {
+      const match = bloque.match(/^(\p{L}+)\s+(\d{1,2}:\d{2})-(\d{1,2}:\d{2})$/u);
+      if (!match) return null;
+      const [, diaTexto, horaInicio, horaFin] = match;
+      const dia = DIAS_VALIDOS.find((d) => d.toLowerCase() === diaTexto.toLowerCase());
+      if (!dia) return null;
+      horarios.push({ dia, horaInicio, horaFin });
+    }
+    return horarios.length > 0 ? horarios : null;
   }
 
-  const PLANTILLA_CLASES_CSV = `ciudad,nivel,grupo,correoProfesor
-Cartagena,A1,A,maria.torres@tweetalig.edu.co
-Cartagena,A1,B,maria.torres@tweetalig.edu.co
-Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co`;
+  const PLANTILLA_CLASES_CSV = `ciudad,nivel,grupo,correoProfesor,horarios
+Cartagena,A1,A,maria.torres@tweetalig.edu.co,Martes 18:00-20:00;Miércoles 18:00-19:00
+Cartagena,A1,B,maria.torres@tweetalig.edu.co,Lunes 17:00-19:00
+Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co,Jueves 18:00-20:00`;
 
   document.getElementById("cl-boton-plantilla").addEventListener("click", () => {
     const blob = new Blob([PLANTILLA_CLASES_CSV], { type: "text/csv;charset=utf-8;" });
@@ -234,10 +224,9 @@ Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co`;
     const selectPrograma = document.getElementById("cl-programa");
     const programaId = selectPrograma.value;
     const programaNombre = selectPrograma.options[selectPrograma.selectedIndex]?.textContent || "";
-    const horarios = clLeerHorarios();
 
-    if (!programaId || horarios.length === 0) {
-      document.getElementById("cl-resultado").innerHTML = `<p class="err">Falta elegir el programa o agregar al menos un horario completo.</p>`;
+    if (!programaId) {
+      document.getElementById("cl-resultado").innerHTML = `<p class="err">Falta elegir el programa.</p>`;
       botonProcesarClases.textContent = "Procesar archivo";
       botonProcesarClases.disabled = false;
       return;
@@ -262,9 +251,16 @@ Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co`;
       const nivel = (fila.nivel || "").trim();
       const grupo = (fila.grupo || "").trim();
       const correoProfesor = (fila.correoProfesor || "").trim().toLowerCase();
+      const horarios = clParsearHorarios(fila.horarios || "");
 
       if (!ciudadNombre || !nivel || !grupo || !correoProfesor) {
         resultados.push({ ok: false, texto: `Fila incompleta: ${JSON.stringify(fila)}` });
+        fallidos++;
+        continue;
+      }
+
+      if (!horarios) {
+        resultados.push({ ok: false, texto: `${nivel} - ${grupo}: la columna "horarios" está vacía o no tiene el formato correcto (ej. "Martes 18:00-20:00"). No se creó.` });
         fallidos++;
         continue;
       }
@@ -312,7 +308,6 @@ Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co`;
   });
 
   cargarSelectoresPeriodoClases();
-  clAgregarFilaHorario();
   await cargarProgramasClases();
   document.getElementById("cl-anio").addEventListener("change", cargarProgramasClases);
   document.getElementById("cl-periodo").addEventListener("change", cargarProgramasClases);
