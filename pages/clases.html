@@ -112,7 +112,7 @@
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { db } from "../js/firebase-config.js?v=3";
-  import { collection, addDoc, updateDoc, doc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { collection, addDoc, updateDoc, deleteDoc, getDoc, doc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
   const { usuario, rol, perfil } = await requireAuth(["master", "admin", "coordinador", "secretaria"]);
 
@@ -340,6 +340,7 @@
           <button class="btn-editar-nivel" data-id="${d.id}">Editar nivel</button>
           <button class="btn-editar-grupo" data-id="${d.id}">Editar grupo</button>
           <button class="btn-editar-horarios" data-id="${d.id}">Editar horarios</button>
+          <button class="btn-borrar-clase" data-id="${d.id}" style="color:var(--error);">Borrar clase</button>
           <a href="notas.html?correo=${encodeURIComponent(c.docenteCorreo)}&grupo=${encodeURIComponent(c.grupoDistanciaId || d.id)}" style="font-size:12px; margin-left:6px;">Ver notas</a>
           ·
           <a href="asistencia.html?correo=${encodeURIComponent(c.docenteCorreo)}&grupo=${encodeURIComponent(c.grupoDistanciaId || d.id)}" style="font-size:12px;">Ver asistencia</a>
@@ -425,6 +426,36 @@
       }
     }));
 
+    cuerpo.querySelectorAll(".btn-borrar-clase").forEach((b) => b.addEventListener("click", async () => {
+      const id = b.dataset.id;
+      const c = clasesCache[id];
+      const descripcion = c ? `${c.nivel} - ${c.grupo} (${c.ciudadNombre || "—"})` : id;
+
+      const intento = prompt(`Escribe la contraseña para borrar la clase "${descripcion}":`);
+      if (intento === null) return;
+
+      const snapClave = await getDoc(doc(db, "configuracion", "claveBorrarClases"));
+      const claveReal = snapClave.exists() ? snapClave.data().clave : null;
+      if (!claveReal) {
+        alert("Todavía no se ha configurado una contraseña para borrar clases. Pídele a Master que la configure en 'Accesos y usuarios'.");
+        return;
+      }
+      if (intento !== claveReal) {
+        alert("Contraseña incorrecta. No se borró la clase.");
+        return;
+      }
+
+      if (!confirm(`¿Seguro que quieres borrar "${descripcion}"? Esto no se puede deshacer.`)) return;
+
+      try {
+        await deleteDoc(doc(db, "clases", id));
+        await registrarLog(usuario, rol, "Borró clase", descripcion);
+        cargarClases();
+      } catch (error) {
+        alert(error.code === "permission-denied" ? "No se puede borrar: el período de esta clase ya está cerrado." : `Error: ${error.message}`);
+      }
+    }));
+
     cuerpo.querySelectorAll(".btn-editar-grupo").forEach((b) => b.addEventListener("click", async () => {
       const id = b.dataset.id;
       const span = cuerpo.querySelector(`.valor-grupo[data-id="${id}"]`);
@@ -493,6 +524,16 @@
       return;
     }
 
+    function claseYaExiste(ciudadId) {
+      return Object.values(clasesCache).some((c) =>
+        c.anio === anio && c.periodo === periodo && c.ciclo === ciclo &&
+        c.programaId === selectPrograma.value &&
+        c.ciudadId === ciudadId &&
+        (c.nivel || "").trim().toLowerCase() === nivel.toLowerCase() &&
+        (c.grupo || "").trim().toLowerCase() === grupo.toLowerCase()
+      );
+    }
+
     const datosBase = {
       anio, periodo, ciclo, nivel,
       horarios: horariosCompletos,
@@ -514,11 +555,14 @@
       const grupoDistanciaId = `${nivel}-${grupo}-${anio}${periodo}${ciclo}-${Date.now()}`;
       let creadas = 0;
 
+      let omitidas = 0;
       for (const chk of sedesMarcadas) {
         const ciudadId = chk.value;
         const ciudadNombre = chk.dataset.nombre;
         const inputGrupo = document.querySelector(`.grupo-sede-distancia[data-sede="${ciudadId}"]`);
         const grupoSede = (inputGrupo?.value || "").trim() || grupo;
+
+        if (claseYaExiste(ciudadId)) { omitidas++; continue; }
 
         await addDoc(collection(db, "clases"), {
           ...datosBase,
@@ -530,13 +574,20 @@
       }
 
       await registrarLog(usuario, rol, "Creó clase a distancia (multi-sede)", `${nivel} - ${grupo} en ${creadas} sede(s) (${anio}-${periodo}, ciclo ${ciclo})`);
-      aviso.style.color = "#2E6E4E";
-      aviso.textContent = `Clase a distancia creada en ${creadas} sede(s) — quedan ligadas como la misma clase real.`;
+      aviso.style.color = creadas > 0 ? "#2E6E4E" : "var(--error)";
+      aviso.textContent = creadas > 0
+        ? `Clase a distancia creada en ${creadas} sede(s) — quedan ligadas como la misma clase real.${omitidas > 0 ? ` (${omitidas} sede(s) ya tenían esta clase, no se duplicó).` : ""}`
+        : "Esa clase ya existe en todas las sedes marcadas — no se creó nada.";
     } else {
       const selectCiudad = document.getElementById("ciudad");
       if (!selectCiudad.value) {
         aviso.style.color = "var(--error)";
         aviso.textContent = "Selecciona la sede.";
+        return;
+      }
+      if (claseYaExiste(selectCiudad.value)) {
+        aviso.style.color = "var(--error)";
+        aviso.textContent = "Ya existe una clase igual (mismo programa, sede, nivel y grupo) para este período — no se creó.";
         return;
       }
       await addDoc(collection(db, "clases"), {

@@ -37,7 +37,7 @@
 
     <div class="tarjeta">
       <h3>1. Elige lo que van a compartir todas estas clases</h3>
-      <p>Período, programa y horario(s) — se aplican igual a todas las filas del CSV.</p>
+      <p>Período y programa se aplican igual a todas las filas. Si necesitas clases de otro programa, súbelas en un archivo aparte.</p>
 
       <label style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin:10px 0 4px;">Período académico</label>
       <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; max-width: 420px;">
@@ -48,16 +48,16 @@
 
       <label style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin:14px 0 4px;">Programa</label>
       <select id="cl-programa" style="max-width: 420px;"></select>
-
-      <label style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin:14px 0 4px;">Horarios</label>
-      <div id="cl-lista-horarios" style="max-width: 420px;"></div>
-      <button type="button" class="boton-secundario" id="cl-boton-agregar-horario">+ Agregar horario</button>
     </div>
 
     <div class="tarjeta">
       <h3>2. Descarga la plantilla</h3>
       <p>
-        Columnas requeridas, en este orden exacto: <code>ciudad, nivel, grupo, correoProfesor</code><br><br>
+        Columnas requeridas, en este orden exacto: <code>ciudad, nivel, grupo, correoProfesor, horarios</code><br><br>
+        <b>Formato de la columna "horarios":</b> <code>Día HH:MM-HH:MM</code>, y si la clase tiene varios días
+        con horarios distintos, se separan con <code>;</code>. Ejemplo: <code>Martes 18:00-20:00;Miércoles 18:00-19:00</code>.<br><br>
+        Si son varios días <b>seguidos con el mismo horario</b> (ej. de lunes a viernes), escribe el rango en vez de repetir cada día:
+        <code>Lunes-Viernes 18:00-19:00</code>. También funciona con rangos más cortos: <code>Martes-Jueves 17:00-18:00</code>.<br><br>
         <b>Importante:</b> el correo del profesor debe ser uno ya registrado en "Profesores". Si el programa elegido arriba es de tipo Distancia, usa la misma ciudad/nivel/grupo en filas distintas por cada sede — cada fila crea una clase.
       </p>
       <button class="boton-secundario" id="cl-boton-plantilla">Descargar plantilla de ejemplo (.csv)</button>
@@ -161,39 +161,53 @@
     });
   }
 
-  function clAgregarFilaHorario() {
-    const cont = document.getElementById("cl-lista-horarios");
-    const fila = document.createElement("div");
-    fila.className = "fila-horario-masiva";
-    fila.style.cssText = "display:grid; grid-template-columns: 1fr 1fr 1fr 30px; gap:8px; margin-bottom:8px;";
-    fila.innerHTML = `
-      <select class="cl-input-dia" style="font-size:13px; padding:7px;">
-        <option>Lunes</option><option>Martes</option><option>Miércoles</option>
-        <option>Jueves</option><option>Viernes</option><option>Sábado</option>
-      </select>
-      <input type="time" class="cl-input-inicio" style="font-size:13px; padding:7px;">
-      <input type="time" class="cl-input-fin" style="font-size:13px; padding:7px;">
-      <button type="button" style="background:none;border:none;color:var(--error);cursor:pointer;">✕</button>
-    `;
-    fila.querySelector("button").addEventListener("click", () => fila.remove());
-    cont.appendChild(fila);
-  }
-  document.getElementById("cl-boton-agregar-horario").addEventListener("click", clAgregarFilaHorario);
+  const DIAS_VALIDOS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
-  function clLeerHorarios() {
-    return [...document.querySelectorAll(".fila-horario-masiva")]
-      .map((f) => ({
-        dia: f.querySelector(".cl-input-dia").value,
-        horaInicio: f.querySelector(".cl-input-inicio").value,
-        horaFin: f.querySelector(".cl-input-fin").value
-      }))
-      .filter((h) => h.horaInicio && h.horaFin);
+  // Quita tildes y pasa a minúsculas, para que "Sabado", "sábado" y "SÁBADO"
+  // se reconozcan igual que "Sábado" al escribir el CSV.
+  function normalizarDia(texto) {
+    return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   }
 
-  const PLANTILLA_CLASES_CSV = `ciudad,nivel,grupo,correoProfesor
-Cartagena,A1,A,maria.torres@tweetalig.edu.co
-Cartagena,A1,B,maria.torres@tweetalig.edu.co
-Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co`;
+  // Convierte "Martes 18:00-20:00;Miércoles 18:00-19:00" en el arreglo
+  // [{dia, horaInicio, horaFin}, ...] que usa el resto del sistema.
+  // También acepta un RANGO de días con el mismo horario, ej.
+  // "Lunes-Viernes 18:00-19:00" (se expande a un bloque por cada día del rango).
+  // Devuelve null si el texto no tiene un formato válido.
+  function clParsearHorarios(texto) {
+    if (!texto || !texto.trim()) return null;
+    const bloques = texto.split(";").map((b) => b.trim()).filter(Boolean);
+    const horarios = [];
+    for (const bloque of bloques) {
+      const match = bloque.match(/^(\p{L}+)(?:-(\p{L}+))?\s+(\d{1,2}:\d{2})-(\d{1,2}:\d{2})$/u);
+      if (!match) return null;
+      const [, diaInicioTexto, diaFinTexto, horaInicio, horaFin] = match;
+      const diaInicio = DIAS_VALIDOS.find((d) => normalizarDia(d) === normalizarDia(diaInicioTexto));
+      if (!diaInicio) return null;
+
+      if (!diaFinTexto) {
+        // Un solo día, como antes: "Lunes 17:00-19:00"
+        horarios.push({ dia: diaInicio, horaInicio, horaFin });
+        continue;
+      }
+
+      // Rango de días, como "Lunes-Viernes 18:00-19:00"
+      const diaFin = DIAS_VALIDOS.find((d) => normalizarDia(d) === normalizarDia(diaFinTexto));
+      if (!diaFin) return null;
+      const indiceInicio = DIAS_VALIDOS.indexOf(diaInicio);
+      const indiceFin = DIAS_VALIDOS.indexOf(diaFin);
+      if (indiceFin < indiceInicio) return null; // ej. "Viernes-Lunes" no es un rango válido
+      for (let i = indiceInicio; i <= indiceFin; i++) {
+        horarios.push({ dia: DIAS_VALIDOS[i], horaInicio, horaFin });
+      }
+    }
+    return horarios.length > 0 ? horarios : null;
+  }
+
+  const PLANTILLA_CLASES_CSV = `ciudad,nivel,grupo,correoProfesor,horarios
+Cartagena,A1,A,maria.torres@tweetalig.edu.co,Martes 18:00-20:00;Miércoles 18:00-19:00
+Cartagena,A1,B,maria.torres@tweetalig.edu.co,Lunes-Viernes 17:00-19:00
+Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co,Martes-Jueves 18:00-20:00`;
 
   document.getElementById("cl-boton-plantilla").addEventListener("click", () => {
     const blob = new Blob([PLANTILLA_CLASES_CSV], { type: "text/csv;charset=utf-8;" });
@@ -234,10 +248,9 @@ Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co`;
     const selectPrograma = document.getElementById("cl-programa");
     const programaId = selectPrograma.value;
     const programaNombre = selectPrograma.options[selectPrograma.selectedIndex]?.textContent || "";
-    const horarios = clLeerHorarios();
 
-    if (!programaId || horarios.length === 0) {
-      document.getElementById("cl-resultado").innerHTML = `<p class="err">Falta elegir el programa o agregar al menos un horario completo.</p>`;
+    if (!programaId) {
+      document.getElementById("cl-resultado").innerHTML = `<p class="err">Falta elegir el programa.</p>`;
       botonProcesarClases.textContent = "Procesar archivo";
       botonProcesarClases.disabled = false;
       return;
@@ -254,6 +267,21 @@ Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co`;
     const snapProfesores = await getDocs(qProf);
     const profesores = snapProfesores.docs.map((d) => ({ correo: d.id, ...d.data() }));
 
+    // Clases que ya existen para este mismo período+programa — para no duplicar
+    // si el mismo archivo se sube dos veces (se compara por sede+nivel+grupo).
+    const snapClasesExistentes = await getDocs(query(
+      collection(db, "clases"),
+      where("anio", "==", anio), where("periodo", "==", periodo), where("ciclo", "==", ciclo), where("programaId", "==", programaId)
+    ));
+    const clasesExistentes = snapClasesExistentes.docs.map((d) => d.data());
+    function claseYaExiste(ciudadId, nivel, grupo) {
+      return clasesExistentes.some((c) =>
+        c.ciudadId === ciudadId &&
+        (c.nivel || "").trim().toLowerCase() === nivel.trim().toLowerCase() &&
+        (c.grupo || "").trim().toLowerCase() === grupo.trim().toLowerCase()
+      );
+    }
+
     const resultados = [];
     let exitosos = 0, fallidos = 0;
 
@@ -262,9 +290,16 @@ Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co`;
       const nivel = (fila.nivel || "").trim();
       const grupo = (fila.grupo || "").trim();
       const correoProfesor = (fila.correoProfesor || "").trim().toLowerCase();
+      const horarios = clParsearHorarios(fila.horarios || "");
 
       if (!ciudadNombre || !nivel || !grupo || !correoProfesor) {
         resultados.push({ ok: false, texto: `Fila incompleta: ${JSON.stringify(fila)}` });
+        fallidos++;
+        continue;
+      }
+
+      if (!horarios) {
+        resultados.push({ ok: false, texto: `${nivel} - ${grupo}: la columna "horarios" está vacía o no tiene el formato correcto (ej. "Martes 18:00-20:00"). No se creó.` });
         fallidos++;
         continue;
       }
@@ -283,6 +318,12 @@ Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co`;
         continue;
       }
 
+      if (claseYaExiste(ciudad.id, nivel, grupo)) {
+        resultados.push({ ok: false, texto: `${nivel} - ${grupo} (${ciudad.nombre}): ya existe una clase igual para este programa y período — no se duplicó.` });
+        fallidos++;
+        continue;
+      }
+
       await addDoc(collection(db, "clases"), {
         anio, periodo, ciclo,
         nivel, grupo, horarios,
@@ -293,6 +334,7 @@ Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co`;
         programaId, programaNombre,
         estudiantes: []
       });
+      clasesExistentes.push({ ciudadId: ciudad.id, nivel, grupo }); // por si el archivo repite la misma fila
       resultados.push({ ok: true, texto: `${nivel} - ${grupo} (${ciudad.nombre}): creada con profesor ${profesor.nombre}.` });
       exitosos++;
     }
@@ -312,7 +354,6 @@ Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co`;
   });
 
   cargarSelectoresPeriodoClases();
-  clAgregarFilaHorario();
   await cargarProgramasClases();
   document.getElementById("cl-anio").addEventListener("change", cargarProgramasClases);
   document.getElementById("cl-periodo").addEventListener("change", cargarProgramasClases);

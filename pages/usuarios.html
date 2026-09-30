@@ -80,6 +80,18 @@
       <button id="boton-guardar" class="boton-primario">Registrar acceso</button>
       <p class="aviso" id="aviso"></p>
     </div>
+
+    <div class="form-tarjeta" id="tarjeta-clave-borrar" style="margin-top:24px; display:none;">
+      <h3 style="font-family: var(--fuente-display); color: var(--azul-profundo); margin: 0;">Contraseña para borrar clases</h3>
+      <p style="font-size:13px; color:var(--tinta-suave); margin: 6px 0 10px;">
+        Antes de borrar una clase en "Clases", el sistema va a pedir esta contraseña — es una capa extra
+        para evitar borrados por error. La usan todos los roles que pueden borrar (Master, Admin, Coordinador, Secretaria).
+      </p>
+      <label for="clave-borrar">Contraseña actual</label>
+      <input type="text" id="clave-borrar" placeholder="Ej. borrar2026">
+      <button id="boton-guardar-clave-borrar" class="boton-primario">Guardar contraseña</button>
+      <p class="aviso" id="aviso-clave-borrar"></p>
+    </div>
   </main>
 </div>
 
@@ -286,6 +298,29 @@
   await cargarSedes();
   agregarFiltroSedeEnTabla();
   await cargarLista();
+
+  // Contraseña compartida para borrar clases (solo Master/Admin la configuran)
+  if (miRol === "master" || miRol === "admin") {
+    document.getElementById("tarjeta-clave-borrar").style.display = "block";
+    const refClaveBorrar = doc(db, "configuracion", "claveBorrarClases");
+    const snapClaveBorrar = await getDoc(refClaveBorrar);
+    if (snapClaveBorrar.exists()) {
+      document.getElementById("clave-borrar").value = snapClaveBorrar.data().clave || "";
+    }
+    document.getElementById("boton-guardar-clave-borrar").addEventListener("click", async () => {
+      const clave = document.getElementById("clave-borrar").value.trim();
+      const aviso = document.getElementById("aviso-clave-borrar");
+      if (!clave) {
+        aviso.style.color = "var(--error)";
+        aviso.textContent = "Escribe una contraseña.";
+        return;
+      }
+      await setDoc(refClaveBorrar, { clave });
+      await registrarLog(usuario, miRol, "Actualizó la contraseña de borrar clases", "");
+      aviso.style.color = "#2E6E4E";
+      aviso.textContent = "Contraseña actualizada.";
+    });
+  }
 </script>
 </body>
 </html>
