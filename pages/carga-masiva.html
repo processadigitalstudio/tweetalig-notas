@@ -89,18 +89,20 @@
     <div class="tarjeta">
       <h3>2. Descarga la plantilla</h3>
       <p>
-        Columnas requeridas, en este orden exacto: <code>nombre, apellido, cedula, correo, nivel, grupo, ciudad</code><br><br>
-        <b>Importante:</b> el horario y el año/periodo/ciclo ya NO van en el CSV — se toman del período que elegiste arriba y del horario que ya configuraste en "Clases". La clase (nivel+grupo+sede, en ese período) tiene que existir antes de subir el archivo.
+        Columnas requeridas, en este orden exacto: <code>nombre, apellido, cedula, correo, nivel, grupo, ciudad, programa</code><br><br>
+        <b>Columna "programa":</b> escribe el nombre exacto (ej. <code>Presencial Semestral</code>). Ayuda a que el estudiante
+        quede en la clase correcta cuando hay más de una clase con el mismo nivel+grupo+sede pero de programas distintos.<br><br>
+        <b>Importante:</b> el horario y el año/periodo/ciclo ya NO van en el CSV — se toman del período que elegiste arriba y del horario que ya configuraste en "Clases". La clase (nivel+grupo+sede+programa, en ese período) tiene que existir antes de subir el archivo.
       </p>
       <button class="boton-secundario" id="boton-plantilla">Descargar plantilla de ejemplo (.csv)</button>
     </div>
 
     <div class="tarjeta">
-      <h3>3. Sube tu archivo</h3>
-      <p>El archivo debe ser .csv, con encabezados en la primera fila (igual que la plantilla).</p>
+      <h3>3. Sube tu archivo y revisa la vista previa</h3>
+      <p>El archivo debe ser .csv, con encabezados en la primera fila (igual que la plantilla). Antes de procesar, revisa que cada fila haya encontrado su clase correcta.</p>
       <input type="file" id="archivo-csv" accept=".csv">
-      <br>
-      <button class="boton-secundario" id="boton-procesar" disabled>Procesar archivo</button>
+      <div class="resultado" id="vista-previa"></div>
+      <button class="boton-secundario" id="boton-procesar" disabled>Confirmar y procesar archivo</button>
       <div class="resultado" id="resultado"></div>
     </div>
   </main>
@@ -361,10 +363,10 @@ Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co,Martes-Jueves 18:00-20:00`;
 
   // ============ CARGA MASIVA DE ESTUDIANTES ============
 
-  const PLANTILLA_CSV = `nombre,apellido,cedula,correo,nivel,grupo,ciudad
-Juan,Pérez Gómez,1102345678,juan.perez@example.com,A1,A,Cartagena
-María,Rodríguez Silva,1102345679,maria.rodriguez@example.com,A1,A,Cartagena
-Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo`;
+  const PLANTILLA_CSV = `nombre,apellido,cedula,correo,nivel,grupo,ciudad,programa
+Juan,Pérez Gómez,1102345678,juan.perez@example.com,A1,A,Cartagena,Presencial Semestral
+María,Rodríguez Silva,1102345679,maria.rodriguez@example.com,A1,A,Cartagena,Presencial Semestral
+Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo,Distancia Semestral`;
 
   function cargarSelectoresPeriodo() {
     const anioActual = new Date().getFullYear();
@@ -401,24 +403,110 @@ Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo`;
   const inputArchivo = document.getElementById("archivo-csv");
   const botonProcesar = document.getElementById("boton-procesar");
 
+  function normalizar(txt) {
+    return (txt || "").toString().trim().toLowerCase();
+  }
+
+  async function obtenerClasesDelPeriodo() {
+    const anio = Number(document.getElementById("anio").value);
+    const periodo = Number(document.getElementById("periodo").value);
+    const ciclo = Number(document.getElementById("ciclo").value);
+    const snapClases = await getDocs(collection(db, "clases"));
+    return snapClases.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((c) => c.anio === anio && c.periodo === periodo && c.ciclo === ciclo);
+  }
+
+  // Busca la clase de una fila. Si la fila trae "programa", exige que coincida
+  // también (para no confundir dos clases con el mismo nivel+grupo+sede pero
+  // de programas distintos). Si la fila no trae programa, solo exige nivel+grupo+sede.
+  function buscarClaseParaFila(fila, clases) {
+    const nivel = (fila.nivel || "").trim();
+    const grupo = (fila.grupo || "").trim();
+    const ciudad = (fila.ciudad || "").trim();
+    const programa = (fila.programa || "").trim();
+
+    return clases.find((c) =>
+      normalizar(c.nivel) === normalizar(nivel) &&
+      normalizar(c.grupo) === normalizar(grupo) &&
+      normalizar(c.ciudadNombre) === normalizar(ciudad) &&
+      (!programa || normalizar(c.programaNombre) === normalizar(programa))
+    );
+  }
+
+  async function pintarVistaPrevia() {
+    const contenedor = document.getElementById("vista-previa");
+    if (filasArchivo.length === 0) { contenedor.innerHTML = ""; return; }
+    contenedor.innerHTML = `<p style="color:var(--tinta-suave); font-size:13px;">Verificando contra las clases existentes...</p>`;
+
+    const clases = await obtenerClasesDelPeriodo();
+    let sinPrograma = false;
+    let conError = 0;
+
+    const tabla = document.createElement("table");
+    tabla.style.cssText = "width:100%; border-collapse:collapse; font-size:13px; margin-top:10px;";
+    tabla.innerHTML = `<thead><tr>
+      <th style="text-align:left; padding:6px 8px; border-bottom:1px solid var(--linea);">Estudiante</th>
+      <th style="text-align:left; padding:6px 8px; border-bottom:1px solid var(--linea);">Nivel/Grupo</th>
+      <th style="text-align:left; padding:6px 8px; border-bottom:1px solid var(--linea);">Programa (CSV)</th>
+      <th style="text-align:left; padding:6px 8px; border-bottom:1px solid var(--linea);">Clase encontrada</th>
+    </tr></thead><tbody></tbody>`;
+    const tbody = tabla.querySelector("tbody");
+
+    filasArchivo.forEach((fila) => {
+      const clase = buscarClaseParaFila(fila, clases);
+      if (!fila.programa || !fila.programa.trim()) sinPrograma = true;
+      if (!clase) conError++;
+
+      const fondo = clase ? "" : "background: var(--error-fondo);";
+      const textoClase = clase
+        ? `✓ ${clase.nivel} - ${clase.grupo} (${clase.programaNombre || "—"})`
+        : `✕ No se encontró ninguna clase que coincida`;
+
+      const tr = document.createElement("tr");
+      tr.style.cssText = fondo;
+      tr.innerHTML = `
+        <td style="padding:6px 8px; border-bottom:1px solid var(--linea);">${fila.nombre || ""} ${fila.apellido || ""}</td>
+        <td style="padding:6px 8px; border-bottom:1px solid var(--linea);">${fila.nivel || "—"} / ${fila.grupo || "—"} (${fila.ciudad || "—"})</td>
+        <td style="padding:6px 8px; border-bottom:1px solid var(--linea);">${fila.programa || "<em>(vacío)</em>"}</td>
+        <td style="padding:6px 8px; border-bottom:1px solid var(--linea); color:${clase ? "#2E6E4E" : "var(--error)"};">${textoClase}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    contenedor.innerHTML = "";
+
+    const resumen = document.createElement("p");
+    resumen.style.cssText = "font-weight:600; margin-bottom: 4px;";
+    resumen.textContent = conError > 0
+      ? `⚠ Revisa: ${conError} de ${filasArchivo.length} fila(s) no encontraron clase. Antes de procesar, confirma que el programa esté bien escrito.`
+      : `✓ Las ${filasArchivo.length} fila(s) encontraron su clase correctamente.`;
+    resumen.style.color = conError > 0 ? "var(--error)" : "#2E6E4E";
+    contenedor.appendChild(resumen);
+
+    if (sinPrograma) {
+      const aviso = document.createElement("p");
+      aviso.style.cssText = "font-size:12.5px; color:var(--oro); margin: 2px 0 8px;";
+      aviso.textContent = 'Nota: algunas filas no traen "programa" — si hay más de una clase con el mismo nivel+grupo+sede, puede matricular al estudiante en la que no es. Revisa la columna "Clase encontrada".';
+      contenedor.appendChild(aviso);
+    }
+
+    contenedor.appendChild(tabla);
+  }
+
   inputArchivo.addEventListener("change", () => {
     const archivo = inputArchivo.files[0];
     if (!archivo) return;
     Papa.parse(archivo, {
       header: true,
       skipEmptyLines: true,
-      complete: (resultado) => {
+      complete: async (resultado) => {
         filasArchivo = resultado.data;
         botonProcesar.disabled = filasArchivo.length === 0;
-        document.getElementById("resultado").innerHTML =
-          `<p style="color:var(--tinta-suave); font-size:13px;">${filasArchivo.length} fila(s) detectadas. Click en "Procesar archivo" para continuar.</p>`;
+        await pintarVistaPrevia();
       }
     });
   });
-
-  function normalizar(txt) {
-    return (txt || "").toString().trim().toLowerCase();
-  }
 
   botonProcesar.addEventListener("click", async () => {
     botonProcesar.disabled = true;
@@ -428,10 +516,7 @@ Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo`;
     const periodo = Number(document.getElementById("periodo").value);
     const ciclo = Number(document.getElementById("ciclo").value);
 
-    const snapClases = await getDocs(collection(db, "clases"));
-    const clases = snapClases.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((c) => c.anio === anio && c.periodo === periodo && c.ciclo === ciclo);
+    const clases = await obtenerClasesDelPeriodo();
 
     const resultados = [];
     let exitosos = 0;
@@ -452,14 +537,11 @@ Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo`;
         continue;
       }
 
-      const clase = clases.find((c) =>
-        normalizar(c.nivel) === normalizar(nivel) &&
-        normalizar(c.grupo) === normalizar(grupo) &&
-        normalizar(c.ciudadNombre) === normalizar(ciudad)
-      );
+      const clase = buscarClaseParaFila(fila, clases);
 
       if (!clase) {
-        resultados.push({ ok: false, texto: `${nombre} ${apellido} (${cedula}): no existe una clase ${anio}-${periodo} ciclo ${ciclo} con nivel ${nivel}, grupo ${grupo}, sede ${ciudad}. Créala primero.` });
+        const conPrograma = fila.programa ? ` y programa "${fila.programa}"` : "";
+        resultados.push({ ok: false, texto: `${nombre} ${apellido} (${cedula}): no existe una clase ${anio}-${periodo} ciclo ${ciclo} con nivel ${nivel}, grupo ${grupo}, sede ${ciudad}${conPrograma}. Créala primero o revisa el nombre del programa.` });
         fallidos++;
         continue;
       }
