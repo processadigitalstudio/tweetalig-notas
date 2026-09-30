@@ -6,9 +6,52 @@
 <title>Tweetalig — Clases</title>
 <link rel="stylesheet" href="../css/styles.css?v=2">
 <style>
-  .tabla-simple { width: 100%; border-collapse: collapse; max-width: 900px; margin-bottom: 28px; }
-  .tabla-simple th, .tabla-simple td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--linea); font-size: 14px; }
+  .tabla-simple { width: 100%; border-collapse: collapse; max-width: 1000px; margin-bottom: 28px; }
+  .tabla-simple th, .tabla-simple td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--linea); font-size: 14px; vertical-align: top; }
   .tabla-simple th { color: var(--tinta-suave); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+
+  .barra-filtros {
+    display: flex; gap: 10px; flex-wrap: wrap; align-items: end;
+    background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio);
+    padding: 14px 16px; max-width: 1000px; margin-bottom: 18px;
+  }
+  .barra-filtros .campo-filtro { display: flex; flex-direction: column; gap: 4px; }
+  .barra-filtros label { font-size: 11.5px; font-weight: 500; color: var(--tinta-suave); text-transform: uppercase; letter-spacing: 0.02em; }
+  .barra-filtros input, .barra-filtros select {
+    font-family: var(--fuente-cuerpo); font-size: 13.5px; padding: 8px 10px;
+    border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta);
+  }
+  .barra-filtros input { min-width: 180px; }
+  .boton-limpiar-filtros {
+    font-family: var(--fuente-cuerpo); font-size: 13px; color: var(--tinta-suave);
+    background: none; border: none; text-decoration: underline; cursor: pointer; padding: 8px 0;
+  }
+  .contador-clases { font-size: 13px; color: var(--tinta-suave); margin: -6px 0 12px; }
+
+  /* Menú de acciones — un botón "Acciones" que despliega la lista, en vez
+     de mostrar todos los botones sueltos y desordenados en cada fila. */
+  .menu-acciones { position: relative; }
+  .menu-acciones summary {
+    cursor: pointer; list-style: none; font-size: 13px; font-weight: 500;
+    color: var(--azul-profundo); border: 1px solid var(--azul-profundo);
+    border-radius: 6px; padding: 6px 12px; display: inline-block;
+  }
+  .menu-acciones summary::-webkit-details-marker { display: none; }
+  .menu-acciones summary::after { content: " ▾"; }
+  .menu-acciones[open] summary::after { content: " ▴"; }
+  .menu-acciones-lista {
+    position: absolute; top: 100%; left: 0; margin-top: 4px;
+    background: var(--superficie); border: 1px solid var(--linea); border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.15); padding: 8px; z-index: 30;
+    display: flex; flex-direction: column; gap: 3px; min-width: 175px;
+  }
+  .menu-acciones-lista button, .menu-acciones-lista a {
+    text-align: left; font-size: 13px; padding: 7px 9px; border-radius: 5px;
+    border: none; background: none; cursor: pointer; color: var(--tinta); text-decoration: none;
+  }
+  .menu-acciones-lista button:hover, .menu-acciones-lista a:hover { background: var(--fondo); }
+  .menu-acciones-lista .accion-borrar { color: var(--error); }
+  .menu-acciones-lista hr { border: none; border-top: 1px solid var(--linea); margin: 4px 0; }
   .form-tarjeta { background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio); padding: 24px 28px; max-width: 520px; }
   .form-tarjeta label { display: block; font-size: 13px; font-weight: 500; color: var(--tinta-suave); margin-top: 12px; margin-bottom: 4px; }
   .form-tarjeta input, .form-tarjeta select { width: 100%; font-family: var(--fuente-cuerpo); font-size: 14px; padding: 9px 11px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
@@ -33,10 +76,30 @@
       Una clase es la combinación de nivel + grupo + profesor + horario + sede. Los estudiantes se matriculan a una clase existente al subir el CSV.
     </p>
 
-    <div id="contenedor-filtro-sede-clases"></div>
+    <div class="barra-filtros">
+      <div class="campo-filtro">
+        <label for="filtro-texto-clases">Buscar</label>
+        <input type="text" id="filtro-texto-clases" placeholder="Nivel, grupo o profesor...">
+      </div>
+      <div class="campo-filtro">
+        <label for="filtro-sede-clases-select">Sede</label>
+        <select id="filtro-sede-clases-select"><option value="">Todas</option></select>
+      </div>
+      <div class="campo-filtro">
+        <label for="filtro-programa-clases-select">Programa</label>
+        <select id="filtro-programa-clases-select"><option value="">Todos</option></select>
+      </div>
+      <div class="campo-filtro">
+        <label for="filtro-periodo-clases-select">Período</label>
+        <select id="filtro-periodo-clases-select"><option value="">Todos</option></select>
+      </div>
+      <button type="button" class="boton-limpiar-filtros" id="boton-limpiar-filtros-clases">Limpiar filtros</button>
+    </div>
+
+    <p class="contador-clases" id="contador-clases"></p>
 
     <table class="tabla-simple">
-      <thead><tr><th>Período</th><th>Nivel</th><th>Grupo</th><th>Profesor</th><th>Horarios</th><th>Sede</th><th>Programa</th><th></th></tr></thead>
+      <thead><tr><th>Período</th><th>Nivel</th><th>Grupo</th><th>Profesor</th><th>Horarios</th><th>Sede</th><th>Programa</th><th>Acciones</th></tr></thead>
       <tbody id="lista-clases"></tbody>
     </table>
 
@@ -300,19 +363,87 @@
     }
   }
 
+  let filtrosClasesTexto = "";
+  let filtrosClasesPrograma = "";
+  let filtrosClasesPeriodo = "";
+
   async function cargarClases() {
-    const cuerpo = document.getElementById("lista-clases");
-    cuerpo.innerHTML = "";
     clasesCache = {};
     const misSedesTabla = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
     const esCoordinacion = (rol === "coordinador" || rol === "secretaria");
     const snap = await getDocs(collection(db, "clases"));
     snap.forEach((d) => {
-      const cTemp = d.data();
-      if (esCoordinacion && !misSedesTabla.includes(cTemp.ciudadId)) return;
-      if (esCoordinacion && filtroSedeClases && cTemp.ciudadId !== filtroSedeClases) return;
       const c = d.data();
+      if (esCoordinacion && !misSedesTabla.includes(c.ciudadId)) return;
       clasesCache[d.id] = c;
+    });
+    poblarFiltrosClases();
+    pintarTablaClases();
+  }
+
+  function poblarFiltrosClases() {
+    const selectSede = document.getElementById("filtro-sede-clases-select");
+    const selectPrograma = document.getElementById("filtro-programa-clases-select");
+    const selectPeriodo = document.getElementById("filtro-periodo-clases-select");
+    const valorSedePrevio = selectSede.value;
+    const valorProgramaPrevio = selectPrograma.value;
+    const valorPeriodoPrevio = selectPeriodo.value;
+
+    const sedes = new Map();
+    const programas = new Set();
+    const periodos = new Set();
+    Object.values(clasesCache).forEach((c) => {
+      if (c.ciudadId) sedes.set(c.ciudadId, c.ciudadNombre || c.ciudadId);
+      if (c.programaNombre) programas.add(c.programaNombre);
+      periodos.add(`${c.anio}-${c.periodo}-${c.ciclo}`);
+    });
+
+    selectSede.innerHTML = '<option value="">Todas</option>';
+    [...sedes.entries()].sort((a, b) => a[1].localeCompare(b[1])).forEach(([id, nombre]) => {
+      const opt = document.createElement("option");
+      opt.value = id; opt.textContent = nombre;
+      selectSede.appendChild(opt);
+    });
+    if ([...selectSede.options].some((o) => o.value === valorSedePrevio)) selectSede.value = valorSedePrevio;
+
+    selectPrograma.innerHTML = '<option value="">Todos</option>';
+    [...programas].sort().forEach((nombre) => {
+      const opt = document.createElement("option");
+      opt.value = nombre; opt.textContent = nombre;
+      selectPrograma.appendChild(opt);
+    });
+    if ([...selectPrograma.options].some((o) => o.value === valorProgramaPrevio)) selectPrograma.value = valorProgramaPrevio;
+
+    selectPeriodo.innerHTML = '<option value="">Todos</option>';
+    [...periodos].sort().reverse().forEach((p) => {
+      const [anio, periodo, ciclo] = p.split("-");
+      const opt = document.createElement("option");
+      opt.value = p; opt.textContent = `${anio}-${periodo} / Ciclo ${ciclo}`;
+      selectPeriodo.appendChild(opt);
+    });
+    if ([...selectPeriodo.options].some((o) => o.value === valorPeriodoPrevio)) selectPeriodo.value = valorPeriodoPrevio;
+  }
+
+  function pintarTablaClases() {
+    const cuerpo = document.getElementById("lista-clases");
+    cuerpo.innerHTML = "";
+
+    const texto = filtrosClasesTexto.trim().toLowerCase();
+    let total = 0;
+
+    Object.entries(clasesCache).forEach(([id, c]) => {
+      if (filtroSedeClases && c.ciudadId !== filtroSedeClases) return;
+      if (filtrosClasesPrograma && c.programaNombre !== filtrosClasesPrograma) return;
+      if (filtrosClasesPeriodo && `${c.anio}-${c.periodo}-${c.ciclo}` !== filtrosClasesPeriodo) return;
+      if (texto) {
+        const coincide = (c.nivel || "").toLowerCase().includes(texto) ||
+          (c.grupo || "").toLowerCase().includes(texto) ||
+          (c.docenteNombre || "").toLowerCase().includes(texto);
+        if (!coincide) return;
+      }
+
+      total++;
+      const d = { id };
       const periodoTexto = `${c.anio || "—"}-${c.periodo || "—"} / Ciclo ${c.ciclo || "—"}`;
       const opcionesProfesor = listaProfesores.map((p) =>
         `<option value="${p.correo}" ${p.correo === c.docenteCorreo ? "selected" : ""}>${p.nombre}</option>`
@@ -336,14 +467,20 @@
         <td>${c.ciudadNombre || "—"}${c.grupoDistanciaId ? ' <span style="font-size:11px; color: var(--verde-marca); font-weight:600;">(distancia)</span>' : ""}</td>
         <td>${c.programaNombre || "—"}</td>
         <td>
-          <button class="btn-reasignar" data-id="${d.id}">Cambiar profesor</button>
-          <button class="btn-editar-nivel" data-id="${d.id}">Editar nivel</button>
-          <button class="btn-editar-grupo" data-id="${d.id}">Editar grupo</button>
-          <button class="btn-editar-horarios" data-id="${d.id}">Editar horarios</button>
-          <button class="btn-borrar-clase" data-id="${d.id}" style="color:var(--error);">Borrar clase</button>
-          <a href="notas.html?correo=${encodeURIComponent(c.docenteCorreo)}&grupo=${encodeURIComponent(c.grupoDistanciaId || d.id)}" style="font-size:12px; margin-left:6px;">Ver notas</a>
-          ·
-          <a href="asistencia.html?correo=${encodeURIComponent(c.docenteCorreo)}&grupo=${encodeURIComponent(c.grupoDistanciaId || d.id)}" style="font-size:12px;">Ver asistencia</a>
+          <details class="menu-acciones">
+            <summary>Acciones</summary>
+            <div class="menu-acciones-lista">
+              <button class="btn-reasignar" data-id="${d.id}">Cambiar profesor</button>
+              <button class="btn-editar-nivel" data-id="${d.id}">Editar nivel</button>
+              <button class="btn-editar-grupo" data-id="${d.id}">Editar grupo</button>
+              <button class="btn-editar-horarios" data-id="${d.id}">Editar horarios</button>
+              <hr>
+              <a href="notas.html?correo=${encodeURIComponent(c.docenteCorreo)}&grupo=${encodeURIComponent(c.grupoDistanciaId || d.id)}">Ver notas</a>
+              <a href="asistencia.html?correo=${encodeURIComponent(c.docenteCorreo)}&grupo=${encodeURIComponent(c.grupoDistanciaId || d.id)}">Ver asistencia</a>
+              <hr>
+              <button class="btn-borrar-clase accion-borrar" data-id="${d.id}">Borrar clase</button>
+            </div>
+          </details>
         </td>
       `;
       cuerpo.appendChild(fila);
@@ -502,6 +639,10 @@
         }
       }
     }));
+
+    const totalGeneral = Object.keys(clasesCache).length;
+    document.getElementById("contador-clases").textContent =
+      total === totalGeneral ? `${total} clase(s).` : `${total} de ${totalGeneral} clase(s) — filtro activo.`;
   }
 
   document.getElementById("boton-guardar").addEventListener("click", async () => {
@@ -610,28 +751,37 @@
     cargarClases();
   });
 
-  function agregarFiltroSedeClases() {
-    const misSedesTabla = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
-    if (!(rol === "coordinador" || rol === "secretaria") || misSedesTabla.length <= 1) return;
-    const contenedor = document.getElementById("contenedor-filtro-sede-clases");
-    contenedor.innerHTML = `
-      <label style="font-size:13px; font-weight:500; color:var(--tinta-suave); margin-right:8px;">Ver:</label>
-      <select id="filtro-sede-clases-select" style="font-size:13px; padding:6px 8px; border:1px solid var(--linea); border-radius:6px; margin-bottom:14px;">
-        <option value="">Todas mis sedes juntas</option>
-      </select>
-    `;
-    misSedesTabla.forEach((idSede) => {
-      const nombreSede = clasesCache && Object.values(clasesCache).find((c) => c.ciudadId === idSede)?.ciudadNombre || idSede;
-      const opt = document.createElement("option");
-      opt.value = idSede;
-      opt.textContent = `Solo ${nombreSede}`;
-      contenedor.querySelector("select").appendChild(opt);
+  document.getElementById("filtro-texto-clases").addEventListener("input", (e) => {
+    filtrosClasesTexto = e.target.value;
+    pintarTablaClases();
+  });
+  document.getElementById("filtro-sede-clases-select").addEventListener("change", (e) => {
+    filtroSedeClases = e.target.value;
+    pintarTablaClases();
+  });
+  document.getElementById("filtro-programa-clases-select").addEventListener("change", (e) => {
+    filtrosClasesPrograma = e.target.value;
+    pintarTablaClases();
+  });
+  document.getElementById("filtro-periodo-clases-select").addEventListener("change", (e) => {
+    filtrosClasesPeriodo = e.target.value;
+    pintarTablaClases();
+  });
+  document.getElementById("boton-limpiar-filtros-clases").addEventListener("click", () => {
+    filtrosClasesTexto = ""; filtroSedeClases = ""; filtrosClasesPrograma = ""; filtrosClasesPeriodo = "";
+    document.getElementById("filtro-texto-clases").value = "";
+    document.getElementById("filtro-sede-clases-select").value = "";
+    document.getElementById("filtro-programa-clases-select").value = "";
+    document.getElementById("filtro-periodo-clases-select").value = "";
+    pintarTablaClases();
+  });
+
+  // Cerrar cualquier menú de acciones abierto al abrir otro o al hacer clic afuera
+  document.addEventListener("click", (e) => {
+    document.querySelectorAll(".menu-acciones[open]").forEach((det) => {
+      if (!det.contains(e.target)) det.removeAttribute("open");
     });
-    contenedor.querySelector("select").addEventListener("change", (e) => {
-      filtroSedeClases = e.target.value;
-      cargarClases();
-    });
-  }
+  });
 
   cargarPeriodoAcademico();
   agregarFilaHorario();
@@ -643,7 +793,6 @@
   await Promise.all([cargarSedes(), cargarProfesores(), cargarProgramas()]);
   actualizarModoSede();
   await cargarClases();
-  agregarFiltroSedeClases();
 </script>
 </body>
 </html>
