@@ -116,6 +116,13 @@ service cloud.firestore {
       // (salvo Master, que siempre puede corregir cualquier cosa).
       allow update, delete: if esGestor() && (esMaster() || periodoEstaActivo(resource.data));
 
+      // El profesor puede poner la fecha real de inicio de SU clase (para
+      // que la asistencia empiece a contar desde ahí, no desde la fecha
+      // general del período) — nunca puede tocar otros campos de la clase.
+      allow update: if estaLogueado() && miRol() == 'profesor' &&
+        resource.data.docenteCorreo == miCorreo() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fechaInicioClase']);
+
       match /sesiones/{fecha} {
         allow read: if estaLogueado();
         allow write: if estaLogueado() && (
@@ -142,6 +149,13 @@ service cloud.firestore {
         (miRol() == 'profesor' && get(/databases/$(database)/documents/clases/$(resource.data.claseId)).data.docenteCorreo == miCorreo())
       );
       allow write: if esGestor();
+
+      // El profesor puede corregir/confirmar el correo de SUS estudiantes
+      // (para que los avisos de habilitación/inasistencia lleguen bien),
+      // pero no puede tocar ningún otro campo (nombre, cédula, clase, etc.).
+      allow update: if estaLogueado() && miRol() == 'profesor' &&
+        get(/databases/$(database)/documents/clases/$(resource.data.claseId)).data.docenteCorreo == miCorreo() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['correo']);
     }
 
     // Colección "logs": historial de auditoría, inmutable. Solo admin/master lo leen.

@@ -68,6 +68,7 @@
       <input type="file" id="cl-archivo-csv" accept=".csv">
       <br>
       <button class="boton-secundario" id="cl-boton-procesar" disabled>Procesar archivo</button>
+      <button class="boton-secundario" id="cl-boton-descargar-reporte" style="display:none;">Descargar reporte (CSV)</button>
       <div class="resultado" id="cl-resultado"></div>
     </div>
 
@@ -77,22 +78,24 @@
     <h2>Cargar estudiantes por CSV</h2>
 
     <div class="tarjeta">
-      <h3>1. Elige el período académico</h3>
-      <p>Todos los estudiantes de este archivo se matricularán en clases de este mismo período — así no hay que repetirlo en cada fila del CSV.</p>
+      <h3>1. Elige lo que van a compartir todos estos estudiantes</h3>
+      <p>Período y programa se aplican igual a todas las filas — así no hay que repetirlo en cada fila del CSV.</p>
+      <label style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin:10px 0 4px;">Período académico</label>
       <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; max-width: 420px;">
         <select id="anio"></select>
         <select id="periodo"><option value="1">1</option><option value="2">2</option></select>
         <select id="ciclo"></select>
       </div>
+      <label style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin:14px 0 4px;">Programa</label>
+      <select id="est-programa" style="max-width: 420px;"></select>
     </div>
 
     <div class="tarjeta">
       <h3>2. Descarga la plantilla</h3>
       <p>
-        Columnas requeridas, en este orden exacto: <code>nombre, apellido, cedula, correo, nivel, grupo, ciudad, programa</code><br><br>
-        <b>Columna "programa":</b> escribe el nombre exacto (ej. <code>Presencial Semestral</code>). Ayuda a que el estudiante
-        quede en la clase correcta cuando hay más de una clase con el mismo nivel+grupo+sede pero de programas distintos.<br><br>
-        <b>Importante:</b> el horario y el año/periodo/ciclo ya NO van en el CSV — se toman del período que elegiste arriba y del horario que ya configuraste en "Clases". La clase (nivel+grupo+sede+programa, en ese período) tiene que existir antes de subir el archivo.
+        Columnas requeridas, en este orden exacto: <code>nombre, apellido, cedula, correo, nivel, grupo, ciudad</code><br><br>
+        <b>Importante:</b> el horario, el año/periodo/ciclo y el programa ya NO van en el CSV — se toman de lo que elegiste arriba.
+        La clase (nivel+grupo+sede, para ese período y programa) tiene que existir antes de subir el archivo.
       </p>
       <button class="boton-secundario" id="boton-plantilla">Descargar plantilla de ejemplo (.csv)</button>
     </div>
@@ -103,6 +106,7 @@
       <input type="file" id="archivo-csv" accept=".csv">
       <div class="resultado" id="vista-previa"></div>
       <button class="boton-secundario" id="boton-procesar" disabled>Confirmar y procesar archivo</button>
+      <button class="boton-secundario" id="boton-descargar-reporte-est" style="display:none;">Descargar reporte (CSV)</button>
       <div class="resultado" id="resultado"></div>
     </div>
   </main>
@@ -163,12 +167,35 @@
     });
   }
 
+  // Convierte la lista de resultados (éxitos y errores) en un CSV descargable,
+  // para no tener que buscar "a ojo" cuáles de 600 filas fallaron.
+  function descargarReporteCSV(resultados, nombreArchivo) {
+    const filas = [["resultado", "detalle"]];
+    resultados.forEach((r) => filas.push([r.ok ? "Éxito" : "Error", r.texto]));
+    const csv = filas.map((fila) => fila.map((v) => `"${(v || "").toString().replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = nombreArchivo;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const DIAS_VALIDOS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
-  // Quita tildes y pasa a minúsculas, para que "Sabado", "sábado" y "SÁBADO"
-  // se reconozcan igual que "Sábado" al escribir el CSV.
+  // Quita tildes (á,é,í,ó,ú) y pasa a minúsculas, para que "Sabado", "sábado"
+  // y "SÁBADO" se reconozcan igual. OJO: la Ñ/ñ NO se toca — no es una letra
+  // con tilde, es una letra distinta, y convertirla en "n" sería un error
+  // (por eso no usamos aquí el truco típico de descomponer con NFD).
   function normalizarDia(texto) {
-    return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    return texto
+      .toLowerCase()
+      .replace(/[áàäâ]/g, "a")
+      .replace(/[éèëê]/g, "e")
+      .replace(/[íìïî]/g, "i")
+      .replace(/[óòöô]/g, "o")
+      .replace(/[úùüû]/g, "u");
   }
 
   // Convierte "Martes 18:00-20:00;Miércoles 18:00-19:00" en el arreglo
@@ -350,6 +377,10 @@ Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co,Martes-Jueves 18:00-20:00`;
       contenedor.appendChild(div);
     });
 
+    const botonReporteClases = document.getElementById("cl-boton-descargar-reporte");
+    botonReporteClases.style.display = "inline-block";
+    botonReporteClases.onclick = () => descargarReporteCSV(resultados, "reporte-carga-clases.csv");
+
     await registrarLog(usuario, rol, "Cargó clases por CSV", `${exitosos} exitosas, ${fallidos} con error`);
     botonProcesarClases.textContent = "Procesar archivo";
     botonProcesarClases.disabled = false;
@@ -363,10 +394,37 @@ Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co,Martes-Jueves 18:00-20:00`;
 
   // ============ CARGA MASIVA DE ESTUDIANTES ============
 
-  const PLANTILLA_CSV = `nombre,apellido,cedula,correo,nivel,grupo,ciudad,programa
-Juan,Pérez Gómez,1102345678,juan.perez@example.com,A1,A,Cartagena,Presencial Semestral
-María,Rodríguez Silva,1102345679,maria.rodriguez@example.com,A1,A,Cartagena,Presencial Semestral
-Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo,Distancia Semestral`;
+  const PLANTILLA_CSV = `nombre,apellido,cedula,correo,nivel,grupo,ciudad
+Juan,Pérez Gómez,1102345678,juan.perez@example.com,A1,A,Cartagena
+María,Rodríguez Silva,1102345679,maria.rodriguez@example.com,A1,A,Cartagena
+Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo`;
+
+  // Carga el desplegable de programas disponibles para el período elegido
+  // (mismo patrón que en "Cargar clases" más arriba en esta misma página).
+  async function cargarProgramasEstudiantes() {
+    const select = document.getElementById("est-programa");
+    select.innerHTML = "";
+    const anio = Number(document.getElementById("anio").value);
+    const periodo = Number(document.getElementById("periodo").value);
+    const ciclo = Number(document.getElementById("ciclo").value);
+
+    const snap = await getDocs(collection(db, "programas"));
+    const coincidentes = snap.docs.filter((d) => {
+      const p = d.data();
+      return p.anio === anio && p.periodo === periodo && p.ciclo === ciclo;
+    });
+
+    if (coincidentes.length === 0) {
+      select.innerHTML = "<option value=''>No hay programas para ese período — créalo primero</option>";
+      return;
+    }
+    coincidentes.forEach((d) => {
+      const opt = document.createElement("option");
+      opt.value = d.id;
+      opt.textContent = d.data().nombre;
+      select.appendChild(opt);
+    });
+  }
 
   function cargarSelectoresPeriodo() {
     const anioActual = new Date().getFullYear();
@@ -388,6 +446,11 @@ Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo,D
     }
   }
   cargarSelectoresPeriodo();
+  await cargarProgramasEstudiantes();
+  document.getElementById("anio").addEventListener("change", async () => { await cargarProgramasEstudiantes(); await pintarVistaPrevia(); });
+  document.getElementById("periodo").addEventListener("change", async () => { await cargarProgramasEstudiantes(); await pintarVistaPrevia(); });
+  document.getElementById("ciclo").addEventListener("change", async () => { await cargarProgramasEstudiantes(); await pintarVistaPrevia(); });
+  document.getElementById("est-programa").addEventListener("change", pintarVistaPrevia);
 
   document.getElementById("boton-plantilla").addEventListener("click", () => {
     const blob = new Blob([PLANTILLA_CSV], { type: "text/csv;charset=utf-8;" });
@@ -411,26 +474,24 @@ Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo,D
     const anio = Number(document.getElementById("anio").value);
     const periodo = Number(document.getElementById("periodo").value);
     const ciclo = Number(document.getElementById("ciclo").value);
+    const programaId = document.getElementById("est-programa").value;
     const snapClases = await getDocs(collection(db, "clases"));
     return snapClases.docs
       .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((c) => c.anio === anio && c.periodo === periodo && c.ciclo === ciclo);
+      .filter((c) => c.anio === anio && c.periodo === periodo && c.ciclo === ciclo && (!programaId || c.programaId === programaId));
   }
 
-  // Busca la clase de una fila. Si la fila trae "programa", exige que coincida
-  // también (para no confundir dos clases con el mismo nivel+grupo+sede pero
-  // de programas distintos). Si la fila no trae programa, solo exige nivel+grupo+sede.
+  // Busca la clase de una fila, dentro de las clases YA filtradas al
+  // programa elegido en el desplegable de arriba (ver obtenerClasesDelPeriodo).
   function buscarClaseParaFila(fila, clases) {
     const nivel = (fila.nivel || "").trim();
     const grupo = (fila.grupo || "").trim();
     const ciudad = (fila.ciudad || "").trim();
-    const programa = (fila.programa || "").trim();
 
     return clases.find((c) =>
       normalizar(c.nivel) === normalizar(nivel) &&
       normalizar(c.grupo) === normalizar(grupo) &&
-      normalizar(c.ciudadNombre) === normalizar(ciudad) &&
-      (!programa || normalizar(c.programaNombre) === normalizar(programa))
+      normalizar(c.ciudadNombre) === normalizar(ciudad)
     );
   }
 
@@ -440,7 +501,6 @@ Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo,D
     contenedor.innerHTML = `<p style="color:var(--tinta-suave); font-size:13px;">Verificando contra las clases existentes...</p>`;
 
     const clases = await obtenerClasesDelPeriodo();
-    let sinPrograma = false;
     let conError = 0;
 
     const tabla = document.createElement("table");
@@ -448,14 +508,12 @@ Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo,D
     tabla.innerHTML = `<thead><tr>
       <th style="text-align:left; padding:6px 8px; border-bottom:1px solid var(--linea);">Estudiante</th>
       <th style="text-align:left; padding:6px 8px; border-bottom:1px solid var(--linea);">Nivel/Grupo</th>
-      <th style="text-align:left; padding:6px 8px; border-bottom:1px solid var(--linea);">Programa (CSV)</th>
       <th style="text-align:left; padding:6px 8px; border-bottom:1px solid var(--linea);">Clase encontrada</th>
     </tr></thead><tbody></tbody>`;
     const tbody = tabla.querySelector("tbody");
 
     filasArchivo.forEach((fila) => {
       const clase = buscarClaseParaFila(fila, clases);
-      if (!fila.programa || !fila.programa.trim()) sinPrograma = true;
       if (!clase) conError++;
 
       const fondo = clase ? "" : "background: var(--error-fondo);";
@@ -468,7 +526,6 @@ Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo,D
       tr.innerHTML = `
         <td style="padding:6px 8px; border-bottom:1px solid var(--linea);">${fila.nombre || ""} ${fila.apellido || ""}</td>
         <td style="padding:6px 8px; border-bottom:1px solid var(--linea);">${fila.nivel || "—"} / ${fila.grupo || "—"} (${fila.ciudad || "—"})</td>
-        <td style="padding:6px 8px; border-bottom:1px solid var(--linea);">${fila.programa || "<em>(vacío)</em>"}</td>
         <td style="padding:6px 8px; border-bottom:1px solid var(--linea); color:${clase ? "#2E6E4E" : "var(--error)"};">${textoClase}</td>
       `;
       tbody.appendChild(tr);
@@ -479,18 +536,10 @@ Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo,D
     const resumen = document.createElement("p");
     resumen.style.cssText = "font-weight:600; margin-bottom: 4px;";
     resumen.textContent = conError > 0
-      ? `⚠ Revisa: ${conError} de ${filasArchivo.length} fila(s) no encontraron clase. Antes de procesar, confirma que el programa esté bien escrito.`
+      ? `⚠ Revisa: ${conError} de ${filasArchivo.length} fila(s) no encontraron clase. Confirma que el programa elegido arriba sea el correcto.`
       : `✓ Las ${filasArchivo.length} fila(s) encontraron su clase correctamente.`;
     resumen.style.color = conError > 0 ? "var(--error)" : "#2E6E4E";
     contenedor.appendChild(resumen);
-
-    if (sinPrograma) {
-      const aviso = document.createElement("p");
-      aviso.style.cssText = "font-size:12.5px; color:var(--oro); margin: 2px 0 8px;";
-      aviso.textContent = 'Nota: algunas filas no traen "programa" — si hay más de una clase con el mismo nivel+grupo+sede, puede matricular al estudiante en la que no es. Revisa la columna "Clase encontrada".';
-      contenedor.appendChild(aviso);
-    }
-
     contenedor.appendChild(tabla);
   }
 
@@ -509,6 +558,10 @@ Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo,D
   });
 
   botonProcesar.addEventListener("click", async () => {
+    if (!document.getElementById("est-programa").value) {
+      document.getElementById("resultado").innerHTML = `<p class="err">Falta elegir el programa.</p>`;
+      return;
+    }
     botonProcesar.disabled = true;
     botonProcesar.textContent = "Procesando...";
 
@@ -540,8 +593,7 @@ Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo,D
       const clase = buscarClaseParaFila(fila, clases);
 
       if (!clase) {
-        const conPrograma = fila.programa ? ` y programa "${fila.programa}"` : "";
-        resultados.push({ ok: false, texto: `${nombre} ${apellido} (${cedula}): no existe una clase ${anio}-${periodo} ciclo ${ciclo} con nivel ${nivel}, grupo ${grupo}, sede ${ciudad}${conPrograma}. Créala primero o revisa el nombre del programa.` });
+        resultados.push({ ok: false, texto: `${nombre} ${apellido} (${cedula}): no existe una clase ${anio}-${periodo} ciclo ${ciclo} con nivel ${nivel}, grupo ${grupo}, sede ${ciudad} para el programa elegido. Créala primero.` });
         fallidos++;
         continue;
       }
@@ -570,6 +622,10 @@ Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo,D
       div.textContent = (r.ok ? "✓ " : "✕ ") + r.texto;
       contenedor.appendChild(div);
     });
+
+    const botonReporteEst = document.getElementById("boton-descargar-reporte-est");
+    botonReporteEst.style.display = "inline-block";
+    botonReporteEst.onclick = () => descargarReporteCSV(resultados, "reporte-carga-estudiantes.csv");
 
     await registrarLog(usuario, rol, "Cargó estudiantes por CSV", `${exitosos} exitosos, ${fallidos} con error`);
 

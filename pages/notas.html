@@ -71,7 +71,7 @@
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { db } from "../js/firebase-config.js?v=3";
-  import { collection, getDocs, getDoc, doc, setDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { collection, getDocs, getDoc, doc, setDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
   const { usuario, rol, perfil } = await requireAuth(["profesor", "master", "admin", "coordinador", "secretaria"]);
 
@@ -392,7 +392,10 @@
     tabla.className = "tabla-notas";
     const verHistorial = (rol === "master" || rol === "admin");
 
+    const esProfesorPropio = (rol === "profesor");
+
     let theadHtml = `<tr><th style="text-align:left;">No.</th><th style="text-align:left;">ID</th><th style="text-align:left;">Estudiante</th>`;
+    if (esProfesorPropio) theadHtml += `<th style="text-align:left;">Correo</th>`;
     programaActual.cortes.forEach((c) => { theadHtml += `<th>${c.nombre} (${c.peso}%)</th>`; });
     theadHtml += `<th class="col-final">Nota final</th>`;
     if (verHistorial) theadHtml += `<th>Historial</th>`;
@@ -402,6 +405,9 @@
     const tbody = tabla.querySelector("tbody");
     estudiantesActuales.forEach((est, idx) => {
       let celdas = `<td>${idx + 1}</td><td>${est.cedula}</td><td class="nombre-estudiante">${est.apellido} ${est.nombre}</td>`;
+      if (esProfesorPropio) {
+        celdas += `<td><input type="email" class="input-correo-estudiante" data-doc-id="${est.id}" value="${est.correo || ""}" placeholder="correo@..." style="width:170px; font-size:12.5px; padding:5px;"></td>`;
+      }
       programaActual.cortes.forEach((c, i) => {
         celdas += `<td>${formatear(calcularPromedioCorte(est.cedula, i))}</td>`;
       });
@@ -416,6 +422,30 @@
 
     cuerpo.innerHTML = "";
     cuerpo.appendChild(tabla);
+
+    if (esProfesorPropio) {
+      const botonGuardarCorreos = document.createElement("button");
+      botonGuardarCorreos.className = "boton-primario";
+      botonGuardarCorreos.textContent = "Guardar correos";
+      botonGuardarCorreos.style.marginTop = "14px";
+      botonGuardarCorreos.addEventListener("click", async () => {
+        const aviso = document.createElement("p");
+        aviso.className = "aviso";
+        for (const input of tabla.querySelectorAll(".input-correo-estudiante")) {
+          const nuevoCorreo = input.value.trim();
+          try {
+            await updateDoc(doc(db, "estudiantes", input.dataset.docId), { correo: nuevoCorreo });
+          } catch (error) {
+            alert(`No se pudo guardar el correo de una fila: ${error.message}`);
+          }
+        }
+        await registrarLog(usuario, rol, "Confirmó/corrigió correos de estudiantes", `${estudiantesActuales.length} estudiante(s)`);
+        aviso.style.color = "#2E6E4E";
+        aviso.textContent = "Correos guardados.";
+        cuerpo.appendChild(aviso);
+      });
+      cuerpo.appendChild(botonGuardarCorreos);
+    }
 
     if (verHistorial) {
       tabla.querySelectorAll(".btn-ver-historial").forEach((b) => b.addEventListener("click", async () => {
