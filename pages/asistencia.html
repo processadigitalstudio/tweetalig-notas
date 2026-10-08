@@ -80,7 +80,7 @@
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { db } from "../js/firebase-config.js?v=3";
-  import { collection, getDocs, getDoc, doc, setDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { collection, getDocs, getDoc, doc, setDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
   import { badgeReporte, separarMovidos, montarPanelProfesor } from "../js/matricula.js?v=1";
 
   const { usuario, rol, perfil } = await requireAuth(["profesor", "master", "admin", "coordinador", "secretaria"]);
@@ -103,7 +103,8 @@
         edicionDesbloqueada = true;
         document.getElementById("estado-candado").textContent = "🔓 Edición desbloqueada — los cambios que hagas se guardan igual que si fueran del profesor.";
         document.getElementById("boton-desbloquear").style.display = "none";
-        pintarDia();
+        if (document.getElementById("cuerpo-dia") && fechaActivaTexto) pintarDia();
+        else if (grupoActual) cargarCalendario(grupoActual.key);
       } else {
         alert("Contraseña incorrecta.");
       }
@@ -239,19 +240,28 @@
         return;
       }
       const per = snapPeriodo.data();
-      const inicio = new Date(per.fechaInicio + "T00:00:00");
+      const inicioPeriodo = new Date(per.fechaInicio + "T00:00:00");
       const fin = new Date(per.fechaFin + "T00:00:00");
+
+      // Cada clase empieza en su propia fecha (la fija el profesor o coordinación).
+      // Mientras no exista, NO se muestra calendario: así nunca salen fechas de
+      // antes de que la clase realmente empezara.
+      const fechaInicioClase = primera.fechaInicioClase || null;
+      const inicioClase = fechaInicioClase ? new Date(fechaInicioClase + "T00:00:00") : null;
+      const inicio = inicioClase && inicioClase > inicioPeriodo ? inicioClase : inicioPeriodo;
 
       const bloqueMin = grupoActual.esDistancia ? 60 : 45;
       const horarios = primera.horarios || [];
 
       fechasSesion = [];
-      for (let d = new Date(inicio); d <= fin; d.setDate(d.getDate() + 1)) {
-        const horario = horarios.find((h) => DIAS_SEMANA[h.dia] === d.getDay());
-        if (!horario) continue;
-        const duracion = minutosEntre(horario.horaInicio, horario.horaFin);
-        const numBloques = Math.max(1, Math.round(duracion / bloqueMin));
-        fechasSesion.push({ fecha: new Date(d), horario, numBloques, bloqueMin });
+      if (fechaInicioClase) {
+        for (let d = new Date(inicio); d <= fin; d.setDate(d.getDate() + 1)) {
+          const horario = horarios.find((h) => DIAS_SEMANA[h.dia] === d.getDay());
+          if (!horario) continue;
+          const duracion = minutosEntre(horario.horaInicio, horario.horaFin);
+          const numBloques = Math.max(1, Math.round(duracion / bloqueMin));
+          fechasSesion.push({ fecha: new Date(d), horario, numBloques, bloqueMin });
+        }
       }
 
       const snapSesiones = await getDocs(collection(db, "clases", grupoActual.claseAncla, "sesiones"));
@@ -283,20 +293,68 @@
         panel.innerHTML = "";
       }
 
-      pintarFechas();
-      pintarResumenAsistencia();
+      if (!fechaInicioClase) {
+        pintarSinFechaInicio();
+      } else {
+        pintarFechas();
+        pintarResumenAsistencia();
+      }
     } catch (error) {
       console.error("Error cargando asistencia:", error);
       contenedor.innerHTML = `<p style="color:var(--error);">No se pudo cargar (${error.code || error.message}).</p>`;
     }
   }
 
+  // Control "Esta clase empezó el: [fecha]". Lo pueden usar el profesor, coordinación
+  // y Master (Admin, una vez desbloquea la edición).
+  function crearControlFechaInicio(obligatorio) {
+    const ancla = grupoActual.clases[0];
+    const caja = document.createElement("div");
+    caja.style.cssText = "display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:16px; padding:10px 14px; border:1px solid var(--linea); border-radius:10px; background:var(--superficie); max-width:760px;";
+    caja.innerHTML = `
+      <label style="font-size:13.5px; font-weight:600;">${obligatorio ? "¿Cuándo empezó esta clase?" : "Esta clase empezó el:"}</label>
+      <input type="date" id="input-fecha-inicio-clase" value="${ancla.fechaInicioClase || ""}" ${edicionDesbloqueada ? "" : "disabled"} style="font-size:13px; padding:7px 9px; border:1px solid var(--linea); border-radius:6px;">
+      <button type="button" class="boton-secundario" id="boton-fecha-inicio-clase" style="${edicionDesbloqueada ? "" : "display:none;"}">${obligatorio ? "Guardar y ver calendario" : "Cambiar fecha"}</button>
+      <span id="aviso-fecha-inicio" style="font-size:12.5px;"></span>`;
+    caja.querySelector("#boton-fecha-inicio-clase").addEventListener("click", async () => {
+      const valor = caja.querySelector("#input-fecha-inicio-clase").value;
+      const aviso = caja.querySelector("#aviso-fecha-inicio");
+      if (!valor) { aviso.style.color = "var(--error)"; aviso.textContent = "Elige una fecha."; return; }
+      try {
+        await updateDoc(doc(db, "clases", ancla.id), { fechaInicioClase: valor });
+        ancla.fechaInicioClase = valor;
+        await registrarLog(usuario, rol, "Fijó fecha de inicio de clase", `${grupoActual.etiqueta} → ${valor}`);
+        fechaActivaTexto = null;
+        await cargarCalendario(grupoActual.key);
+      } catch (error) {
+        aviso.style.color = "var(--error)";
+        aviso.textContent = error.code === "permission-denied"
+          ? "No se pudo guardar: el período de esta clase está cerrado o no tienes permiso."
+          : `No se pudo guardar (${error.code || error.message}).`;
+      }
+    });
+    return caja;
+  }
+
+  function pintarSinFechaInicio() {
+    const contenedor = document.getElementById("contenido-asistencia");
+    contenedor.innerHTML = "";
+    const p = document.createElement("p");
+    p.style.cssText = "color:var(--tinta-suave); max-width:620px; font-size:13.5px;";
+    p.textContent = edicionDesbloqueada
+      ? "Esta clase todavía no tiene fecha de inicio. Indícala para que el calendario de asistencia empiece a contar desde ese día."
+      : "Esta clase todavía no tiene fecha de inicio. Pídele al profesor o a coordinación que la indique.";
+    contenedor.appendChild(p);
+    contenedor.appendChild(crearControlFechaInicio(true));
+  }
+
   function pintarFechas() {
     const contenedor = document.getElementById("contenido-asistencia");
     contenedor.innerHTML = "";
+    contenedor.appendChild(crearControlFechaInicio(false));
 
     if (fechasSesion.length === 0) {
-      contenedor.innerHTML = "<p style='color:var(--tinta-suave);'>No hay sesiones calculadas — revisa que la clase tenga horarios y el período tenga fechas.</p>";
+      contenedor.insertAdjacentHTML("beforeend", "<p style='color:var(--tinta-suave);'>No hay sesiones calculadas — revisa que la clase tenga horarios y que la fecha de inicio caiga antes del fin del período.</p>");
       return;
     }
 
@@ -449,6 +507,7 @@
 
   function pintarResumenAsistencia() {
     const cuerpo = document.getElementById("cuerpo-dia");
+    if (!cuerpo) return;
     const horasTotales = {};
     estudiantesActuales.forEach((est, idx) => { horasTotales[est.cedula] = 0; });
 
