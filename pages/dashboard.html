@@ -57,6 +57,25 @@
   if (["master", "admin", "coordinador", "secretaria"].includes(rol)) {
     const contenedor = document.getElementById("contenedor-periodos");
 
+    // Aviso de reportes de profesores pendientes (no bloquea el resto del panel).
+    try {
+      const sedesAviso = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
+      const esCoord = (rol === "coordinador" || rol === "secretaria");
+      if (!esCoord || sedesAviso.length > 0) {
+        const qRep = esCoord
+          ? query(collection(db, "reportes_estudiantes"), where("ciudadId", "in", sedesAviso), where("estado", "==", "pendiente"))
+          : query(collection(db, "reportes_estudiantes"), where("estado", "==", "pendiente"));
+        const snapRep = await getDocs(qRep);
+        if (!snapRep.empty) {
+          const aviso = document.createElement("a");
+          aviso.href = "reportes.html";
+          aviso.style.cssText = "display:block; max-width:640px; margin:18px 0 6px; padding:12px 16px; border-radius:10px; background:#fbf0c9; border:1px solid #e6c14f; color:#5c4700; text-decoration:none; font-size:14px; font-weight:500;";
+          aviso.textContent = `🔔 Tienes ${snapRep.size} reporte(s) de profesores pendiente(s). Haz clic para revisarlos.`;
+          contenedor.before(aviso);
+        }
+      }
+    } catch (e) { console.warn("No se pudieron leer los reportes pendientes:", e); }
+
     const snapPeriodos = await getDocs(query(collection(db, "periodos"), where("activo", "==", true)));
 
     if (snapPeriodos.empty) {

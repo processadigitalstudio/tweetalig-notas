@@ -65,6 +65,7 @@
     </div>
 
     <div id="contenido-notas"></div>
+    <div id="panel-estudiantes"></div>
   </main>
 </div>
 
@@ -72,6 +73,7 @@
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, getDoc, doc, setDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { badgeReporte, separarMovidos, montarPanelProfesor } from "../js/matricula.js?v=1";
 
   const { usuario, rol, perfil } = await requireAuth(["profesor", "master", "admin", "coordinador", "secretaria"]);
 
@@ -149,6 +151,7 @@
 
   async function cargarGrupos() {
     if (!correoActivo) {
+      document.getElementById("panel-estudiantes").innerHTML = "";
       document.getElementById("selector-clase").innerHTML = "<option value=''>No hay profesores en tu sede</option>";
       document.getElementById("contenido-notas").innerHTML = "<p style='color:var(--tinta-suave);'>No hay profesores registrados en tu sede todavía.</p>";
       return;
@@ -179,6 +182,7 @@
     if (gruposClase.length === 0) {
       select.innerHTML = "<option value=''>No tienes clases asignadas</option>";
       document.getElementById("contenido-notas").innerHTML = "";
+      document.getElementById("panel-estudiantes").innerHTML = "";
       return;
     }
     gruposClase.forEach((g) => {
@@ -200,6 +204,7 @@
 
   let corteActivoIndex = 0;
   let estudiantesActuales = [];
+  let estudiantesMovidos = [];
   let programaActual = null;
   let notasGuardadas = {};
 
@@ -228,7 +233,24 @@
         snap.forEach((d) => estudiantes.push({ id: d.id, ...d.data() }));
       }
       estudiantes.sort((a, b) => (a.apellido || "").localeCompare(b.apellido || ""));
-      estudiantesActuales = estudiantes;
+      const separados = separarMovidos(estudiantes);
+      estudiantesActuales = separados.activos;
+      estudiantesMovidos = separados.movidos;
+      estudiantes = estudiantesActuales;
+
+      // Panel del profesor (añadir por cédula / reportar). Se monta antes de
+      // salir por "no hay estudiantes" para que pueda añadir al primero.
+      const panel = document.getElementById("panel-estudiantes");
+      if (rol === "profesor") {
+        montarPanelProfesor(panel, {
+          grupo, usuario, perfil,
+          getEstudiantes: () => estudiantesActuales,
+          getMovidos: () => estudiantesMovidos,
+          alCambiar: () => cargarPlanilla(claveGrupo)
+        });
+      } else {
+        panel.innerHTML = "";
+      }
 
       if (estudiantes.length === 0) {
         contenedor.innerHTML = "<p style='color:var(--tinta-suave);'>Todavía no hay estudiantes matriculados en esta clase.</p>";
@@ -236,7 +258,7 @@
       }
 
       notasGuardadas = {};
-      for (const est of estudiantes) {
+      for (const est of [...estudiantes, ...estudiantesMovidos]) {
         const idNota = `${est.claseId}_${est.cedula}`;
         const snapNota = await getDoc(doc(db, "notas", idNota));
         notasGuardadas[est.cedula] = snapNota.exists() ? snapNota.data().valores || {} : {};
@@ -326,7 +348,7 @@
     const tbody = tabla.querySelector("tbody");
     estudiantesActuales.forEach((est, idx) => {
       const fila = document.createElement("tr");
-      let celdas = `<td>${idx + 1}</td><td>${est.cedula}</td><td class="nombre-estudiante">${est.apellido} ${est.nombre}</td>`;
+      let celdas = `<td>${idx + 1}</td><td>${est.cedula}</td><td class="nombre-estudiante">${est.apellido} ${est.nombre}${badgeReporte(est)}</td>`;
       corte.notas.forEach((n, ni) => {
         const clave = `c${corteActivoIndex}n${ni}`;
         const valorActual = (notasGuardadas[est.cedula] || {})[clave] ?? "";
@@ -404,7 +426,7 @@
 
     const tbody = tabla.querySelector("tbody");
     estudiantesActuales.forEach((est, idx) => {
-      let celdas = `<td>${idx + 1}</td><td>${est.cedula}</td><td class="nombre-estudiante">${est.apellido} ${est.nombre}</td>`;
+      let celdas = `<td>${idx + 1}</td><td>${est.cedula}</td><td class="nombre-estudiante">${est.apellido} ${est.nombre}${badgeReporte(est)}</td>`;
       if (esProfesorPropio) {
         celdas += `<td><input type="email" class="input-correo-estudiante" data-doc-id="${est.id}" value="${est.correo || ""}" placeholder="correo@..." style="width:170px; font-size:12.5px; padding:5px;"></td>`;
       }
@@ -416,6 +438,21 @@
         celdas += `<td><button type="button" class="boton-secundario btn-ver-historial" data-cedula="${est.cedula}" data-clase="${est.claseId}">Ver</button></td>`;
       }
       const fila = document.createElement("tr");
+      fila.innerHTML = celdas;
+      tbody.appendChild(fila);
+    });
+
+    // Estudiantes movidos a otra clase: se muestran como historial (solo lectura).
+    estudiantesMovidos.forEach((est) => {
+      let celdas = `<td>—</td><td>${est.cedula}</td><td class="nombre-estudiante">${est.apellido} ${est.nombre} <span style="font-size:11px; color:var(--tinta-suave);">(movido a ${est.movidoATexto || "otra clase"})</span></td>`;
+      if (esProfesorPropio) celdas += `<td></td>`;
+      programaActual.cortes.forEach((c, i) => {
+        celdas += `<td>${formatear(calcularPromedioCorte(est.cedula, i))}</td>`;
+      });
+      celdas += `<td class="col-final">${formatear(calcularNotaFinal(est.cedula))}</td>`;
+      if (verHistorial) celdas += `<td></td>`;
+      const fila = document.createElement("tr");
+      fila.style.cssText = "opacity:0.55; background:var(--superficie);";
       fila.innerHTML = celdas;
       tbody.appendChild(fila);
     });

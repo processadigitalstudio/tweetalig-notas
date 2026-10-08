@@ -73,6 +73,7 @@
     </div>
 
     <div id="contenido-asistencia"></div>
+    <div id="panel-estudiantes"></div>
   </main>
 </div>
 
@@ -80,6 +81,7 @@
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, getDoc, doc, setDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { badgeReporte, separarMovidos, montarPanelProfesor } from "../js/matricula.js?v=1";
 
   const { usuario, rol, perfil } = await requireAuth(["profesor", "master", "admin", "coordinador", "secretaria"]);
 
@@ -153,6 +155,7 @@
 
   async function cargarGrupos() {
     if (!correoActivo) {
+      document.getElementById("panel-estudiantes").innerHTML = "";
       document.getElementById("selector-clase").innerHTML = "<option value=''>No hay profesores en tu sede</option>";
       document.getElementById("contenido-asistencia").innerHTML = "<p style='color:var(--tinta-suave);'>No hay profesores registrados en tu sede todavía.</p>";
       return;
@@ -186,6 +189,7 @@
     if (gruposClase.length === 0) {
       select.innerHTML = "<option value=''>No tienes clases asignadas</option>";
       document.getElementById("contenido-asistencia").innerHTML = "";
+      document.getElementById("panel-estudiantes").innerHTML = "";
       return;
     }
     gruposClase.forEach((g) => {
@@ -208,6 +212,7 @@
   let fechasSesion = []; // [{fecha: Date, horario: {...}, bloqueMin, numBloques}]
   let fechaActivaTexto = null;
   let estudiantesActuales = [];
+  let estudiantesMovidos = [];
   let sesionesGuardadas = {};
   let grupoActual = null;
 
@@ -262,7 +267,21 @@
         snap.forEach((d) => estudiantes.push({ id: d.id, ...d.data() }));
       }
       estudiantes.sort((a, b) => (a.apellido || "").localeCompare(b.apellido || ""));
-      estudiantesActuales = estudiantes;
+      const separados = separarMovidos(estudiantes);
+      estudiantesActuales = separados.activos;
+      estudiantesMovidos = separados.movidos;
+
+      const panel = document.getElementById("panel-estudiantes");
+      if (rol === "profesor") {
+        montarPanelProfesor(panel, {
+          grupo: grupoActual, usuario, perfil,
+          getEstudiantes: () => estudiantesActuales,
+          getMovidos: () => estudiantesMovidos,
+          alCambiar: () => cargarCalendario(claveGrupo)
+        });
+      } else {
+        panel.innerHTML = "";
+      }
 
       pintarFechas();
       pintarResumenAsistencia();
@@ -361,7 +380,7 @@
 
       estudiantesActuales.forEach((est, idx) => {
         const marcados = guardada.ausencias?.[est.cedula] || [];
-        let celdas = `<td>${idx + 1}</td><td>${est.cedula}</td><td>${est.apellido} ${est.nombre}</td>`;
+        let celdas = `<td>${idx + 1}</td><td>${est.cedula}</td><td>${est.apellido} ${est.nombre}${badgeReporte(est)}</td>`;
         for (let b = 0; b < numBloques; b++) {
           celdas += `<td class="celda-bloque"><input type="checkbox" class="chk-bloque" data-cedula="${est.cedula}" data-bloque="${b}" ${marcados[b] ? "checked" : ""} ${edicionDesbloqueada ? "" : "disabled"}></td>`;
         }
@@ -452,7 +471,16 @@
       const horas = horasTotales[est.cedula] || 0;
       const alerta = horas >= 2 ? ` style="color:var(--error); font-weight:600;"` : "";
       const fila = document.createElement("tr");
-      fila.innerHTML = `<td>${idx + 1}</td><td>${est.cedula}</td><td>${est.apellido} ${est.nombre}</td><td${alerta}>${horas.toFixed(2)}${horas >= 2 ? " ⚠" : ""}</td>`;
+      fila.innerHTML = `<td>${idx + 1}</td><td>${est.cedula}</td><td>${est.apellido} ${est.nombre}${badgeReporte(est)}</td><td${alerta}>${horas.toFixed(2)}${horas >= 2 ? " ⚠" : ""}</td>`;
+      tbody.appendChild(fila);
+    });
+
+    // Estudiantes movidos a otra clase: historial de solo lectura.
+    estudiantesMovidos.forEach((est) => {
+      const horas = horasTotales[est.cedula] || 0;
+      const fila = document.createElement("tr");
+      fila.style.cssText = "opacity:0.55;";
+      fila.innerHTML = `<td>—</td><td>${est.cedula}</td><td>${est.apellido} ${est.nombre} <span style="font-size:11px;">(movido a ${est.movidoATexto || "otra clase"})</span></td><td>${horas.toFixed(2)}</td>`;
       tbody.appendChild(fila);
     });
 

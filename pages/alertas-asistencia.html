@@ -269,7 +269,7 @@ Tweetalig Centro de Idiomas`;
         ]);
 
         const estudiantes = [];
-        resultadosEst.forEach((snap) => snap.forEach((d) => estudiantes.push(d.data())));
+        resultadosEst.forEach((snap) => snap.forEach((d) => { if (d.data().estado !== "movido") estudiantes.push(d.data()); }));
         if (estudiantes.length === 0) return;
 
         const horasTotales = {};

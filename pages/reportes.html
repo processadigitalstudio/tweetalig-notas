@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tweetalig — Reportes de profesores</title>
+<link rel="stylesheet" href="../css/styles.css?v=2">
+<style>
+  .filtros { display: flex; gap: 14px; margin-bottom: 18px; flex-wrap: wrap; align-items: center; font-size: 13px; color: var(--tinta-suave); }
+  .tarjeta-reporte { max-width: 900px; border: 1px solid var(--linea); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; background: var(--superficie); }
+  .tarjeta-reporte h3 { margin: 0 0 4px; font-size: 15px; color: var(--azul-profundo); }
+  .tarjeta-reporte .meta { font-size: 12.5px; color: var(--tinta-suave); margin: 0 0 8px; }
+  .tarjeta-reporte .motivo { font-size: 13.5px; margin: 0 0 10px; }
+  .etiqueta-tipo { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-right: 6px; }
+  .tipo-no_pertenece { background: #fbf0c9; color: #7a5d00; border: 1px solid #e6c14f; }
+  .tipo-agregado_por_profesor { background: #e3f4ee; color: #2d6a58; border: 1px solid #5db69c; }
+  .acciones { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .acciones button, .zona-mover button {
+    font-family: var(--fuente-cuerpo); font-size: 12.5px; font-weight: 500; padding: 7px 12px;
+    border-radius: 6px; border: 1px solid var(--azul-profundo); background: none; color: var(--azul-profundo); cursor: pointer;
+  }
+  .acciones button.principal, .zona-mover button.principal { background: var(--verde-marca); border-color: var(--verde-marca); color: #fff; }
+  .zona-mover { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--linea); font-size: 13px; }
+  .zona-mover select { font-family: var(--fuente-cuerpo); font-size: 13px; padding: 6px 8px; border: 1px solid var(--linea); border-radius: 6px; max-width: 100%; }
+  .resuelto-info { font-size: 12.5px; color: #2E6E4E; margin: 0; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <nav class="app-nav">
+    <div class="logo-nav-wrap"><img src="../assets/logo-tweetalig.png" alt="Tweetalig"></div>
+    <h1>Portal de notas</h1>
+    <div id="menu-rol"></div>
+    <a href="#" id="link-salir">Cerrar sesión</a>
+  </nav>
+  <main class="app-contenido">
+    <span class="etiqueta-rol">Reportes</span>
+    <h2>Reportes de profesores</h2>
+    <p style="color: var(--tinta-suave); max-width: 640px; margin-top: -8px; font-size: 13.5px;">
+      Aquí llegan los avisos de los profesores: estudiantes que aparecen en su planilla pero <b>no son de su clase</b>,
+      y estudiantes que el profesor <b>añadió</b> a su clase. Tú decides qué hacer.
+    </p>
+
+    <div class="filtros">
+      <label><input type="radio" name="estado" value="pendiente" checked> Pendientes</label>
+      <label><input type="radio" name="estado" value="resuelto"> Resueltos</label>
+      <span id="contador"></span>
+    </div>
+
+    <div id="lista-reportes"></div>
+  </main>
+</div>
+
+<script type="module">
+  import { requireAuth } from "../js/auth.js?v=3";
+  import { db } from "../js/firebase-config.js?v=3";
+  import { collection, getDocs, getDoc, doc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { cargarDestinos, etiquetaDestino, moverEstudiante, resolverReporte } from "../js/matricula.js?v=1";
+
+  const { usuario, rol, perfil } = await requireAuth(["master", "admin", "coordinador", "secretaria"]);
+
+  const esCoordinacion = (rol === "coordinador" || rol === "secretaria");
+  const misSedes = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
+
+  function escapar(t) {
+    return String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  async function cargar() {
+    const lista = document.getElementById("lista-reportes");
+    const estado = document.querySelector('input[name="estado"]:checked').value;
+    lista.innerHTML = "<p style='color:var(--tinta-suave);'>Cargando...</p>";
+
+    try {
+      let q;
+      if (esCoordinacion) {
+        if (misSedes.length === 0) {
+          lista.innerHTML = "<p style='color:var(--tinta-suave);'>Tu cuenta no tiene sedes asignadas.</p>";
+          return;
+        }
+        q = query(collection(db, "reportes_estudiantes"), where("ciudadId", "in", misSedes), where("estado", "==", estado));
+      } else {
+        q = query(collection(db, "reportes_estudiantes"), where("estado", "==", estado));
+      }
+      const snap = await getDocs(q);
+      const reportes = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      reportes.sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""));
+
+      document.getElementById("contador").textContent = `${reportes.length} reporte(s) ${estado === "pendiente" ? "pendiente(s)" : "resuelto(s)"}`;
+
+      lista.innerHTML = "";
+      if (reportes.length === 0) {
+        lista.innerHTML = `<p style='color:var(--tinta-suave);'>${estado === "pendiente" ? "No hay reportes pendientes. 🎉" : "Todavía no hay reportes resueltos."}</p>`;
+        return;
+      }
+      reportes.forEach((r) => lista.appendChild(tarjeta(r)));
+    } catch (error) {
+      console.error(error);
+      lista.innerHTML = `<p style="color:var(--error);">No se pudieron cargar los reportes (${error.code || error.message}).</p>`;
+    }
+  }
+
+  function tarjeta(r) {
+    const div = document.createElement("div");
+    div.className = "tarjeta-reporte";
+    const esAgregado = r.tipo === "agregado_por_profesor";
+    const etiqueta = esAgregado ? "Añadido por el profesor" : "No es de su clase";
+    const fecha = r.fecha ? new Date(r.fecha).toLocaleString("es-CO") : "";
+
+    let cuerpo = `
+      <h3><span class="etiqueta-tipo tipo-${r.tipo}">${etiqueta}</span>${escapar(r.estudianteNombre)} · ${escapar(r.cedula)}</h3>
+      <p class="meta">Clase: ${escapar(r.claseTexto)} · Sede ${escapar(r.ciudadNombre)} · Profesor(a): ${escapar(r.profesorNombre)} · ${fecha}</p>`;
+    if (!esAgregado) {
+      cuerpo += `<p class="motivo">${r.motivo ? `Motivo: “${escapar(r.motivo)}”` : "<i>El profesor no escribió motivo.</i>"}</p>`;
+    } else {
+      cuerpo += `<p class="motivo">El profesor lo añadió a su clase buscándolo por cédula. Ya aparece en su planilla.</p>`;
+    }
+
+    if (r.estado === "resuelto") {
+      const texto = r.resolucion === "movido" ? `Movido a ${escapar(r.destinoTexto || "otra clase")}`
+        : r.resolucion === "enterada" ? "Marcado como enterado"
+        : "Se dejó en su clase";
+      div.innerHTML = cuerpo + `<p class="resuelto-info">✔ ${texto} · por ${escapar(r.resueltoPor || "")} · ${r.resueltoEn ? new Date(r.resueltoEn).toLocaleString("es-CO") : ""}</p>`;
+      return div;
+    }
+
+    div.innerHTML = cuerpo + `
+      <div class="acciones">
+        <button type="button" class="principal btn-mover">Mover a otra clase…</button>
+        <button type="button" class="btn-cerrar">${esAgregado ? "Enterada, está bien" : "Dejar en su clase"}</button>
+      </div>
+      <div class="zona-mover" style="display:none;"></div>
+      <p class="msg" style="font-size:12.5px; margin:8px 0 0; min-height:16px;"></p>`;
+
+    const msg = div.querySelector(".msg");
+    function error(texto) { msg.style.color = "var(--error)"; msg.textContent = texto; }
+
+    div.querySelector(".btn-cerrar").addEventListener("click", async (ev) => {
+      ev.target.disabled = true;
+      try {
+        await resolverReporte({ reporte: r, resolucion: esAgregado ? "enterada" : "dejar", usuario, rol });
+        await cargar();
+      } catch (e) {
+        ev.target.disabled = false;
+        error(`No se pudo cerrar el reporte (${e.code || e.message}).`);
+      }
+    });
+
+    div.querySelector(".btn-mover").addEventListener("click", async () => {
+      const zona = div.querySelector(".zona-mover");
+      if (zona.style.display === "block") { zona.style.display = "none"; return; }
+      zona.style.display = "block";
+      zona.textContent = "Buscando clases disponibles...";
+      try {
+        const snapEst = await getDoc(doc(db, "estudiantes", r.estudianteDocId));
+        if (!snapEst.exists() || snapEst.data().estado === "movido") {
+          zona.innerHTML = "Esta matrícula ya no existe o ya fue movida. Puedes cerrar el reporte.";
+          return;
+        }
+        const est = { id: snapEst.id, ...snapEst.data() };
+        const destinos = await cargarDestinos(est, rol, perfil);
+        if (destinos.length === 0) {
+          zona.innerHTML = `No hay otras clases del mismo programa y período${esCoordinacion ? " en tus sedes" : ""} a las que moverlo.`;
+          return;
+        }
+        zona.innerHTML = `
+          Mover a <select class="sel-destino">${destinos.map((c, i) => `<option value="${i}">${escapar(etiquetaDestino(c))}</option>`).join("")}</select>
+          <button type="button" class="principal confirmar">Confirmar movimiento</button>
+          <p style="font-size:12px; color:var(--tinta-suave); margin:6px 0 0;">Sus notas y asistencia quedan en la clase anterior como historial; en la nueva empieza en blanco.</p>`;
+        zona.querySelector(".confirmar").addEventListener("click", async (ev) => {
+          const destino = destinos[Number(zona.querySelector(".sel-destino").value)];
+          if (!confirm(`¿Mover a ${r.estudianteNombre} a ${etiquetaDestino(destino)}?`)) return;
+          ev.target.disabled = true;
+          try {
+            await moverEstudiante({ est, destino, usuario, rol, reporteId: r.id });
+            await cargar();
+          } catch (e) {
+            ev.target.disabled = false;
+            error(e.code === "permission-denied" ? "No tienes permiso para mover a esa sede." : (e.message || e.code));
+          }
+        });
+      } catch (e) {
+        zona.innerHTML = `<span style="color:var(--error);">No se pudo cargar (${escapar(e.code || e.message)}).</span>`;
+      }
+    });
+
+    return div;
+  }
+
+  document.querySelectorAll('input[name="estado"]').forEach((r) => r.addEventListener("change", cargar));
+  await cargar();
+</script>
+</body>
+</html>
