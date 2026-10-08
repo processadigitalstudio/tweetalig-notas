@@ -115,6 +115,7 @@
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
+  import { datosDirectorio } from "../js/matricula.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, doc, setDoc, addDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -606,6 +607,10 @@ Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo`;
           anio: clase.anio, periodo: clase.periodo, ciclo: clase.ciclo,
           ciudadId: clase.ciudadId, ciudadNombre: clase.ciudadNombre
         });
+        // Directorio mínimo para que los profesores puedan buscar al estudiante por cédula.
+        try {
+          await setDoc(doc(db, "directorio_estudiantes", cedula), datosDirectorio({ nombre, apellido, cedula, correo, ciudadId: clase.ciudadId, ciudadNombre: clase.ciudadNombre }), { merge: true });
+        } catch (e) { console.warn("No se pudo actualizar el directorio:", e); }
         resultados.push({ ok: true, texto: `${nombre} ${apellido} (${cedula}): matriculado en ${clase.nivel} - ${clase.grupo}.` });
         exitosos++;
       } catch (e) {

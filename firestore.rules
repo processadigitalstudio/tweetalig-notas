@@ -140,22 +140,90 @@ service cloud.firestore {
 
     // Colección "estudiantes": nombre, apellido, cédula, correo, clase asignada
     // Compartimentado por rol: profesor solo ve estudiantes de SUS clases;
-    // coordinador/secretaria solo ven estudiantes de SU sede asignada;
-    // admin/master ven todo.
+    // coordinador/secretaria solo ven y modifican estudiantes de SU(S) sede(s);
+    // admin/master ven y modifican todo.
+    //
+    // Un estudiante "movido" de clase NO se borra: su matrícula vieja queda con
+    // estado "movido" (así sus notas y asistencia se conservan como historial).
     match /estudiantes/{id} {
+      function claseDeMatricula(claseId) {
+        return get(/databases/$(database)/documents/clases/$(claseId)).data;
+      }
+      function esSedeDeMiCoordinacion(datos) {
+        return miRol() in ['coordinador', 'secretaria'] && datos.ciudadId in misSedes();
+      }
+
       allow read: if estaLogueado() && (
         esAdminOMaster() ||
         (miRol() in ['coordinador', 'secretaria'] && resource.data.ciudadId in misSedes()) ||
-        (miRol() == 'profesor' && get(/databases/$(database)/documents/clases/$(resource.data.claseId)).data.docenteCorreo == miCorreo())
+        (miRol() == 'profesor' && claseDeMatricula(resource.data.claseId).docenteCorreo == miCorreo())
       );
-      allow write: if esGestor();
 
-      // El profesor puede corregir/confirmar el correo de SUS estudiantes
-      // (para que los avisos de habilitación/inasistencia lleguen bien),
-      // pero no puede tocar ningún otro campo (nombre, cédula, clase, etc.).
+      allow create: if estaLogueado() && (
+        esAdminOMaster() || esSedeDeMiCoordinacion(request.resource.data)
+      );
+      allow update: if estaLogueado() && (
+        esAdminOMaster() ||
+        (esSedeDeMiCoordinacion(resource.data) && esSedeDeMiCoordinacion(request.resource.data))
+      );
+      allow delete: if estaLogueado() && (
+        esAdminOMaster() || esSedeDeMiCoordinacion(resource.data)
+      );
+
+      // El profesor puede corregir/confirmar el correo de SUS estudiantes y
+      // poner/quitar la marca "reporte" (reportar que alguien no es de su
+      // clase). No puede tocar ningún otro campo.
       allow update: if estaLogueado() && miRol() == 'profesor' &&
-        get(/databases/$(database)/documents/clases/$(resource.data.claseId)).data.docenteCorreo == miCorreo() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['correo']);
+        claseDeMatricula(resource.data.claseId).docenteCorreo == miCorreo() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['correo', 'reporte']);
+
+      // El profesor puede AÑADIR a su propia clase a un estudiante que ya
+      // existe en el sistema (lo busca por cédula). Solo se crea la matrícula
+      // en su clase, con la sede de esa clase y marcada con su nombre; el
+      // reporte para coordinación se crea en el mismo paso.
+      allow create: if estaLogueado() && miRol() == 'profesor' &&
+        request.resource.data.keys().hasOnly(['nombre', 'apellido', 'cedula', 'correo', 'claseId', 'claseTexto',
+          'anio', 'periodo', 'ciclo', 'ciudadId', 'ciudadNombre', 'agregadoPor', 'agregadoEn', 'reporte']) &&
+        request.resource.data.keys().hasAll(['nombre', 'apellido', 'cedula', 'claseId', 'ciudadId', 'agregadoPor']) &&
+        id == request.resource.data.claseId + '_' + request.resource.data.cedula &&
+        claseDeMatricula(request.resource.data.claseId).docenteCorreo == miCorreo() &&
+        request.resource.data.ciudadId == claseDeMatricula(request.resource.data.claseId).ciudadId &&
+        request.resource.data.agregadoPor == miCorreo() &&
+        periodoEstaActivo(claseDeMatricula(request.resource.data.claseId));
+    }
+
+    // Colección "directorio_estudiantes": un registro mínimo por cédula (nombre,
+    // apellido, correo, sede) que permite al profesor ENCONTRAR a un estudiante
+    // existente escribiendo su cédula. El profesor solo puede pedirlo por cédula
+    // exacta (get), nunca listar ni explorar el directorio completo.
+    match /directorio_estudiantes/{cedula} {
+      allow get: if estaLogueado() && miRol() in ['profesor', 'coordinador', 'secretaria', 'admin', 'master'];
+      allow list: if esAdminOMaster();
+      allow create, update: if esGestor();
+      allow delete: if esAdminOMaster();
+    }
+
+    // Colección "reportes_estudiantes": avisos de los profesores a coordinación
+    // ("este estudiante no es de mi clase" / "añadí a este estudiante a mi
+    // clase"). El profesor solo los crea (de sus propias clases); coordinación
+    // de la sede, Admin y Master los leen y los resuelven. Nunca se borran.
+    match /reportes_estudiantes/{id} {
+      allow read: if estaLogueado() && (
+        esAdminOMaster() ||
+        (miRol() in ['coordinador', 'secretaria'] && resource.data.ciudadId in misSedes()) ||
+        (miRol() == 'profesor' && resource.data.profesorCorreo == miCorreo())
+      );
+      allow create: if estaLogueado() && miRol() == 'profesor' &&
+        request.resource.data.profesorCorreo == miCorreo() &&
+        request.resource.data.estado == 'pendiente' &&
+        request.resource.data.tipo in ['no_pertenece', 'agregado_por_profesor'] &&
+        get(/databases/$(database)/documents/clases/$(request.resource.data.claseId)).data.docenteCorreo == miCorreo() &&
+        request.resource.data.ciudadId == get(/databases/$(database)/documents/clases/$(request.resource.data.claseId)).data.ciudadId;
+      allow update: if estaLogueado() && (
+        esAdminOMaster() ||
+        (miRol() in ['coordinador', 'secretaria'] && resource.data.ciudadId in misSedes())
+      );
+      allow delete: if false;
     }
 
     // Colección "logs": historial de auditoría, inmutable. Solo admin/master lo leen.

@@ -93,6 +93,10 @@
         <label for="filtro-periodo-clases-select">Período</label>
         <select id="filtro-periodo-clases-select"><option value="">Todos</option></select>
       </div>
+      <div class="campo-filtro">
+        <label for="filtro-sin-profesor">Revisión</label>
+        <label style="text-transform:none; font-size:13px; display:flex; gap:6px; align-items:center; padding:8px 0;"><input type="checkbox" id="filtro-sin-profesor"> Solo clases sin profesor activo</label>
+      </div>
       <button type="button" class="boton-limpiar-filtros" id="boton-limpiar-filtros-clases">Limpiar filtros</button>
     </div>
 
@@ -366,6 +370,7 @@
   let filtrosClasesTexto = "";
   let filtrosClasesPrograma = "";
   let filtrosClasesPeriodo = "";
+  let filtroSoloSinProfesor = false;
 
   async function cargarClases() {
     clasesCache = {};
@@ -435,6 +440,8 @@
       if (filtroSedeClases && c.ciudadId !== filtroSedeClases) return;
       if (filtrosClasesPrograma && c.programaNombre !== filtrosClasesPrograma) return;
       if (filtrosClasesPeriodo && `${c.anio}-${c.periodo}-${c.ciclo}` !== filtrosClasesPeriodo) return;
+      const sinProfesor = !listaProfesores.some((p) => p.correo === c.docenteCorreo);
+      if (filtroSoloSinProfesor && !sinProfesor) return;
       if (texto) {
         const coincide = (c.nivel || "").toLowerCase().includes(texto) ||
           (c.grupo || "").toLowerCase().includes(texto) ||
@@ -445,12 +452,14 @@
       total++;
       const d = { id };
       const periodoTexto = `${c.anio || "—"}-${c.periodo || "—"} / Ciclo ${c.ciclo || "—"}`;
-      const opcionesProfesor = listaProfesores.map((p) =>
+      const opcionesProfesor = (sinProfesor ? '<option value="">— Elige un profesor —</option>' : "") + listaProfesores.map((p) =>
         `<option value="${p.correo}" ${p.correo === c.docenteCorreo ? "selected" : ""}>${p.nombre}</option>`
       ).join("");
       const fila = document.createElement("tr");
       fila.innerHTML = `
-        <td>${periodoTexto}</td>
+        <td>${periodoTexto}<br>${c.fechaInicioClase
+          ? `<span style="font-size:11.5px; color:var(--tinta-suave);">Empezó: ${c.fechaInicioClase}</span>`
+          : `<span style="font-size:11.5px; color:#7a5d00;">⚠ Sin fecha de inicio</span>`}</td>
         <td>
           <span class="valor-nivel" data-id="${d.id}">${c.nivel}</span>
           <input type="text" class="input-editar-nivel" data-id="${d.id}" value="${c.nivel}" style="display:none; width:70px; font-size:13px; padding:3px 5px;">
@@ -460,7 +469,7 @@
           <input type="text" class="input-editar-grupo" data-id="${d.id}" value="${c.grupo}" style="display:none; width:70px; font-size:13px; padding:3px 5px;">
         </td>
         <td>
-          <span class="nombre-docente" data-id="${d.id}">${c.docenteNombre || "—"}</span>
+          <span class="nombre-docente" data-id="${d.id}">${c.docenteNombre || "—"}${sinProfesor ? ' <span title="Este profesor ya no tiene acceso (o no es de tu sede)." style="font-size:11px; padding:2px 7px; border-radius:10px; background:#fbf0c9; color:#7a5d00; border:1px solid #e6c14f; white-space:nowrap;">⚠ sin acceso</span> <button type="button" class="btn-asignar-rapido" data-id="' + d.id + '" style="font-size:12px; border:1px solid var(--verde-marca); background:var(--verde-marca); color:#fff; border-radius:6px; padding:3px 9px; cursor:pointer;">Asignar profesor</button>' : ""}</span>
           <select class="select-reasignar" data-id="${d.id}" style="display:none; font-size:12px; padding:3px;">${opcionesProfesor}</select>
         </td>
         <td><span class="valor-horarios" data-id="${d.id}">${textoHorarios(c.horarios)}</span></td>
@@ -474,6 +483,11 @@
               <button class="btn-editar-nivel" data-id="${d.id}">Editar nivel</button>
               <button class="btn-editar-grupo" data-id="${d.id}">Editar grupo</button>
               <button class="btn-editar-horarios" data-id="${d.id}">Editar horarios</button>
+              <div style="padding:6px 10px;">
+                <label style="font-size:11.5px; color:var(--tinta-suave); display:block;">Fecha de inicio de la clase</label>
+                <input type="date" class="input-fecha-inicio" data-id="${d.id}" value="${c.fechaInicioClase || ""}" style="font-size:12.5px; padding:4px 6px; border:1px solid var(--linea); border-radius:6px;">
+                <button type="button" class="btn-guardar-fecha-inicio" data-id="${d.id}" style="margin-top:4px;">Guardar fecha</button>
+              </div>
               <hr>
               <a href="notas.html?correo=${encodeURIComponent(c.docenteCorreo)}&grupo=${encodeURIComponent(c.grupoDistanciaId || d.id)}">Ver notas</a>
               <a href="asistencia.html?correo=${encodeURIComponent(c.docenteCorreo)}&grupo=${encodeURIComponent(c.grupoDistanciaId || d.id)}">Ver asistencia</a>
@@ -629,6 +643,7 @@
         b.textContent = "Guardar";
       } else {
         const nuevoCorreo = select.value;
+        if (!nuevoCorreo) { alert("Elige un profesor de la lista."); return; }
         const nuevoNombre = select.options[select.selectedIndex].textContent;
         try {
           await updateDoc(doc(db, "clases", id), { docenteCorreo: nuevoCorreo, docenteNombre: nuevoNombre });
@@ -637,6 +652,26 @@
         } catch (error) {
           alert(error.code === "permission-denied" ? "No se puede editar: el período de esta clase ya está cerrado." : `Error: ${error.message}`);
         }
+      }
+    }));
+
+    // Botón visible para asignar de una vez a clases cuyo profesor ya no tiene acceso.
+    cuerpo.querySelectorAll(".btn-asignar-rapido").forEach((b) => b.addEventListener("click", () => {
+      cuerpo.querySelector(`.btn-reasignar[data-id="${b.dataset.id}"]`).click();
+      b.style.display = "none";
+    }));
+
+    // Fecha de inicio de la clase (la ven y la cambian profesor, coordinación, Admin y Master).
+    cuerpo.querySelectorAll(".btn-guardar-fecha-inicio").forEach((b) => b.addEventListener("click", async () => {
+      const id = b.dataset.id;
+      const valor = cuerpo.querySelector(`.input-fecha-inicio[data-id="${id}"]`).value;
+      if (!valor) { alert("Elige una fecha."); return; }
+      try {
+        await updateDoc(doc(db, "clases", id), { fechaInicioClase: valor });
+        await registrarLog(usuario, rol, "Fijó fecha de inicio de clase", `${id} → ${valor}`);
+        cargarClases();
+      } catch (error) {
+        alert(error.code === "permission-denied" ? "No se puede editar: el período de esta clase ya está cerrado." : `Error: ${error.message}`);
       }
     }));
 
@@ -767,8 +802,14 @@
     filtrosClasesPeriodo = e.target.value;
     pintarTablaClases();
   });
+  document.getElementById("filtro-sin-profesor").addEventListener("change", (e) => {
+    filtroSoloSinProfesor = e.target.checked;
+    pintarTablaClases();
+  });
   document.getElementById("boton-limpiar-filtros-clases").addEventListener("click", () => {
     filtrosClasesTexto = ""; filtroSedeClases = ""; filtrosClasesPrograma = ""; filtrosClasesPeriodo = "";
+    filtroSoloSinProfesor = false;
+    document.getElementById("filtro-sin-profesor").checked = false;
     document.getElementById("filtro-texto-clases").value = "";
     document.getElementById("filtro-sede-clases-select").value = "";
     document.getElementById("filtro-programa-clases-select").value = "";

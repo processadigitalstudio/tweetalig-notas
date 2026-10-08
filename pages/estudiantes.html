@@ -13,6 +13,11 @@
   .filtros { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
   .filtros input, .filtros select { font-family: var(--fuente-cuerpo); font-size: 13px; padding: 8px 10px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
   .contador { font-size: 13px; color: var(--tinta-suave); margin-bottom: 14px; }
+  .tabla-simple .btn-mover { color: var(--azul-profundo); margin-right: 10px; }
+  .fila-movida { opacity: 0.55; }
+  .fila-mover td { background: var(--superficie); }
+  .fila-mover select { font-family: var(--fuente-cuerpo); font-size: 13px; padding: 6px 8px; border: 1px solid var(--linea); border-radius: 6px; max-width: 420px; }
+  .fila-mover button.confirmar { background: var(--verde-marca); color: #fff; text-decoration: none; padding: 7px 12px; border-radius: 6px; margin-left: 8px; }
 </style>
 </head>
 <body>
@@ -34,6 +39,14 @@
       <select id="filtro-periodo"><option value="">Todos los períodos</option></select>
     </div>
 
+    <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-bottom:14px;">
+      <label style="font-size:13px; color:var(--tinta-suave); display:flex; gap:6px; align-items:center;">
+        <input type="checkbox" id="chk-movidos"> Mostrar historial de estudiantes movidos de clase
+      </label>
+      <button type="button" id="boton-directorio" style="display:none; font-size:12.5px; padding:6px 10px; border:1px dashed var(--azul-profundo); background:none; border-radius:6px; cursor:pointer; color:var(--azul-profundo);">Actualizar directorio de cédulas</button>
+      <span id="aviso-directorio" style="font-size:12.5px;"></span>
+    </div>
+
     <p class="contador" id="contador"></p>
     <p style="font-size:12.5px; color:var(--tinta-suave); margin-top:-10px; margin-bottom:16px;">
       Si buscas por cédula, verás todas las matrículas de ese estudiante a lo largo del tiempo (cada ciclo/período es un registro separado).
@@ -49,7 +62,8 @@
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { db } from "../js/firebase-config.js?v=3";
-  import { collection, getDocs, doc, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { collection, getDocs, doc, deleteDoc, setDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { cargarDestinos, etiquetaDestino, moverEstudiante, datosDirectorio } from "../js/matricula.js?v=1";
 
   const { usuario, rol, perfil } = await requireAuth(["master", "admin", "coordinador", "secretaria"]);
 
@@ -106,7 +120,10 @@
     const claseId = document.getElementById("filtro-clase").value;
     const periodo = document.getElementById("filtro-periodo").value;
 
+    const verMovidos = document.getElementById("chk-movidos").checked;
+
     const filtrados = todos.filter((e) => {
+      if (e.estado === "movido" && !verMovidos) return false;
       const coincideTexto = !texto ||
         (e.nombre || "").toLowerCase().includes(texto) ||
         (e.apellido || "").toLowerCase().includes(texto) ||
@@ -125,18 +142,25 @@
     cuerpo.innerHTML = "";
     filtrados.forEach((e, idx) => {
       const fila = document.createElement("tr");
+      const movido = e.estado === "movido";
+      if (movido) fila.className = "fila-movida";
+      const marca = e.reporte
+        ? (e.reporte.tipo === "agregado_por_profesor" ? ' <span style="font-size:11px; color:#2d6a58;">· añadido por profesor</span>' : ' <span style="font-size:11px; color:#7a5d00;">· reportado por profesor</span>')
+        : "";
       fila.innerHTML = `
-        <td>${idx + 1}</td>
-        <td>${e.apellido || ""} ${e.nombre || ""}</td>
+        <td>${movido ? "—" : idx + 1}</td>
+        <td>${e.apellido || ""} ${e.nombre || ""}${marca}</td>
         <td>${e.cedula || "—"}</td>
         <td>${e.anio ? `${e.anio}-${e.periodo} / Ciclo ${e.ciclo}` : "—"}</td>
         <td>${e.correo || "—"}</td>
-        <td>${e.claseTexto || "—"}</td>
+        <td>${e.claseTexto || "—"}${movido ? `<br><span style="font-size:11.5px;">Movido a ${e.movidoATexto || "otra clase"}</span>` : ""}</td>
         <td>${e.ciudadNombre || "—"}</td>
-        <td><button class="btn-borrar" data-id="${e.id}" data-nombre="${e.nombre} ${e.apellido}">Quitar</button></td>
+        <td style="white-space:nowrap;">${movido ? "" : `<button class="btn-mover" data-id="${e.id}">Mover</button><button class="btn-borrar" data-id="${e.id}" data-nombre="${e.nombre} ${e.apellido}">Quitar</button>`}</td>
       `;
       cuerpo.appendChild(fila);
     });
+
+    cuerpo.querySelectorAll(".btn-mover").forEach((b) => b.addEventListener("click", () => abrirMover(b)));
 
     cuerpo.querySelectorAll(".btn-borrar").forEach((b) => b.addEventListener("click", async () => {
       if (confirm(`¿Quitar a ${b.dataset.nombre} de esta clase?`)) {
@@ -147,6 +171,79 @@
     }));
   }
 
+  // Fila desplegable con las clases a las que se puede mover el estudiante.
+  async function abrirMover(boton) {
+    const filaActual = boton.closest("tr");
+    const abierta = filaActual.nextElementSibling;
+    if (abierta && abierta.classList.contains("fila-mover")) { abierta.remove(); return; }
+
+    const est = todos.find((x) => x.id === boton.dataset.id);
+    const filaMover = document.createElement("tr");
+    filaMover.className = "fila-mover";
+    filaMover.innerHTML = `<td colspan="8">Buscando clases disponibles...</td>`;
+    filaActual.after(filaMover);
+
+    try {
+      const destinos = await cargarDestinos(est, rol, perfil);
+      if (destinos.length === 0) {
+        filaMover.innerHTML = `<td colspan="8">No hay otras clases del mismo programa y período${(rol === "coordinador" || rol === "secretaria") ? " en tus sedes" : ""} a las que moverlo.</td>`;
+        return;
+      }
+      filaMover.innerHTML = `<td colspan="8">
+        <b>Mover a ${est.apellido} ${est.nombre}</b> (hoy en ${est.claseTexto || "—"}) a:
+        <select class="sel-destino">${destinos.map((c, i) => `<option value="${i}">${etiquetaDestino(c)}</option>`).join("")}</select>
+        <button type="button" class="confirmar">Mover</button>
+        <p style="font-size:12px; color:var(--tinta-suave); margin:6px 0 0;">Sus notas y asistencia quedan en la clase anterior como historial; en la clase nueva empieza en blanco.</p>
+        <span class="msg-mover" style="font-size:12.5px;"></span>
+      </td>`;
+      filaMover.querySelector(".confirmar").addEventListener("click", async (ev) => {
+        const destino = destinos[Number(filaMover.querySelector(".sel-destino").value)];
+        if (!confirm(`¿Mover a ${est.apellido} ${est.nombre} a ${etiquetaDestino(destino)}?`)) return;
+        ev.target.disabled = true;
+        try {
+          await moverEstudiante({ est, destino, usuario, rol });
+          await cargarEstudiantes();
+        } catch (error) {
+          ev.target.disabled = false;
+          const msg = filaMover.querySelector(".msg-mover");
+          msg.style.color = "var(--error)";
+          msg.textContent = error.code === "permission-denied" ? "No tienes permiso para mover a ese estudiante o a esa sede." : (error.message || error.code);
+        }
+      });
+    } catch (error) {
+      filaMover.innerHTML = `<td colspan="8" style="color:var(--error);">No se pudo cargar las clases (${error.code || error.message}).</td>`;
+    }
+  }
+
+  // Solo Master/Admin: reconstruye el directorio de cédulas con los estudiantes ya cargados.
+  if (rol === "master" || rol === "admin") {
+    const botonDir = document.getElementById("boton-directorio");
+    botonDir.style.display = "inline-block";
+    botonDir.addEventListener("click", async () => {
+      const aviso = document.getElementById("aviso-directorio");
+      botonDir.disabled = true;
+      aviso.style.color = "var(--tinta-suave)";
+      aviso.textContent = "Actualizando...";
+      try {
+        const vistos = new Set();
+        let n = 0;
+        for (const e of todos) {
+          if (!e.cedula || vistos.has(e.cedula)) continue;
+          vistos.add(e.cedula);
+          await setDoc(doc(db, "directorio_estudiantes", e.cedula), datosDirectorio(e), { merge: true });
+          n++;
+        }
+        aviso.style.color = "#2E6E4E";
+        aviso.textContent = `Directorio actualizado: ${n} estudiante(s).`;
+      } catch (error) {
+        aviso.style.color = "var(--error)";
+        aviso.textContent = `No se pudo actualizar (${error.code || error.message}).`;
+      }
+      botonDir.disabled = false;
+    });
+  }
+
+  document.getElementById("chk-movidos").addEventListener("change", pintarLista);
   document.getElementById("filtro-texto").addEventListener("input", pintarLista);
   document.getElementById("filtro-sede").addEventListener("change", pintarLista);
   document.getElementById("filtro-clase").addEventListener("change", pintarLista);

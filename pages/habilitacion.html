@@ -274,14 +274,16 @@ Tweetalig Centro de Idiomas`;
         const programa = cachePrograma[clase.programaId];
         if (!programa) return;
 
-        const snapEst = await getDocs(query(collection(db, "estudiantes"), where("claseId", "==", clase.id)));
-        if (snapEst.empty) return;
+        const snapEstTodos = await getDocs(query(collection(db, "estudiantes"), where("claseId", "==", clase.id)));
+        // Los estudiantes movidos a otra clase ya no cuentan en esta.
+        const docsEst = snapEstTodos.docs.filter((dEst) => dEst.data().estado !== "movido");
+        if (docsEst.length === 0) return;
 
         const notasPorEstudiante = await Promise.all(
-          snapEst.docs.map((dEst) => getDoc(doc(db, "notas", `${clase.id}_${dEst.data().cedula}`)))
+          docsEst.map((dEst) => getDoc(doc(db, "notas", `${clase.id}_${dEst.data().cedula}`)))
         );
 
-        snapEst.docs.forEach((dEst, i) => {
+        docsEst.forEach((dEst, i) => {
           const est = dEst.data();
           const snapNota = notasPorEstudiante[i];
           const valores = snapNota.exists() ? snapNota.data().valores || {} : {};
