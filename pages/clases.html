@@ -30,15 +30,17 @@
 
   /* Menú de acciones — un botón "Acciones" que despliega la lista, en vez
      de mostrar todos los botones sueltos y desordenados en cada fila. */
-  .menu-acciones { position: relative; }
+  .menu-acciones { position: relative; white-space: nowrap; }
+  td:has(> .menu-acciones) { white-space: nowrap; width: 1%; }
   .menu-acciones summary {
     cursor: pointer; list-style: none; font-size: 13px; font-weight: 500;
     color: var(--azul-profundo); border: 1px solid var(--azul-profundo);
-    border-radius: 6px; padding: 6px 12px; display: inline-block;
+    border-radius: 6px; padding: 6px 12px;
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
   }
   .menu-acciones summary::-webkit-details-marker { display: none; }
-  .menu-acciones summary::after { content: " ▾"; }
-  .menu-acciones[open] summary::after { content: " ▴"; }
+  .menu-acciones summary::after { content: "▾"; font-size: 11px; }
+  .menu-acciones[open] summary::after { content: "▴"; }
   .menu-acciones-lista {
     position: absolute; top: 100%; left: 0; margin-top: 4px;
     background: var(--superficie); border: 1px solid var(--linea); border-radius: 8px;
