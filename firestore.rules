@@ -192,14 +192,22 @@ service cloud.firestore {
         periodoEstaActivo(claseDeMatricula(request.resource.data.claseId));
     }
 
-    // Colección "directorio_estudiantes": un registro mínimo por cédula (nombre,
-    // apellido, correo, sede) que permite al profesor ENCONTRAR a un estudiante
-    // existente escribiendo su cédula. El profesor solo puede pedirlo por cédula
-    // exacta (get), nunca listar ni explorar el directorio completo.
+    // Colección "directorio_estudiantes": una ficha mínima por cédula (nombre,
+    // apellido, sede y la clase donde está hoy; SIN correo). Permite al profesor
+    // BUSCAR a un estudiante (por cédula exacta, o por nombre/apellido con un
+    // máximo de 10 resultados por búsqueda) y ver en qué clase está para pedir su
+    // traspaso. No puede listar el directorio completo.
     match /directorio_estudiantes/{cedula} {
       allow get: if estaLogueado() && miRol() in ['profesor', 'coordinador', 'secretaria', 'admin', 'master'];
-      allow list: if esAdminOMaster();
-      allow create, update: if esGestor();
+      allow list: if esAdminOMaster() ||
+        (estaLogueado() && miRol() in ['profesor', 'coordinador', 'secretaria'] && request.query.limit <= 10);
+      allow create: if esGestor();
+      allow update: if esGestor() ||
+        // El profesor solo puede actualizar DÓNDE está el estudiante, y solo
+        // hacia una clase suya (cuando lo añade a su clase).
+        (estaLogueado() && miRol() == 'profesor' &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ultimaMatricula']) &&
+         get(/databases/$(database)/documents/clases/$(request.resource.data.ultimaMatricula.claseId)).data.docenteCorreo == miCorreo());
       allow delete: if esAdminOMaster();
     }
 
@@ -211,17 +219,20 @@ service cloud.firestore {
       allow read: if estaLogueado() && (
         esAdminOMaster() ||
         (miRol() in ['coordinador', 'secretaria'] && resource.data.ciudadId in misSedes()) ||
+        // Un traspaso entre sedes también lo ve la coordinación de la sede de origen.
+        (miRol() in ['coordinador', 'secretaria'] && resource.data.ciudadOrigenId in misSedes()) ||
         (miRol() == 'profesor' && resource.data.profesorCorreo == miCorreo())
       );
       allow create: if estaLogueado() && miRol() == 'profesor' &&
         request.resource.data.profesorCorreo == miCorreo() &&
         request.resource.data.estado == 'pendiente' &&
-        request.resource.data.tipo in ['no_pertenece', 'agregado_por_profesor'] &&
+        request.resource.data.tipo in ['no_pertenece', 'agregado_por_profesor', 'solicitud_traspaso'] &&
         get(/databases/$(database)/documents/clases/$(request.resource.data.claseId)).data.docenteCorreo == miCorreo() &&
         request.resource.data.ciudadId == get(/databases/$(database)/documents/clases/$(request.resource.data.claseId)).data.ciudadId;
       allow update: if estaLogueado() && (
         esAdminOMaster() ||
-        (miRol() in ['coordinador', 'secretaria'] && resource.data.ciudadId in misSedes())
+        (miRol() in ['coordinador', 'secretaria'] &&
+         (resource.data.ciudadId in misSedes() || resource.data.ciudadOrigenId in misSedes()))
       );
       allow delete: if false;
     }

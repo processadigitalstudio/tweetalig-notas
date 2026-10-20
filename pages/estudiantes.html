@@ -225,12 +225,29 @@
       aviso.style.color = "var(--tinta-suave)";
       aviso.textContent = "Actualizando...";
       try {
-        const vistos = new Set();
-        let n = 0;
+        // Para cada cédula se toma su matrícula MÁS RECIENTE que siga activa
+        // (no movida) y se guarda en qué clase está, con el nombre de su profesor.
+        const snapClases = await getDocs(collection(db, "clases"));
+        const clasesPorId = {};
+        snapClases.forEach((d) => { clasesPorId[d.id] = { id: d.id, ...d.data() }; });
+        const clavePeriodo = (e) => (Number(e.anio) || 0) * 10000 + (Number(e.periodo) || 0) * 100 + (Number(e.ciclo) || 0);
+
+        const porCedula = new Map();
         for (const e of todos) {
-          if (!e.cedula || vistos.has(e.cedula)) continue;
-          vistos.add(e.cedula);
-          await setDoc(doc(db, "directorio_estudiantes", e.cedula), datosDirectorio(e), { merge: true });
+          if (!e.cedula) continue;
+          const actual = porCedula.get(e.cedula);
+          const esActiva = e.estado !== "movido";
+          if (!actual) { porCedula.set(e.cedula, { base: e, activa: esActiva ? e : null }); continue; }
+          if (esActiva && (!actual.activa || clavePeriodo(e) > clavePeriodo(actual.activa))) actual.activa = e;
+        }
+
+        let n = 0;
+        for (const { base, activa } of porCedula.values()) {
+          const fuente = activa || base;
+          const clase = activa ? clasesPorId[activa.claseId] : null;
+          const ficha = datosDirectorio(fuente, clase, activa ? activa.id : null);
+          // Reemplaza la ficha completa (así también se elimina el correo de fichas antiguas).
+          await setDoc(doc(db, "directorio_estudiantes", base.cedula), ficha);
           n++;
         }
         aviso.style.color = "#2E6E4E";

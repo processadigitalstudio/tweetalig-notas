@@ -13,6 +13,7 @@
   .tarjeta-reporte .motivo { font-size: 13.5px; margin: 0 0 10px; }
   .etiqueta-tipo { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-right: 6px; }
   .tipo-no_pertenece { background: #fbf0c9; color: #7a5d00; border: 1px solid #e6c14f; }
+  .tipo-solicitud_traspaso { background: #e6e0f3; color: #4a3b78; border: 1px solid #9575cd; }
   .tipo-agregado_por_profesor { background: #e3f4ee; color: #2d6a58; border: 1px solid #5db69c; }
   .acciones { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .acciones button, .zona-mover button {
@@ -38,7 +39,7 @@
     <h2>Reportes de profesores</h2>
     <p style="color: var(--tinta-suave); max-width: 640px; margin-top: -8px; font-size: 13.5px;">
       Aquí llegan los avisos de los profesores: estudiantes que aparecen en su planilla pero <b>no son de su clase</b>,
-      y estudiantes que el profesor <b>añadió</b> a su clase. Tú decides qué hacer.
+      estudiantes que el profesor <b>añadió</b> a su clase, y <b>solicitudes de traspaso</b> (un profesor pide pasar a su clase a un estudiante que está en otra). Tú decides qué hacer.
     </p>
 
     <div class="filtros">
@@ -78,12 +79,18 @@
           lista.innerHTML = "<p style='color:var(--tinta-suave);'>Tu cuenta no tiene sedes asignadas.</p>";
           return;
         }
-        q = query(collection(db, "reportes_estudiantes"), where("ciudadId", "in", misSedes), where("estado", "==", estado));
+        q = [
+          query(collection(db, "reportes_estudiantes"), where("ciudadId", "in", misSedes), where("estado", "==", estado)),
+          // Traspasos que salen de mis sedes hacia una clase de otra sede.
+          query(collection(db, "reportes_estudiantes"), where("ciudadOrigenId", "in", misSedes), where("estado", "==", estado))
+        ];
       } else {
-        q = query(collection(db, "reportes_estudiantes"), where("estado", "==", estado));
+        q = [query(collection(db, "reportes_estudiantes"), where("estado", "==", estado))];
       }
-      const snap = await getDocs(q);
-      const reportes = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const snaps = await Promise.all(q.map((consulta) => getDocs(consulta)));
+      const unicos = new Map();
+      snaps.forEach((sn) => sn.docs.forEach((d) => unicos.set(d.id, { id: d.id, ...d.data() })));
+      const reportes = [...unicos.values()];
       reportes.sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""));
 
       document.getElementById("contador").textContent = `${reportes.length} reporte(s) ${estado === "pendiente" ? "pendiente(s)" : "resuelto(s)"}`;
@@ -104,33 +111,42 @@
     const div = document.createElement("div");
     div.className = "tarjeta-reporte";
     const esAgregado = r.tipo === "agregado_por_profesor";
-    const etiqueta = esAgregado ? "Añadido por el profesor" : "No es de su clase";
+    const esSolicitud = r.tipo === "solicitud_traspaso";
+    const etiqueta = esSolicitud ? "Solicitud de traspaso" : (esAgregado ? "Añadido por el profesor" : "No es de su clase");
     const fecha = r.fecha ? new Date(r.fecha).toLocaleString("es-CO") : "";
 
     let cuerpo = `
       <h3><span class="etiqueta-tipo tipo-${r.tipo}">${etiqueta}</span>${escapar(r.estudianteNombre)} · ${escapar(r.cedula)}</h3>
       <p class="meta">Clase: ${escapar(r.claseTexto)} · Sede ${escapar(r.ciudadNombre)} · Profesor(a): ${escapar(r.profesorNombre)} · ${fecha}</p>`;
-    if (!esAgregado) {
+    if (esSolicitud) {
+      cuerpo += `<p class="motivo"><b>${escapar(r.profesorNombre)}</b> pide pasar a su clase <b>${escapar(r.claseTexto)}</b> (sede ${escapar(r.ciudadNombre)}) a este estudiante, que hoy está en <b>${escapar(r.origenClaseTexto)}</b> (sede ${escapar(r.origenCiudadNombre)}${r.origenDocente ? `, profe ${escapar(r.origenDocente)}` : ""}).${r.motivo ? ` Motivo: “${escapar(r.motivo)}”.` : ""}<br>Si lo autorizas, en la clase nueva empieza en blanco y sus notas y asistencia quedan en la anterior como historial.</p>`;
+    } else if (!esAgregado) {
       cuerpo += `<p class="motivo">${r.motivo ? `Motivo: “${escapar(r.motivo)}”` : "<i>El profesor no escribió motivo.</i>"}</p>`;
     } else {
       cuerpo += `<p class="motivo">El profesor lo añadió a su clase buscándolo por cédula. Ya aparece en su planilla.</p>`;
     }
 
     if (r.estado === "resuelto") {
-      const texto = r.resolucion === "movido" ? `Movido a ${escapar(r.destinoTexto || "otra clase")}`
+      const texto = r.resolucion === "movido" ? `${esSolicitud ? "Traspaso autorizado: " : ""}Movido a ${escapar(r.destinoTexto || "otra clase")}`
         : r.resolucion === "enterada" ? "Marcado como enterado"
+        : r.resolucion === "rechazada" ? "Traspaso rechazado"
         : "Se dejó en su clase";
       div.innerHTML = cuerpo + `<p class="resuelto-info">✔ ${texto} · por ${escapar(r.resueltoPor || "")} · ${r.resueltoEn ? new Date(r.resueltoEn).toLocaleString("es-CO") : ""}</p>`;
       return div;
     }
 
-    div.innerHTML = cuerpo + `
+    div.innerHTML = cuerpo + (esSolicitud ? `
+      <div class="acciones">
+        <button type="button" class="principal btn-autorizar">Autorizar traspaso</button>
+        <button type="button" class="btn-cerrar">Rechazar</button>
+      </div>
+      <p class="msg" style="font-size:12.5px; margin:8px 0 0; min-height:16px;"></p>` : `
       <div class="acciones">
         <button type="button" class="principal btn-mover">Mover a otra clase…</button>
         <button type="button" class="btn-cerrar">${esAgregado ? "Enterada, está bien" : "Dejar en su clase"}</button>
-      </div>
+      </div>`) + (esSolicitud ? "" : `
       <div class="zona-mover" style="display:none;"></div>
-      <p class="msg" style="font-size:12.5px; margin:8px 0 0; min-height:16px;"></p>`;
+      <p class="msg" style="font-size:12.5px; margin:8px 0 0; min-height:16px;"></p>`);
 
     const msg = div.querySelector(".msg");
     function error(texto) { msg.style.color = "var(--error)"; msg.textContent = texto; }
@@ -138,7 +154,7 @@
     div.querySelector(".btn-cerrar").addEventListener("click", async (ev) => {
       ev.target.disabled = true;
       try {
-        await resolverReporte({ reporte: r, resolucion: esAgregado ? "enterada" : "dejar", usuario, rol });
+        await resolverReporte({ reporte: r, resolucion: esSolicitud ? "rechazada" : (esAgregado ? "enterada" : "dejar"), usuario, rol });
         await cargar();
       } catch (e) {
         ev.target.disabled = false;
@@ -146,7 +162,33 @@
       }
     });
 
-    div.querySelector(".btn-mover").addEventListener("click", async () => {
+    div.querySelector(".btn-autorizar")?.addEventListener("click", async (ev) => {
+      if (!confirm(`¿Autorizar el traspaso de ${r.estudianteNombre} a ${r.claseTexto}?`)) return;
+      ev.target.disabled = true;
+      try {
+        const snapEst = await getDoc(doc(db, "estudiantes", r.estudianteDocId));
+        if (!snapEst.exists() || snapEst.data().estado === "movido") {
+          error("Esa matrícula ya no existe o ya fue movida. Rechaza la solicitud.");
+          ev.target.disabled = false;
+          return;
+        }
+        const snapDestino = await getDoc(doc(db, "clases", r.claseId));
+        if (!snapDestino.exists()) { error("La clase de destino ya no existe."); ev.target.disabled = false; return; }
+        await moverEstudiante({
+          est: { id: snapEst.id, ...snapEst.data() },
+          destino: { id: snapDestino.id, ...snapDestino.data() },
+          usuario, rol, reporteId: r.id
+        });
+        await cargar();
+      } catch (e) {
+        ev.target.disabled = false;
+        error(e.code === "permission-denied"
+          ? "No tienes permiso para este traspaso: cruza sedes. Debe autorizarlo Admin/Master o alguien con acceso a las dos sedes."
+          : (e.message || e.code));
+      }
+    });
+
+    div.querySelector(".btn-mover")?.addEventListener("click", async () => {
       const zona = div.querySelector(".zona-mover");
       if (zona.style.display === "block") { zona.style.display = "none"; return; }
       zona.style.display = "block";
