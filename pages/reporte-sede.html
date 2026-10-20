@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tweetalig — Reporte de sede</title>
+<link rel="stylesheet" href="../css/styles.css?v=2">
+<style>
+  .barra-filtros { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 16px; }
+  .campo-filtro { display: flex; flex-direction: column; gap: 4px; }
+  .campo-filtro label { font-size: 11.5px; font-weight: 500; color: var(--tinta-suave); text-transform: uppercase; letter-spacing: 0.02em; }
+  .campo-filtro input, .campo-filtro select {
+    font-family: var(--fuente-cuerpo); font-size: 13px; padding: 8px 10px;
+    border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta);
+  }
+  .campo-filtro input[type="text"] { min-width: 220px; }
+  .campo-filtro input[type="number"] { width: 80px; }
+
+  .pestanas { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+  .pestana {
+    font-family: var(--fuente-cuerpo); font-size: 13px; font-weight: 500;
+    padding: 8px 16px; border-radius: 20px; border: 1px solid var(--linea);
+    background: var(--superficie); color: var(--tinta-suave); cursor: pointer;
+  }
+  .pestana.activa { background: var(--verde-marca); color: #fff; border-color: var(--verde-marca); }
+
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .chip { font-size: 12.5px; padding: 5px 12px; border-radius: 16px; border: 1px solid var(--linea); background: var(--superficie); color: var(--tinta); cursor: pointer; font-family: var(--fuente-cuerpo); }
+  .chip.activo { background: var(--azul-profundo); color: #fff; border-color: var(--azul-profundo); }
+
+  .tabla-reporte { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tabla-reporte th, .tabla-reporte td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--linea); }
+  .tabla-reporte th { color: var(--tinta-suave); font-weight: 500; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.02em; position: sticky; top: 0; background: var(--fondo); }
+  .tabla-reporte td.num { text-align: center; }
+  .contenedor-tabla { overflow-x: auto; max-width: 100%; }
+  .contador { font-size: 13px; color: var(--tinta-suave); margin: 0 0 12px; }
+  .estado { font-size: 11.5px; font-weight: 600; padding: 2px 9px; border-radius: 10px; white-space: nowrap; }
+  .estado.ok { background: #e3f4ee; color: #2d6a58; border: 1px solid #5db69c; }
+  .estado.alerta { background: #fbf0c9; color: #7a5d00; border: 1px solid #e6c14f; }
+  .estado.perdida { background: #f8e1da; color: #8a3a22; border: 1px solid #d48167; }
+  .estado.sin { background: #eceff3; color: #4a5766; border: 1px solid #a9b3c1; }
+  .boton-secundario {
+    font-family: var(--fuente-cuerpo); font-size: 12.5px; font-weight: 500;
+    color: var(--azul-profundo); background: none; border: 1px dashed var(--azul-profundo);
+    border-radius: 6px; padding: 8px 12px; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <nav class="app-nav">
+    <div class="logo-nav-wrap"><img src="../assets/logo-tweetalig.png" alt="Tweetalig"></div>
+    <h1>Portal de notas</h1>
+    <div id="menu-rol"></div>
+    <a href="#" id="link-salir">Cerrar sesión</a>
+  </nav>
+  <main class="app-contenido">
+    <span class="etiqueta-rol">Reporte</span>
+    <h2>Reporte de sede</h2>
+    <p style="color: var(--tinta-suave); max-width: 700px; margin-top: -8px; font-size: 13.5px;">
+      Todos los estudiantes de la sede en un solo lugar: sus horas de inasistencia y quién ya tiene notas y quién no.
+      Solo lectura. Usa el buscador y los filtros para encontrar a alguien o a un grupo.
+    </p>
+
+    <div class="barra-filtros">
+      <div class="campo-filtro">
+        <label for="f-periodo">Período</label>
+        <select id="f-periodo"></select>
+      </div>
+      <div class="campo-filtro" id="caja-sede">
+        <label for="f-sede">Sede</label>
+        <select id="f-sede"><option value="">Todas</option></select>
+      </div>
+      <div class="campo-filtro">
+        <label for="f-programa">Programa</label>
+        <select id="f-programa"><option value="">Todos</option></select>
+      </div>
+      <div class="campo-filtro">
+        <label for="f-clase">Clase</label>
+        <select id="f-clase"><option value="">Todas</option></select>
+      </div>
+      <div class="campo-filtro">
+        <label for="f-texto">Buscar</label>
+        <input type="text" id="f-texto" placeholder="Nombre, apellido o cédula...">
+      </div>
+    </div>
+
+    <div class="pestanas">
+      <button type="button" class="pestana activa" id="tab-asistencia">Inasistencias</button>
+      <button type="button" class="pestana" id="tab-notas">Notas</button>
+    </div>
+
+    <div id="zona-umbrales" class="barra-filtros" style="margin-bottom:10px;">
+      <div class="campo-filtro"><label for="u-alerta">Horas para alerta</label><input type="number" id="u-alerta" value="2" min="0.5" step="0.5"></div>
+      <div class="campo-filtro"><label for="u-perdida">Horas para pérdida</label><input type="number" id="u-perdida" value="6" min="0.5" step="0.5"></div>
+    </div>
+
+    <div class="chips" id="chips"></div>
+    <p class="contador" id="contador"></p>
+    <button type="button" class="boton-secundario" id="boton-csv" style="margin-bottom:12px;">Descargar lo que se ve (CSV)</button>
+    <div class="contenedor-tabla"><table class="tabla-reporte" id="tabla"></table></div>
+  </main>
+</div>
+
+<script type="module">
+  import { requireAuth } from "../js/auth.js?v=3";
+  import { db } from "../js/firebase-config.js?v=3";
+  import { collection, getDocs, getDoc, doc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { cargarEstudiantesDeClases } from "../js/matricula.js?v=1";
+
+  const { usuario, rol, perfil } = await requireAuth(["master", "admin", "coordinador", "secretaria"]);
+
+  const esCoord = (rol === "coordinador" || rol === "secretaria");
+  const misSedes = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
+
+  function escapar(t) {
+    return String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+  function normalizar(t) {
+    return String(t || "").toLowerCase().trim()
+      .replace(/[áàäâ]/g, "a").replace(/[éèëê]/g, "e").replace(/[íìïî]/g, "i")
+      .replace(/[óòöô]/g, "o").replace(/[úùüû]/g, "u");
+  }
+
+  let todasLasClases = [];
+  let filas = [];            // un registro por estudiante del período cargado
+  let pestana = "asistencia";
+  let chipActivo = "todos";
+  let cargaId = 0;
+
+  // ───────── Carga de clases y filtros ─────────
+  async function cargarClases() {
+    const snap = await getDocs(collection(db, "clases"));
+    todasLasClases = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    if (esCoord) todasLasClases = todasLasClases.filter((c) => misSedes.includes(c.ciudadId));
+  }
+
+  async function poblarPeriodos() {
+    const claves = [...new Set(todasLasClases.map((c) => `${c.anio}-${c.periodo}-${c.ciclo}`))]
+      .sort((a, b) => {
+        const [a1, a2, a3] = a.split("-").map(Number), [b1, b2, b3] = b.split("-").map(Number);
+        return (b1 - a1) || (b2 - a2) || (b3 - a3);
+      });
+    const select = document.getElementById("f-periodo");
+    select.innerHTML = "";
+    claves.forEach((k) => {
+      const [a, p, c] = k.split("-");
+      const opt = document.createElement("option");
+      opt.value = k; opt.textContent = `${a}-${p} / Ciclo ${c}`;
+      select.appendChild(opt);
+    });
+    // Por defecto: el período activo más reciente.
+    try {
+      const snapActivos = await getDocs(query(collection(db, "periodos"), where("activo", "==", true)));
+      const activos = snapActivos.docs.map((d) => d.id).filter((id) => claves.includes(id));
+      activos.sort((a, b) => claves.indexOf(a) - claves.indexOf(b));
+      if (activos.length) select.value = activos[0];
+    } catch (e) { /* si falla, queda el más reciente */ }
+  }
+
+  async function poblarSedes() {
+    const caja = document.getElementById("caja-sede");
+    const select = document.getElementById("f-sede");
+    const sedes = new Map();
+    todasLasClases.forEach((c) => { if (c.ciudadId) sedes.set(c.ciudadId, c.ciudadNombre || c.ciudadId); });
+    if (sedes.size <= 1) { caja.style.display = "none"; return; }
+    [...sedes.entries()].sort((a, b) => a[1].localeCompare(b[1])).forEach(([id, nombre]) => {
+      const opt = document.createElement("option");
+      opt.value = id; opt.textContent = nombre;
+      select.appendChild(opt);
+    });
+  }
+
+  function poblarProgramasYClases() {
+    const clavePeriodo = document.getElementById("f-periodo").value;
+    const delPeriodo = todasLasClases.filter((c) => `${c.anio}-${c.periodo}-${c.ciclo}` === clavePeriodo);
+
+    const selPrograma = document.getElementById("f-programa");
+    const previoP = selPrograma.value;
+    selPrograma.innerHTML = '<option value="">Todos</option>';
+    [...new Set(delPeriodo.map((c) => c.programaNombre).filter(Boolean))].sort().forEach((n) => {
+      const opt = document.createElement("option");
+      opt.value = n; opt.textContent = n;
+      selPrograma.appendChild(opt);
+    });
+    if ([...selPrograma.options].some((o) => o.value === previoP)) selPrograma.value = previoP;
+
+    const selClase = document.getElementById("f-clase");
+    const previoC = selClase.value;
+    selClase.innerHTML = '<option value="">Todas</option>';
+    delPeriodo
+      .sort((a, b) => (a.nivel || "").localeCompare(b.nivel || "", "es", { numeric: true }) || (a.grupo || "").localeCompare(b.grupo || ""))
+      .forEach((c) => {
+        const opt = document.createElement("option");
+        opt.value = c.id;
+        opt.textContent = `${c.nivel} - ${c.grupo} (${c.ciudadNombre || "—"})`;
+        selClase.appendChild(opt);
+      });
+    if ([...selClase.options].some((o) => o.value === previoC)) selClase.value = previoC;
+  }
+
+  // ───────── Carga de datos del período ─────────
+  function promedioCorte(programa, valores, i) {
+    const corte = programa.cortes[i];
+    let suma = 0;
+    for (let n = 0; n < corte.notas.length; n++) {
+      const v = valores[`c${i}n${n}`];
+      if (v === undefined || v === null || v === "" || isNaN(Number(v))) return null;
+      suma += Number(v) * (corte.notas[n].porcentaje / 100);
+    }
+    return suma;
+  }
+
+  async function cargarPeriodo() {
+    const miCarga = ++cargaId;
+    const contador = document.getElementById("contador");
+    contador.textContent = "Cargando estudiantes, asistencia y notas...";
+    document.getElementById("tabla").innerHTML = "";
+    document.getElementById("chips").innerHTML = "";
+
+    const clavePeriodo = document.getElementById("f-periodo").value;
+    const clases = todasLasClases.filter((c) => `${c.anio}-${c.periodo}-${c.ciclo}` === clavePeriodo);
+
+    const grupos = {};
+    clases.forEach((c) => {
+      const k = c.grupoDistanciaId || c.id;
+      (grupos[k] = grupos[k] || []).push(c);
+    });
+
+    const cacheProgramas = {};
+    const idsProgramas = [...new Set(clases.map((c) => c.programaId).filter(Boolean))];
+    await Promise.all(idsProgramas.map(async (pid) => {
+      try {
+        const s = await getDoc(doc(db, "programas", pid));
+        cacheProgramas[pid] = s.exists() ? s.data() : null;
+      } catch (e) { cacheProgramas[pid] = null; }
+    }));
+
+    const resultado = [];
+    try {
+      await Promise.all(Object.values(grupos).map(async (grupo) => {
+        grupo.sort((a, b) => (a.id < b.id ? -1 : 1));
+        const ancla = grupo[0].id;
+        const esDistancia = (grupo[0].programaNombre || "").toLowerCase().includes("distancia");
+
+        const [estudiantesTodos, snapSesiones] = await Promise.all([
+          cargarEstudiantesDeClases(grupo, rol, perfil),
+          getDocs(collection(db, "clases", ancla, "sesiones"))
+        ]);
+        const estudiantes = estudiantesTodos.filter((e) => e.estado !== "movido");
+        if (estudiantes.length === 0) return;
+
+        const horas = {};
+        const speakingHechas = {};
+        let totalSpeaking = 0;
+        snapSesiones.forEach((d) => {
+          const s = d.data();
+          if (s.festivo) return;
+          if (s.speaking) {
+            totalSpeaking++;
+            Object.entries(s.speakingRealizada || {}).forEach(([ced, ok]) => { if (ok) speakingHechas[ced] = (speakingHechas[ced] || 0) + 1; });
+          }
+          const bloqueMin = s.bloqueMin || 60;
+          Object.entries(s.ausencias || {}).forEach(([ced, marcados]) => {
+            horas[ced] = (horas[ced] || 0) + (marcados || []).filter(Boolean).length * bloqueMin / 60;
+          });
+        });
+
+        const notasDocs = await Promise.all(estudiantes.map((e) => getDoc(doc(db, "notas", `${e.claseId}_${e.cedula}`))));
+
+        estudiantes.forEach((e, i) => {
+          const clase = grupo.find((c) => c.id === e.claseId) || grupo[0];
+          const programa = cacheProgramas[clase.programaId] || null;
+          const valores = notasDocs[i].exists() ? (notasDocs[i].data().valores || {}) : {};
+          const llenas = Object.values(valores).filter((v) => v !== undefined && v !== null && v !== "").length;
+
+          let cortesCompletos = 0, totalCortes = 0, notaFinal = null;
+          if (programa && programa.cortes) {
+            totalCortes = programa.cortes.length;
+            let total = 0, completo = true;
+            programa.cortes.forEach((corte, ci) => {
+              const p = promedioCorte(programa, valores, ci);
+              if (p === null) { completo = false; } else { cortesCompletos++; total += p * (corte.peso / 100); }
+            });
+            if (completo && totalCortes > 0) notaFinal = total;
+          }
+          const estadoNotas = llenas === 0 ? "sin" : (notaFinal === null ? "parcial" : "completo");
+
+          resultado.push({
+            id: e.id, cedula: e.cedula, nombre: e.nombre, apellido: e.apellido,
+            claseId: clase.id, nivel: clase.nivel, grupo: clase.grupo,
+            claseTexto: `${clase.nivel} - ${clase.grupo}`,
+            profesor: clase.docenteNombre || "—",
+            ciudadId: clase.ciudadId, sede: clase.ciudadNombre || "—",
+            programa: clase.programaNombre || "—",
+            esDistancia, totalSpeaking, speaking: speakingHechas[e.cedula] || 0,
+            horas: horas[e.cedula] || 0,
+            llenas, cortesCompletos, totalCortes, notaFinal, estadoNotas
+          });
+        });
+      }));
+    } catch (error) {
+      console.error(error);
+      if (miCarga !== cargaId) return;
+      contador.innerHTML = `<span style="color:var(--error);">No se pudo cargar el reporte (${escapar(error.code || error.message)}).</span>`;
+      return;
+    }
+    if (miCarga !== cargaId) return; // llegó una carga más reciente
+    filas = resultado.sort((a, b) => (a.apellido || "").localeCompare(b.apellido || "") || (a.nombre || "").localeCompare(b.nombre || ""));
+    pintar();
+  }
+
+  // ───────── Pintado ─────────
+  function filasFiltradas() {
+    const sede = document.getElementById("f-sede").value;
+    const programa = document.getElementById("f-programa").value;
+    const claseId = document.getElementById("f-clase").value;
+    const texto = normalizar(document.getElementById("f-texto").value);
+    const uAlerta = Number(document.getElementById("u-alerta").value) || 2;
+    const uPerdida = Number(document.getElementById("u-perdida").value) || 6;
+
+    return filas.filter((f) => {
+      if (sede && f.ciudadId !== sede) return false;
+      if (programa && f.programa !== programa) return false;
+      if (claseId && f.claseId !== claseId) return false;
+      if (texto && !(normalizar(`${f.apellido} ${f.nombre}`).includes(texto) || normalizar(`${f.nombre} ${f.apellido}`).includes(texto) || String(f.cedula).includes(texto))) return false;
+      if (pestana === "asistencia") {
+        if (chipActivo === "alerta" && !(f.horas >= uAlerta && f.horas < uPerdida)) return false;
+        if (chipActivo === "perdida" && !(f.horas >= uPerdida)) return false;
+        if (chipActivo === "con" && !(f.horas > 0)) return false;
+      } else {
+        if (chipActivo !== "todos" && f.estadoNotas !== chipActivo) return false;
+      }
+      return true;
+    });
+  }
+
+  function pintarChips(base) {
+    const uAlerta = Number(document.getElementById("u-alerta").value) || 2;
+    const uPerdida = Number(document.getElementById("u-perdida").value) || 6;
+    const cuenta = (fn) => base.filter(fn).length;
+    const chips = pestana === "asistencia"
+      ? [["todos", `Todos (${base.length})`],
+         ["con", `Con inasistencias (${cuenta((f) => f.horas > 0)})`],
+         ["alerta", `En alerta (${cuenta((f) => f.horas >= uAlerta && f.horas < uPerdida)})`],
+         ["perdida", `En pérdida (${cuenta((f) => f.horas >= uPerdida)})`]]
+      : [["todos", `Todos (${base.length})`],
+         ["sin", `Sin notas (${cuenta((f) => f.estadoNotas === "sin")})`],
+         ["parcial", `Con notas parciales (${cuenta((f) => f.estadoNotas === "parcial")})`],
+         ["completo", `Notas completas (${cuenta((f) => f.estadoNotas === "completo")})`]];
+    const caja = document.getElementById("chips");
+    caja.innerHTML = "";
+    chips.forEach(([clave, texto]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip" + (clave === chipActivo ? " activo" : "");
+      b.textContent = texto;
+      b.addEventListener("click", () => { chipActivo = clave; pintar(); });
+      caja.appendChild(b);
+    });
+  }
+
+  let encabezadoActual = [];
+  let cuerpoActual = [];
+
+  function pintar() {
+    // Los chips cuentan sobre lo filtrado por sede/programa/clase/búsqueda, sin el chip.
+    const guardado = chipActivo;
+    chipActivo = "todos";
+    const base = filasFiltradas();
+    chipActivo = guardado;
+    pintarChips(base);
+
+    const lista = filasFiltradas();
+    const uAlerta = Number(document.getElementById("u-alerta").value) || 2;
+    const uPerdida = Number(document.getElementById("u-perdida").value) || 6;
+    document.getElementById("contador").textContent = `${lista.length} estudiante(s) de ${filas.length} en el período.`;
+
+    const hayDistancia = lista.some((f) => f.esDistancia);
+    let encabezado, cuerpo;
+
+    if (pestana === "asistencia") {
+      encabezado = ["No.", "Estudiante", "Cédula", "Clase", "Profesor", "Sede", "Programa", "Horas de inasistencia", "Estado"];
+      if (hayDistancia) encabezado.splice(8, 0, "Speaking realizadas");
+      cuerpo = lista.map((f, i) => {
+        const estado = f.horas >= uPerdida ? ["perdida", "Pérdida"] : (f.horas >= uAlerta ? ["alerta", "Alerta"] : ["ok", "Al día"]);
+        const fila = [i + 1, `${f.apellido} ${f.nombre}`, f.cedula, f.claseTexto, f.profesor, f.sede, f.programa, f.horas.toFixed(2)];
+        if (hayDistancia) fila.push(f.esDistancia ? `${f.speaking} de ${f.totalSpeaking}` : "—");
+        fila.push({ estado: estado[0], texto: estado[1] });
+        return fila;
+      });
+    } else {
+      encabezado = ["No.", "Estudiante", "Cédula", "Clase", "Profesor", "Sede", "Programa", "Cortes con nota", "Nota final", "Estado"];
+      cuerpo = lista.map((f, i) => {
+        const estado = f.estadoNotas === "sin" ? ["sin", "Sin notas"] : (f.estadoNotas === "parcial" ? ["alerta", "Parcial"] : ["ok", "Completo"]);
+        return [i + 1, `${f.apellido} ${f.nombre}`, f.cedula, f.claseTexto, f.profesor, f.sede, f.programa,
+          f.totalCortes ? `${f.cortesCompletos} de ${f.totalCortes}` : "—",
+          f.notaFinal === null ? "—" : f.notaFinal.toFixed(2),
+          { estado: estado[0], texto: estado[1] }];
+      });
+    }
+
+    encabezadoActual = encabezado;
+    cuerpoActual = cuerpo;
+
+    const tabla = document.getElementById("tabla");
+    tabla.innerHTML = `<thead><tr>${encabezado.map((h) => `<th>${escapar(h)}</th>`).join("")}</tr></thead>`;
+    const tbody = document.createElement("tbody");
+    cuerpo.forEach((fila) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = fila.map((c, idx) => {
+        if (c && typeof c === "object") return `<td><span class="estado ${c.estado}">${escapar(c.texto)}</span></td>`;
+        const numerica = encabezado[idx] === "No." || /horas|cortes|nota final|speaking/i.test(encabezado[idx]);
+        return `<td${numerica ? ' class="num"' : ""}>${escapar(c)}</td>`;
+      }).join("");
+      tbody.appendChild(tr);
+    });
+    tabla.appendChild(tbody);
+
+    document.getElementById("zona-umbrales").style.display = pestana === "asistencia" ? "flex" : "none";
+  }
+
+  function descargarCSV() {
+    const celda = (c) => {
+      const texto = (c && typeof c === "object") ? c.texto : c;
+      return `"${String(texto ?? "").replace(/"/g, '""')}"`;
+    };
+    const lineas = [encabezadoActual.map(celda).join(",")].concat(cuerpoActual.map((f) => f.map(celda).join(",")));
+    const blob = new Blob(["﻿" + lineas.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `reporte-sede-${pestana}-${document.getElementById("f-periodo").value}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function cambiarPestana(nueva) {
+    pestana = nueva;
+    chipActivo = "todos";
+    document.getElementById("tab-asistencia").classList.toggle("activa", nueva === "asistencia");
+    document.getElementById("tab-notas").classList.toggle("activa", nueva === "notas");
+    pintar();
+  }
+
+  document.getElementById("tab-asistencia").addEventListener("click", () => cambiarPestana("asistencia"));
+  document.getElementById("tab-notas").addEventListener("click", () => cambiarPestana("notas"));
+  document.getElementById("boton-csv").addEventListener("click", descargarCSV);
+  document.getElementById("f-periodo").addEventListener("change", async () => { poblarProgramasYClases(); await cargarPeriodo(); });
+  ["f-sede", "f-programa", "f-clase"].forEach((id) => document.getElementById(id).addEventListener("change", pintar));
+  document.getElementById("f-texto").addEventListener("input", pintar);
+  ["u-alerta", "u-perdida"].forEach((id) => document.getElementById(id).addEventListener("input", pintar));
+
+  await cargarClases();
+  if (todasLasClases.length === 0) {
+    document.getElementById("contador").textContent = "No hay clases en tu sede todavía.";
+  } else {
+    await Promise.all([poblarPeriodos(), poblarSedes()]);
+    poblarProgramasYClases();
+    await cargarPeriodo();
+  }
+</script>
+</body>
+</html>

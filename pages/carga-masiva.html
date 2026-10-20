@@ -115,7 +115,7 @@
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
-  import { datosDirectorio } from "../js/matricula.js?v=1";
+  import { datosDirectorio, moverEstudiante } from "../js/matricula.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, doc, setDoc, addDoc, deleteField, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -600,20 +600,36 @@ Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo`;
       }
 
       try {
+        // Si ya está matriculado/a en OTRA clase del mismo período, se mueve (no se duplica).
+        let movidoDe = null;
+        try {
+          const prev = await getDocs(query(collection(db, "estudiantes"),
+            where("cedula", "==", cedula), where("ciudadId", "==", clase.ciudadId)));
+          const previos = prev.docs.map((d) => ({ id: d.id, ...d.data() })).filter((e) =>
+            e.estado !== "movido" && e.claseId !== clase.id &&
+            e.anio === clase.anio && e.periodo === clase.periodo && e.ciclo === clase.ciclo &&
+            !(clase.grupoDistanciaId && e.claseId && clases.some((c) => c.id === e.claseId && c.grupoDistanciaId === clase.grupoDistanciaId)));
+          if (previos.length) {
+            await moverEstudiante({ est: previos[0], destino: clase, usuario, rol });
+            movidoDe = previos[0].claseTexto || previos[0].claseId;
+          }
+        } catch (e) { console.warn("No se pudo revisar/mover matrícula previa:", e); }
         await setDoc(doc(db, "estudiantes", `${clase.id}_${cedula}`), {
           nombre, apellido, cedula, correo,
           claseId: clase.id,
           claseTexto: `${clase.nivel} - ${clase.grupo} (${clase.anio}-${clase.periodo}, ciclo ${clase.ciclo})`,
           anio: clase.anio, periodo: clase.periodo, ciclo: clase.ciclo,
           ciudadId: clase.ciudadId, ciudadNombre: clase.ciudadNombre
-        });
+        }, { merge: true });
         // Directorio mínimo para que los profesores puedan buscar al estudiante por cédula.
         try {
           await setDoc(doc(db, "directorio_estudiantes", cedula),
             { ...datosDirectorio({ nombre, apellido, cedula, ciudadId: clase.ciudadId, ciudadNombre: clase.ciudadNombre }, clase, `${clase.id}_${cedula}`), correo: deleteField() },
             { merge: true });
         } catch (e) { console.warn("No se pudo actualizar el directorio:", e); }
-        resultados.push({ ok: true, texto: `${nombre} ${apellido} (${cedula}): matriculado en ${clase.nivel} - ${clase.grupo}.` });
+        resultados.push({ ok: true, texto: movidoDe
+          ? `${nombre} ${apellido} (${cedula}): movido/a de ${movidoDe} a ${clase.nivel} - ${clase.grupo} (no se duplicó).`
+          : `${nombre} ${apellido} (${cedula}): matriculado en ${clase.nivel} - ${clase.grupo}.` });
         exitosos++;
       } catch (e) {
         resultados.push({ ok: false, texto: `${nombre} ${apellido} (${cedula}): error al guardar — ${e.message}` });
