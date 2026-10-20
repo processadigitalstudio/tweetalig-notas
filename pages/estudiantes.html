@@ -186,7 +186,7 @@
     try {
       const destinos = await cargarDestinos(est, rol, perfil);
       if (destinos.length === 0) {
-        filaMover.innerHTML = `<td colspan="8">No hay otras clases del mismo programa y período${(rol === "coordinador" || rol === "secretaria") ? " en tus sedes" : ""} a las que moverlo.</td>`;
+        filaMover.innerHTML = `<td colspan="8">No hay otras clases del mismo año y período${(rol === "coordinador" || rol === "secretaria") ? " en tus sedes" : ""} a las que moverlo.</td>`;
         return;
       }
       filaMover.innerHTML = `<td colspan="8">

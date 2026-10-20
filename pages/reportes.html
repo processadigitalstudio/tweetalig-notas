@@ -202,7 +202,7 @@
         const est = { id: snapEst.id, ...snapEst.data() };
         const destinos = await cargarDestinos(est, rol, perfil);
         if (destinos.length === 0) {
-          zona.innerHTML = `No hay otras clases del mismo programa y período${esCoordinacion ? " en tus sedes" : ""} a las que moverlo.`;
+          zona.innerHTML = `No hay otras clases del mismo año y período${esCoordinacion ? " en tus sedes" : ""} a las que moverlo.`;
           return;
         }
         zona.innerHTML = `

@@ -251,8 +251,9 @@ function misSedesDe(perfil) {
   return perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
 }
 
-// Clases a las que se puede mover un estudiante: mismo período y mismo
-// programa, distintas a la actual; coordinación solo ve las de sus sedes.
+// Clases a las que se puede mover un estudiante: cualquier nivel o grupo del
+// mismo año y período (también de otro ciclo o programa; la etiqueta lo dice),
+// distintas a la actual. Coordinación solo ve las de sus sedes.
 export async function cargarDestinos(est, rol, perfil) {
   const snapOrigen = await getDoc(doc(db, "clases", est.claseId));
   if (!snapOrigen.exists()) throw new Error("La clase de origen ya no existe.");
@@ -261,9 +262,7 @@ export async function cargarDestinos(est, rol, perfil) {
   const q = query(
     collection(db, "clases"),
     where("anio", "==", origen.anio),
-    where("periodo", "==", origen.periodo),
-    where("ciclo", "==", origen.ciclo),
-    where("programaId", "==", origen.programaId)
+    where("periodo", "==", origen.periodo)
   );
   const snap = await getDocs(q);
   let destinos = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((c) => c.id !== est.claseId);
@@ -274,14 +273,14 @@ export async function cargarDestinos(est, rol, perfil) {
   }
   destinos.sort((a, b) =>
     (a.ciudadNombre || "").localeCompare(b.ciudadNombre || "") ||
-    (a.nivel || "").localeCompare(b.nivel || "") ||
+    (a.nivel || "").localeCompare(b.nivel || "", "es", { numeric: true }) ||
     (a.grupo || "").localeCompare(b.grupo || "")
   );
   return destinos;
 }
 
 export function etiquetaDestino(c) {
-  return `${c.nivel} - ${c.grupo} · ${c.ciudadNombre || "—"} · ${c.docenteNombre || "sin profesor"}`;
+  return `${c.nivel} - ${c.grupo} · ${c.ciudadNombre || "—"} · ciclo ${c.ciclo}${c.programaNombre ? ` · ${c.programaNombre}` : ""} · ${c.docenteNombre || "sin profesor"}`;
 }
 
 export async function moverEstudiante({ est, destino, usuario, rol, reporteId = null }) {
