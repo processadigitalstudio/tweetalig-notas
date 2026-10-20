@@ -251,6 +251,22 @@ function misSedesDe(perfil) {
   return perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
 }
 
+// Carga los estudiantes de una o varias clases. Para coordinación/secretaria la
+// consulta DEBE llevar la sede de la clase (así Firestore puede comprobar que solo
+// lee estudiantes de sus sedes) y solo se piden las clases de sus sedes.
+export async function cargarEstudiantesDeClases(clases, rol, perfil) {
+  const esCoord = rol === "coordinador" || rol === "secretaria";
+  const sedes = misSedesDe(perfil);
+  const visibles = esCoord ? clases.filter((c) => sedes.includes(c.ciudadId)) : clases;
+  const snaps = await Promise.all(visibles.map((c) => getDocs(esCoord
+    ? query(collection(db, "estudiantes"), where("claseId", "==", c.id), where("ciudadId", "==", c.ciudadId))
+    : query(collection(db, "estudiantes"), where("claseId", "==", c.id))
+  )));
+  const lista = [];
+  snaps.forEach((sn) => sn.forEach((d) => lista.push({ id: d.id, ...d.data() })));
+  return lista;
+}
+
 // Clases a las que se puede mover un estudiante: cualquier nivel o grupo del
 // mismo año y período (también de otro ciclo o programa; la etiqueta lo dice),
 // distintas a la actual. Coordinación solo ve las de sus sedes.

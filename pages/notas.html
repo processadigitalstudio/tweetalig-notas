@@ -73,7 +73,7 @@
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, getDoc, doc, setDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-  import { badgeReporte, separarMovidos, montarPanelProfesor } from "../js/matricula.js?v=1";
+  import { badgeReporte, separarMovidos, montarPanelProfesor, cargarEstudiantesDeClases } from "../js/matricula.js?v=1";
 
   const { usuario, rol, perfil } = await requireAuth(["profesor", "master", "admin", "coordinador", "secretaria"]);
 
@@ -123,6 +123,15 @@
     }
     const snapProf = await getDocs(qProfesores);
     let profesores = snapProf.docs;
+    // Profesores creados con el formato antiguo (una sola sede) también deben aparecer.
+    if ((rol === "coordinador" || rol === "secretaria") && misSedesN.length > 0) {
+      try {
+        const snapViejos = await getDocs(query(collection(db, "usuarios"), where("rol", "==", "profesor"), where("ciudadId", "in", misSedesN)));
+        const ya = new Set(profesores.map((d) => d.id));
+        snapViejos.docs.forEach((d) => { if (!ya.has(d.id)) profesores.push(d); });
+        profesores.sort((a, b) => (a.data().nombre || "").localeCompare(b.data().nombre || ""));
+      } catch (e) { console.warn("No se pudieron leer profesores del formato antiguo:", e); }
+    }
 
     selectProf.innerHTML = "";
     profesores.forEach((d) => {
@@ -224,14 +233,7 @@
       }
       programaActual = snapPrograma.data();
 
-      const idsClases = grupo.clases.map((c) => c.id);
-      let estudiantes = [];
-      for (let i = 0; i < idsClases.length; i += 10) {
-        const lote = idsClases.slice(i, i + 10);
-        const q = query(collection(db, "estudiantes"), where("claseId", "in", lote));
-        const snap = await getDocs(q);
-        snap.forEach((d) => estudiantes.push({ id: d.id, ...d.data() }));
-      }
+      let estudiantes = await cargarEstudiantesDeClases(grupo.clases, rol, perfil);
       estudiantes.sort((a, b) => (a.apellido || "").localeCompare(b.apellido || ""));
       const separados = separarMovidos(estudiantes);
       estudiantesActuales = separados.activos;

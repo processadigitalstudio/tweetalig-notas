@@ -274,7 +274,10 @@ Tweetalig Centro de Idiomas`;
         const programa = cachePrograma[clase.programaId];
         if (!programa) return;
 
-        const snapEstTodos = await getDocs(query(collection(db, "estudiantes"), where("claseId", "==", clase.id)));
+        // Coordinación debe pedir los estudiantes con la sede de la clase para que Firestore la autorice.
+        const snapEstTodos = await getDocs((rol === "coordinador" || rol === "secretaria")
+          ? query(collection(db, "estudiantes"), where("claseId", "==", clase.id), where("ciudadId", "==", clase.ciudadId))
+          : query(collection(db, "estudiantes"), where("claseId", "==", clase.id)));
         // Los estudiantes movidos a otra clase ya no cuentan en esta.
         const docsEst = snapEstTodos.docs.filter((dEst) => dEst.data().estado !== "movido");
         if (docsEst.length === 0) return;

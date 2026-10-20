@@ -115,6 +115,7 @@
 
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
+  import { cargarEstudiantesDeClases } from "../js/matricula.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, getDoc, doc, setDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -259,17 +260,12 @@ Tweetalig Centro de Idiomas`;
         grupo.sort((a, b) => (a.id < b.id ? -1 : 1));
         const claseAncla = grupo[0].id;
 
-        const idsClases = grupo.map((c) => c.id);
-        const lotes = [];
-        for (let i = 0; i < idsClases.length; i += 10) lotes.push(idsClases.slice(i, i + 10));
-
-        const [resultadosEst, snapSesiones] = await Promise.all([
-          Promise.all(lotes.map((lote) => getDocs(query(collection(db, "estudiantes"), where("claseId", "in", lote))))),
+        const [listaEst, snapSesiones] = await Promise.all([
+          cargarEstudiantesDeClases(grupo, rol, perfil),
           getDocs(collection(db, "clases", claseAncla, "sesiones"))
         ]);
 
-        const estudiantes = [];
-        resultadosEst.forEach((snap) => snap.forEach((d) => { if (d.data().estado !== "movido") estudiantes.push(d.data()); }));
+        const estudiantes = listaEst.filter((e) => e.estado !== "movido");
         if (estudiantes.length === 0) return;
 
         const horasTotales = {};
