@@ -19,6 +19,9 @@
   .pastilla-fecha.activa { background: var(--azul-profundo); color: #fff; border-color: var(--azul-profundo); }
   .pastilla-fecha.activa .dia-semana { color: #cfe0ea; }
   .pastilla-fecha.es-festivo { background: var(--oro-suave); border-color: var(--oro); }
+  .pastilla-fecha.es-speaking { background: #e6e0f3; border-color: #9575cd; }
+  .pastilla-fecha.es-speaking.activa { background: #9575cd; color: #fff; border-color: #9575cd; }
+  .pastilla-fecha .etiqueta-speaking { display:block; font-size: 10px; font-weight:600; }
   .pastilla-fecha.es-festivo.activa { background: var(--oro); color: var(--tinta); border-color: var(--oro); }
 
   .info-bloques { font-size: 13px; color: var(--tinta-suave); margin-bottom: 14px; }
@@ -366,8 +369,9 @@
       const btn = document.createElement("button");
       btn.className = "pastilla-fecha" +
         (fechaTexto === fechaActivaTexto ? " activa" : "") +
-        (guardada?.festivo ? " es-festivo" : "");
-      btn.innerHTML = `<span class="dia-semana">${DIAS_CORTOS[s.fecha.getDay()]}</span>${s.fecha.getDate()}/${s.fecha.getMonth() + 1}`;
+        (guardada?.festivo ? " es-festivo" : "") +
+        (guardada?.speaking && !guardada?.festivo ? " es-speaking" : "");
+      btn.innerHTML = `<span class="dia-semana">${DIAS_CORTOS[s.fecha.getDay()]}</span>${s.fecha.getDate()}/${s.fecha.getMonth() + 1}${guardada?.speaking && !guardada?.festivo ? '<span class="etiqueta-speaking">🎤 Speaking</span>' : ""}`;
       btn.addEventListener("click", () => {
         fechaActivaTexto = fechaTexto;
         pintarFechas();
@@ -412,6 +416,7 @@
     const numBloques = sesionInfo?.numBloques || 1;
     const bloqueMin = sesionInfo?.bloqueMin || 60;
     const guardada = sesionesGuardadas[fechaActivaTexto] || { festivo: false, ausencias: {} };
+    const permiteSpeaking = !!grupoActual.esDistancia;
 
     cuerpo.innerHTML = `
       <p class="info-bloques">${numBloques} bloque(s) de ${bloqueMin} min ese día.</p>
@@ -419,10 +424,15 @@
         <input type="checkbox" id="chk-festivo" ${guardada.festivo ? "checked" : ""} ${edicionDesbloqueada ? "" : "disabled"}>
         Marcar este día como festivo (no hay clase / no se toma asistencia)
       </label>
+      ${permiteSpeaking ? `<label class="toggle-festivo">
+        <input type="checkbox" id="chk-speaking" ${guardada.speaking ? "checked" : ""} ${edicionDesbloqueada ? "" : "disabled"}>
+        🎤 Esta es una Speaking session (marca quién la realizó)
+      </label>` : ""}
       <div id="zona-estudiantes"></div>
     `;
 
     const chkFestivo = document.getElementById("chk-festivo");
+    const chkSpeaking = document.getElementById("chk-speaking");
     const zona = document.getElementById("zona-estudiantes");
 
     function pintarTablaEstudiantes() {
@@ -432,7 +442,10 @@
       tabla.className = "tabla-asistencia";
       let theadHtml = `<tr><th>No.</th><th>ID</th><th>Estudiante</th>`;
       for (let b = 1; b <= numBloques; b++) theadHtml += `<th>Bloque ${b}</th>`;
-      theadHtml += `<th>Horas ausente</th></tr>`;
+      theadHtml += `<th>Horas ausente</th>`;
+      const hayColSpeaking = !!(chkSpeaking && chkSpeaking.checked);
+      if (hayColSpeaking) theadHtml += `<th>🎤 Realizó Speaking</th>`;
+      theadHtml += `</tr>`;
       tabla.innerHTML = `<thead>${theadHtml}</thead><tbody></tbody>`;
       const tbody = tabla.querySelector("tbody");
 
@@ -443,6 +456,9 @@
           celdas += `<td class="celda-bloque"><input type="checkbox" class="chk-bloque" data-cedula="${est.cedula}" data-bloque="${b}" ${marcados[b] ? "checked" : ""} ${edicionDesbloqueada ? "" : "disabled"}></td>`;
         }
         celdas += `<td class="col-horas" id="horas-${est.cedula}">${((marcados.filter(Boolean).length) * bloqueMin / 60).toFixed(2)}</td>`;
+        if (hayColSpeaking) {
+          celdas += `<td class="celda-bloque"><input type="checkbox" class="chk-speaking-realizada" data-cedula="${est.cedula}" ${guardada.speakingRealizada?.[est.cedula] ? "checked" : ""} ${edicionDesbloqueada ? "" : "disabled"}></td>`;
+        }
         const fila = document.createElement("tr");
         fila.innerHTML = celdas;
         tbody.appendChild(fila);
@@ -450,6 +466,13 @@
 
       zona.innerHTML = "";
       zona.appendChild(tabla);
+
+      tabla.querySelectorAll(".chk-speaking-realizada").forEach((chk) => {
+        chk.addEventListener("change", () => {
+          if (!guardada.speakingRealizada) guardada.speakingRealizada = {};
+          guardada.speakingRealizada[chk.dataset.cedula] = chk.checked;
+        });
+      });
 
       tabla.querySelectorAll(".chk-bloque").forEach((chk) => {
         chk.addEventListener("change", () => {
@@ -465,6 +488,10 @@
     }
 
     chkFestivo.addEventListener("change", pintarTablaEstudiantes);
+    if (chkSpeaking) chkSpeaking.addEventListener("change", () => {
+      guardada.speaking = chkSpeaking.checked;
+      pintarTablaEstudiantes();
+    });
     pintarTablaEstudiantes();
 
     const botonGuardar = document.createElement("button");
@@ -474,14 +501,18 @@
     botonGuardar.addEventListener("click", async () => {
       const aviso = document.getElementById("aviso-asistencia");
       aviso.textContent = "Guardando...";
+      const esSpeaking = !!(chkSpeaking && chkSpeaking.checked) && !chkFestivo.checked;
+      const speakingRealizadas = Object.fromEntries(Object.entries(guardada.speakingRealizada || {}).filter(([, v]) => v));
       try {
         await setDoc(doc(db, "clases", grupoActual.claseAncla, "sesiones", fechaActivaTexto), {
           fecha: fechaActivaTexto,
           festivo: chkFestivo.checked,
           numBloques, bloqueMin,
-          ausencias: chkFestivo.checked ? {} : (guardada.ausencias || {})
+          ausencias: chkFestivo.checked ? {} : (guardada.ausencias || {}),
+          speaking: esSpeaking,
+          speakingRealizada: esSpeaking ? speakingRealizadas : {}
         });
-        sesionesGuardadas[fechaActivaTexto] = { fecha: fechaActivaTexto, festivo: chkFestivo.checked, numBloques, bloqueMin, ausencias: guardada.ausencias || {} };
+        sesionesGuardadas[fechaActivaTexto] = { fecha: fechaActivaTexto, festivo: chkFestivo.checked, numBloques, bloqueMin, ausencias: guardada.ausencias || {}, speaking: esSpeaking, speakingRealizada: esSpeaking ? speakingRealizadas : {} };
         await registrarLog(usuario, rol, "Guardó asistencia", `${fechaActivaTexto} — ${grupoActual.etiqueta}`);
         pintarFechas();
         pintarDia();
@@ -510,9 +541,18 @@
     if (!cuerpo) return;
     const horasTotales = {};
     estudiantesActuales.forEach((est, idx) => { horasTotales[est.cedula] = 0; });
+    const speakingHechas = {};
+    let totalSpeaking = 0;
+    const muestraSpeaking = !!grupoActual.esDistancia;
 
     Object.values(sesionesGuardadas).forEach((sesion) => {
       if (sesion.festivo) return;
+      if (sesion.speaking) {
+        totalSpeaking++;
+        Object.entries(sesion.speakingRealizada || {}).forEach(([cedula, hecho]) => {
+          if (hecho) speakingHechas[cedula] = (speakingHechas[cedula] || 0) + 1;
+        });
+      }
       const bloqueMin = sesion.bloqueMin || 60;
       Object.entries(sesion.ausencias || {}).forEach(([cedula, marcados]) => {
         if (horasTotales[cedula] === undefined) horasTotales[cedula] = 0;
@@ -523,14 +563,14 @@
 
     const tabla = document.createElement("table");
     tabla.className = "tabla-asistencia";
-    tabla.innerHTML = `<thead><tr><th>No.</th><th>ID</th><th>Estudiante</th><th>Horas de inasistencia</th></tr></thead><tbody></tbody>`;
+    tabla.innerHTML = `<thead><tr><th>No.</th><th>ID</th><th>Estudiante</th><th>Horas de inasistencia</th>${muestraSpeaking ? `<th>🎤 Speaking realizadas (de ${totalSpeaking})</th>` : ""}</tr></thead><tbody></tbody>`;
     const tbody = tabla.querySelector("tbody");
 
     estudiantesActuales.forEach((est, idx) => {
       const horas = horasTotales[est.cedula] || 0;
       const alerta = horas >= 2 ? ` style="color:var(--error); font-weight:600;"` : "";
       const fila = document.createElement("tr");
-      fila.innerHTML = `<td>${idx + 1}</td><td>${est.cedula}</td><td>${est.apellido} ${est.nombre}${badgeReporte(est)}</td><td${alerta}>${horas.toFixed(2)}${horas >= 2 ? " ⚠" : ""}</td>`;
+      fila.innerHTML = `<td>${idx + 1}</td><td>${est.cedula}</td><td>${est.apellido} ${est.nombre}${badgeReporte(est)}</td><td${alerta}>${horas.toFixed(2)}${horas >= 2 ? " ⚠" : ""}</td>${muestraSpeaking ? `<td>${speakingHechas[est.cedula] || 0}</td>` : ""}`;
       tbody.appendChild(fila);
     });
 
@@ -539,7 +579,7 @@
       const horas = horasTotales[est.cedula] || 0;
       const fila = document.createElement("tr");
       fila.style.cssText = "opacity:0.55;";
-      fila.innerHTML = `<td>—</td><td>${est.cedula}</td><td>${est.apellido} ${est.nombre} <span style="font-size:11px;">(movido a ${est.movidoATexto || "otra clase"})</span></td><td>${horas.toFixed(2)}</td>`;
+      fila.innerHTML = `<td>—</td><td>${est.cedula}</td><td>${est.apellido} ${est.nombre} <span style="font-size:11px;">(movido a ${est.movidoATexto || "otra clase"})</span></td><td>${horas.toFixed(2)}</td>${muestraSpeaking ? `<td>${speakingHechas[est.cedula] || 0}</td>` : ""}`;
       tbody.appendChild(fila);
     });
 
