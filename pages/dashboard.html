@@ -62,10 +62,16 @@
       const sedesAviso = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
       const esCoord = (rol === "coordinador" || rol === "secretaria");
       if (!esCoord || sedesAviso.length > 0) {
-        const qRep = esCoord
-          ? query(collection(db, "reportes_estudiantes"), where("ciudadId", "in", sedesAviso), where("estado", "==", "pendiente"))
-          : query(collection(db, "reportes_estudiantes"), where("estado", "==", "pendiente"));
-        const snapRep = await getDocs(qRep);
+        const consultas = esCoord
+          ? [
+              query(collection(db, "reportes_estudiantes"), where("ciudadId", "in", sedesAviso), where("estado", "==", "pendiente")),
+              query(collection(db, "reportes_estudiantes"), where("ciudadOrigenId", "in", sedesAviso), where("estado", "==", "pendiente"))
+            ]
+          : [query(collection(db, "reportes_estudiantes"), where("estado", "==", "pendiente"))];
+        const snapsRep = await Promise.all(consultas.map((c) => getDocs(c)));
+        const idsRep = new Set();
+        snapsRep.forEach((sn) => sn.docs.forEach((d) => idsRep.add(d.id)));
+        const snapRep = { empty: idsRep.size === 0, size: idsRep.size };
         if (!snapRep.empty) {
           const aviso = document.createElement("a");
           aviso.href = "reportes.html";
