@@ -226,14 +226,17 @@
 
     try {
       const programaId = grupo.clases[0].programaId;
-      const snapPrograma = await getDoc(doc(db, "programas", programaId));
+      const [snapPrograma, estudiantesCargados] = await Promise.all([
+        getDoc(doc(db, "programas", programaId)),
+        cargarEstudiantesDeClases(grupo.clases, rol, perfil)
+      ]);
       if (!snapPrograma.exists()) {
         contenedor.innerHTML = "<p style='color:var(--error);'>Esta clase no tiene un programa de notas configurado.</p>";
         return;
       }
       programaActual = snapPrograma.data();
 
-      let estudiantes = await cargarEstudiantesDeClases(grupo.clases, rol, perfil);
+      let estudiantes = estudiantesCargados;
       estudiantes.sort((a, b) => (a.apellido || "").localeCompare(b.apellido || ""));
       const separados = separarMovidos(estudiantes);
       estudiantesActuales = separados.activos;
@@ -260,11 +263,11 @@
       }
 
       notasGuardadas = {};
-      for (const est of [...estudiantes, ...estudiantesMovidos]) {
-        const idNota = `${est.claseId}_${est.cedula}`;
-        const snapNota = await getDoc(doc(db, "notas", idNota));
-        notasGuardadas[est.cedula] = snapNota.exists() ? snapNota.data().valores || {} : {};
-      }
+      const todos = [...estudiantes, ...estudiantesMovidos];
+      const snapsNotas = await Promise.all(todos.map((est) => getDoc(doc(db, "notas", `${est.claseId}_${est.cedula}`))));
+      todos.forEach((est, i) => {
+        notasGuardadas[est.cedula] = snapsNotas[i].exists() ? snapsNotas[i].data().valores || {} : {};
+      });
 
       corteActivoIndex = 0;
       pintarPestanas();
