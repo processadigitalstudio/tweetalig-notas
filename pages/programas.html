@@ -93,13 +93,15 @@
         </div>
       </div>
 
-      <label for="nombre-programa">Tipo de programa</label>
-      <select id="nombre-programa" class="campo-nombre-programa">
-        <option value="Presencial Semestral">Presencial Semestral</option>
-        <option value="Distancia Semestral">Distancia Semestral</option>
-        <option value="Intensivo Presencial">Intensivo Presencial</option>
-        <option value="Intensivo Distancia">Intensivo Distancia</option>
-      </select>
+      <label for="nombre-programa">Nombre del programa</label>
+      <input type="text" id="nombre-programa" class="campo-nombre-programa" list="sugerencias-programa" placeholder="Escribe el nombre o elige uno sugerido" autocomplete="off">
+      <datalist id="sugerencias-programa">
+        <option value="Presencial Semestral">
+        <option value="Distancia Semestral">
+        <option value="Intensivo Presencial">
+        <option value="Intensivo Distancia">
+      </datalist>
+      <p class="ts" style="font-size: 12px; color: var(--tinta-suave); margin-top: 4px;">Puedes inventar el nombre que quieras. Si el programa es a distancia, el nombre debe incluir la palabra <strong>Distancia</strong> (así el sistema activa las sesiones de Speaking y los grupos por sede).</p>
 
       <label>Sedes donde aplica</label>
       <div class="sedes-check" id="sedes-check"></div>
