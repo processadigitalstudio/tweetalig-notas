@@ -124,6 +124,12 @@ service cloud.firestore {
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fechaInicioClase']);
 
       match /sesiones/{fecha} {
+        // El visto bueno de asistencia docente solo lo cambia coordinación/admin/master:
+        // el profesor puede guardar su sesión pero no crear, cambiar ni quitar 'vobo'.
+        function voboIntacto() {
+          return request.resource.data.get('vobo', null) ==
+            (resource == null ? null : resource.data.get('vobo', null));
+        }
         allow read: if estaLogueado();
         allow write: if estaLogueado() && (
           esMaster() ||
@@ -131,7 +137,7 @@ service cloud.firestore {
             (
               esAdminOMaster() ||
               (miRol() in ['coordinador', 'secretaria'] && get(/databases/$(database)/documents/clases/$(claseId)).data.ciudadId in misSedes()) ||
-              (miRol() == 'profesor' && get(/databases/$(database)/documents/clases/$(claseId)).data.docenteCorreo == miCorreo())
+              (miRol() == 'profesor' && get(/databases/$(database)/documents/clases/$(claseId)).data.docenteCorreo == miCorreo() && voboIntacto())
             ) && periodoEstaActivo(get(/databases/$(database)/documents/clases/$(claseId)).data)
           )
         );

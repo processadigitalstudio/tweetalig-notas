@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tweetalig — Control de horas docentes</title>
+<link rel="stylesheet" href="../css/styles.css?v=2">
+<style>
+  .barra-filtros { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 16px; }
+  .campo-filtro { display: flex; flex-direction: column; gap: 4px; }
+  .campo-filtro label { font-size: 11.5px; font-weight: 500; color: var(--tinta-suave); text-transform: uppercase; letter-spacing: 0.02em; }
+  .campo-filtro input, .campo-filtro select { font-family: var(--fuente-cuerpo); font-size: 13px; padding: 8px 10px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
+  .tabla-horas { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tabla-horas th, .tabla-horas td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--linea); vertical-align: top; }
+  .tabla-horas th { color: var(--tinta-suave); font-weight: 500; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.02em; }
+  .tabla-horas td.num { text-align: center; white-space: nowrap; }
+  .contenedor-tabla { overflow-x: auto; max-width: 100%; }
+  .estado { font-size: 11.5px; font-weight: 600; padding: 2px 9px; border-radius: 10px; white-space: nowrap; }
+  .estado.ok { background: #e3f4ee; color: #2d6a58; border: 1px solid #5db69c; }
+  .estado.pend { background: #fbf0c9; color: #7a5d00; border: 1px solid #e6c14f; }
+  .estado.falta { background: #eceff3; color: #4a5766; border: 1px solid #a9b3c1; }
+  .resumen-total { font-size: 14px; margin: 12px 0; }
+  .boton-verde { font-family: var(--fuente-cuerpo); font-size: 13px; font-weight: 600; color: #fff; background: var(--verde-marca); border: none; border-radius: 7px; padding: 9px 16px; cursor: pointer; }
+  .boton-verde:disabled { opacity: .5; cursor: default; }
+  .boton-secundario { font-family: var(--fuente-cuerpo); font-size: 12.5px; font-weight: 500; color: var(--azul-profundo); background: none; border: 1px dashed var(--azul-profundo); border-radius: 6px; padding: 8px 12px; cursor: pointer; }
+  @media print { .app-nav, .barra-filtros, .acciones-pagina { display: none !important; } .app-contenido { padding: 0 !important; } }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <nav class="app-nav">
+    <div class="logo-nav-wrap"><img src="../assets/logo-tweetalig.png" alt="Tweetalig"></div>
+    <h1>Portal de notas</h1>
+    <div id="menu-rol"></div>
+    <a href="#" id="link-salir">Cerrar sesión</a>
+  </nav>
+  <main class="app-contenido">
+    <span class="etiqueta-rol">Control docente</span>
+    <h2>Control de horas docentes</h2>
+    <p style="color: var(--tinta-suave); max-width: 720px; margin-top: -8px; font-size: 13.5px;">
+      Cada día de clase tiene su tema, hora de llegada, hora de salida y visto bueno de coordinación.
+      Las horas a pagar se cuentan por <strong>bloques</strong> (45 min en presencial, 60 min en distancia) solo en los días con visto bueno.
+      Elige profesor y fechas para ver y descargar el detalle para la cuenta de cobro.
+    </p>
+
+    <div class="barra-filtros">
+      <div class="campo-filtro" id="caja-profesor"><label for="f-profesor">Profesor</label><select id="f-profesor"></select></div>
+      <div class="campo-filtro"><label for="f-desde">Desde</label><input type="date" id="f-desde"></div>
+      <div class="campo-filtro"><label for="f-hasta">Hasta</label><input type="date" id="f-hasta"></div>
+      <button type="button" class="boton-verde" id="boton-consultar">Consultar</button>
+    </div>
+
+    <p id="mensaje" style="font-size:13px; color: var(--tinta-suave);"></p>
+    <div class="resumen-total" id="resumen" style="display:none;"></div>
+    <div class="acciones-pagina" style="display:none; gap:8px; margin-bottom:12px;" id="acciones">
+      <button type="button" class="boton-secundario" id="boton-csv">Descargar (Excel/CSV)</button>
+      <button type="button" class="boton-secundario" id="boton-imprimir">Imprimir / guardar PDF</button>
+      <button type="button" class="boton-verde" id="boton-aprobar-todos" style="display:none;">Dar visto bueno a todos los completos</button>
+    </div>
+    <div class="contenedor-tabla"><table class="tabla-horas" id="tabla"></table></div>
+  </main>
+</div>
+
+<script type="module">
+  import { requireAuth, registrarLog } from "../js/auth.js?v=3";
+  import { db } from "../js/firebase-config.js?v=3";
+  import { collection, getDocs, doc, setDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { claveGrupo } from "../js/grupos.js?v=1";
+
+  const { usuario, rol, perfil } = await requireAuth(["profesor", "master", "admin", "coordinador", "secretaria"]);
+  const esProfesor = rol === "profesor";
+  const puedeAprobar = ["coordinador", "secretaria", "admin", "master"].includes(rol);
+  const misSedes = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
+  const miCorreo = (usuario.email || "").toLowerCase();
+
+  const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const DIAS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+
+  let clases = [];
+  let filas = [];
+
+  async function cargarClases() {
+    let snap;
+    if (esProfesor) {
+      snap = await getDocs(query(collection(db, "clases"), where("docenteCorreo", "==", miCorreo)));
+    } else {
+      snap = await getDocs(collection(db, "clases"));
+    }
+    clases = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((c) => c.docenteCorreo);
+    if (rol === "coordinador" || rol === "secretaria") clases = clases.filter((c) => misSedes.includes(c.ciudadId));
+  }
+
+  function poblarProfesores() {
+    const sel = document.getElementById("f-profesor");
+    const mapa = new Map();
+    clases.forEach((c) => mapa.set(c.docenteCorreo.toLowerCase(), c.docenteNombre || c.docenteCorreo));
+    const lista = [...mapa.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+    sel.innerHTML = "";
+    if (!esProfesor) sel.innerHTML = '<option value="">Todos los profesores</option>';
+    lista.forEach(([correo, nombre]) => {
+      const o = document.createElement("option"); o.value = correo; o.textContent = nombre; sel.appendChild(o);
+    });
+    if (esProfesor) document.getElementById("caja-profesor").style.display = "none";
+  }
+
+  function fechaLocal(d) { return d.toISOString().slice(0, 10); }
+
+  function ponerRangoPorDefecto() {
+    const hoy = new Date();
+    const ini = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    document.getElementById("f-desde").value = fechaLocal(new Date(ini.getTime() - ini.getTimezoneOffset() * 60000));
+    document.getElementById("f-hasta").value = fechaLocal(new Date(hoy.getTime() - hoy.getTimezoneOffset() * 60000));
+  }
+
+  function horasDe(s) { return (s.numBloques || 1) * (s.bloqueMin || 60) / 60; }
+  function dosDec(n) { return (Math.round(n * 100) / 100).toFixed(2); }
+
+  async function consultar() {
+    const mensaje = document.getElementById("mensaje");
+    const desde = document.getElementById("f-desde").value;
+    const hasta = document.getElementById("f-hasta").value;
+    const correoFiltro = document.getElementById("f-profesor").value;
+    if (!desde || !hasta || desde > hasta) { mensaje.textContent = "Elige un rango de fechas válido."; return; }
+    mensaje.textContent = "Cargando...";
+
+    const delProfesor = clases.filter((c) => !correoFiltro || c.docenteCorreo.toLowerCase() === correoFiltro);
+    const grupos = {};
+    delProfesor.forEach((c) => { (grupos[claveGrupo(c)] = grupos[claveGrupo(c)] || []).push(c); });
+
+    const resultado = [];
+    try {
+      await Promise.all(Object.values(grupos).map(async (g) => {
+        g.sort((a, b) => (a.id < b.id ? -1 : 1));
+        const ancla = g[0];
+        const snap = await getDocs(collection(db, "clases", ancla.id, "sesiones"));
+        snap.forEach((d) => {
+          const s = d.data();
+          const fecha = s.fecha || d.id;
+          if (fecha < desde || fecha > hasta || s.festivo) return;
+          const sedes = [...new Set(g.map((c) => c.ciudadNombre).filter(Boolean))].join(", ");
+          resultado.push({
+            anclaId: ancla.id, fecha,
+            profesor: ancla.docenteNombre || ancla.docenteCorreo, correo: ancla.docenteCorreo,
+            clase: `${ancla.programaNombre ? ancla.programaNombre + " · " : ""}${ancla.nivel} - ${ancla.grupo}`,
+            sedes, tema: s.tema || "", llegada: s.horaLlegada || "", salida: s.horaSalida || "",
+            horas: horasDe(s), vobo: s.vobo || null, sesion: s
+          });
+        });
+      }));
+    } catch (e) {
+      console.error(e);
+      mensaje.textContent = `No se pudo cargar (${e.code || e.message}).`;
+      return;
+    }
+    filas = resultado.sort((a, b) => a.profesor.localeCompare(b.profesor) || a.fecha.localeCompare(b.fecha) || a.clase.localeCompare(b.clase));
+    mensaje.textContent = filas.length ? "" : "No hay días de clase registrados en ese rango (los días se registran cuando el profesor guarda su asistencia).";
+    pintar();
+  }
+
+  function estadoFila(f) {
+    if (f.vobo) return ["ok", "✔ Visto bueno"];
+    if (!f.tema || !f.llegada || !f.salida) return ["falta", "Falta tema u horas"];
+    return ["pend", "Pendiente de visto bueno"];
+  }
+
+  function pintar() {
+    const tabla = document.getElementById("tabla");
+    const acciones = document.getElementById("acciones");
+    const resumen = document.getElementById("resumen");
+    if (filas.length === 0) { tabla.innerHTML = ""; acciones.style.display = "none"; resumen.style.display = "none"; return; }
+    acciones.style.display = "flex";
+
+    const aprobadas = filas.filter((f) => f.vobo);
+    const pendientes = filas.filter((f) => !f.vobo);
+    const totalAprob = aprobadas.reduce((a, f) => a + f.horas, 0);
+    const totalPend = pendientes.reduce((a, f) => a + f.horas, 0);
+
+    // Total por profesor (solo aprobadas)
+    const porProf = {};
+    aprobadas.forEach((f) => { porProf[f.profesor] = (porProf[f.profesor] || 0) + f.horas; });
+    resumen.style.display = "block";
+    resumen.innerHTML = `<strong>Horas con visto bueno (a pagar): ${dosDec(totalAprob)} h</strong> · Pendientes de visto bueno: ${dosDec(totalPend)} h` +
+      (Object.keys(porProf).length > 1 ? "<br>" + Object.entries(porProf).map(([n, h]) => `${esc(n)}: ${dosDec(h)} h`).join(" · ") : "");
+
+    const columnas = ["Fecha", "Profesor", "Clase", "Sede(s)", "Tema", "Llegada", "Salida", "Horas (bloques)", "Estado"];
+    tabla.innerHTML = `<thead><tr>${columnas.map((c) => `<th>${c}</th>`).join("")}${puedeAprobar ? "<th></th>" : ""}</tr></thead>`;
+    const tb = document.createElement("tbody");
+    filas.forEach((f, i) => {
+      const [cls, txt] = estadoFila(f);
+      const d = new Date(f.fecha + "T00:00:00");
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td class="num">${DIAS[d.getDay()]} ${f.fecha}</td><td>${esc(f.profesor)}</td><td>${esc(f.clase)}</td><td>${esc(f.sedes)}</td>
+        <td>${esc(f.tema) || "—"}</td><td class="num">${esc(f.llegada) || "—"}</td><td class="num">${esc(f.salida) || "—"}</td>
+        <td class="num">${dosDec(f.horas)}</td><td><span class="estado ${cls}">${txt}</span></td>`;
+      if (puedeAprobar) {
+        const td = document.createElement("td");
+        const completo = f.tema && f.llegada && f.salida;
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "boton-secundario";
+        b.textContent = f.vobo ? "Quitar" : "Dar visto bueno";
+        b.disabled = !f.vobo && !completo;
+        b.addEventListener("click", () => cambiarVobo(f, !f.vobo));
+        td.appendChild(b); tr.appendChild(td);
+      }
+      tb.appendChild(tr);
+    });
+    tabla.appendChild(tb);
+
+    const btnTodos = document.getElementById("boton-aprobar-todos");
+    const completos = filas.filter((f) => !f.vobo && f.tema && f.llegada && f.salida);
+    btnTodos.style.display = puedeAprobar && completos.length ? "inline-block" : "none";
+    btnTodos.textContent = `Dar visto bueno a los ${completos.length} días completos`;
+  }
+
+  async function aplicarVobo(f, aprobar) {
+    const datos = { ...f.sesion };
+    if (aprobar) datos.vobo = { por: usuario.email, porNombre: perfil?.nombre || usuario.email, fecha: new Date().toISOString() };
+    else delete datos.vobo;
+    await setDoc(doc(db, "clases", f.anclaId, "sesiones", f.fecha), datos);
+    f.sesion = datos; f.vobo = datos.vobo || null;
+  }
+
+  async function cambiarVobo(f, aprobar) {
+    try {
+      await aplicarVobo(f, aprobar);
+      await registrarLog(usuario, rol, aprobar ? "Dio visto bueno de asistencia docente" : "Quitó visto bueno de asistencia docente", `${f.fecha} — ${f.profesor} — ${f.clase}`);
+      pintar();
+    } catch (e) {
+      document.getElementById("mensaje").textContent = e.code === "permission-denied"
+        ? "No se pudo guardar: el período de esa clase está cerrado o no tienes permiso."
+        : `No se pudo guardar (${e.code || e.message}).`;
+    }
+  }
+
+  document.getElementById("boton-aprobar-todos").addEventListener("click", async () => {
+    const completos = filas.filter((f) => !f.vobo && f.tema && f.llegada && f.salida);
+    if (!confirm(`¿Dar visto bueno a ${completos.length} día(s)?`)) return;
+    let fallos = 0;
+    for (const f of completos) { try { await aplicarVobo(f, true); } catch (e) { fallos++; } }
+    await registrarLog(usuario, rol, "Dio visto bueno de asistencia docente (varios)", `${completos.length - fallos} día(s)`);
+    document.getElementById("mensaje").textContent = fallos ? `${fallos} día(s) no se pudieron aprobar (período cerrado o sin permiso).` : "";
+    pintar();
+  });
+
+  document.getElementById("boton-csv").addEventListener("click", () => {
+    const cab = ["Fecha", "Profesor", "Clase", "Sede(s)", "Tema", "Hora de llegada", "Hora de salida", "Horas (bloques)", "Estado", "Visto bueno por"];
+    const celda = (t) => `"${String(t ?? "").replace(/"/g, '""')}"`;
+    const lineas = [cab.map(celda).join(",")].concat(filas.map((f) => [
+      f.fecha, f.profesor, f.clase, f.sedes, f.tema, f.llegada, f.salida, dosDec(f.horas),
+      f.vobo ? "Con visto bueno" : "Sin visto bueno", f.vobo ? (f.vobo.porNombre || f.vobo.por) : ""
+    ].map(celda).join(",")));
+    const total = filas.filter((f) => f.vobo).reduce((a, f) => a + f.horas, 0);
+    lineas.push(["", "", "", "", "", "", "TOTAL horas con visto bueno", dosDec(total), "", ""].map(celda).join(","));
+    const blob = new Blob(["﻿" + lineas.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `horas-docentes-${document.getElementById("f-desde").value}_a_${document.getElementById("f-hasta").value}.csv`;
+    a.click(); URL.revokeObjectURL(a.href);
+  });
+  document.getElementById("boton-imprimir").addEventListener("click", () => window.print());
+  document.getElementById("boton-consultar").addEventListener("click", consultar);
+
+  await cargarClases();
+  poblarProfesores();
+  ponerRangoPorDefecto();
+  if (clases.length === 0) document.getElementById("mensaje").textContent = "No hay clases con profesor asignado.";
+  else await consultar();
+</script>
+</body>
+</html>

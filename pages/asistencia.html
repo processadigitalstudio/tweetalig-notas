@@ -436,10 +436,24 @@
         <label for="input-tema" id="label-tema" style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin-bottom:4px;"></label>
         <input type="text" id="input-tema" maxlength="300" value="" ${edicionDesbloqueada ? "" : "disabled"} placeholder="Ej. Present perfect, páginas 24-26" style="width:100%; max-width:560px; font-family:var(--fuente-cuerpo); font-size:13.5px; padding:8px 10px; border:1px solid var(--linea); border-radius:7px; background:var(--fondo); color:var(--tinta);">
       </div>
+      <div id="caja-horas" style="margin:10px 0; display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end;">
+        <div><label for="input-llegada" style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin-bottom:4px;">Hora de llegada</label>
+          <input type="time" id="input-llegada" style="font-size:13.5px; padding:7px 9px; border:1px solid var(--linea); border-radius:7px; background:var(--fondo); color:var(--tinta);"></div>
+        <div><label for="input-salida" style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin-bottom:4px;">Hora de salida</label>
+          <input type="time" id="input-salida" style="font-size:13.5px; padding:7px 9px; border:1px solid var(--linea); border-radius:7px; background:var(--fondo); color:var(--tinta);"></div>
+        <div id="estado-vobo" style="font-size:13px;"></div>
+      </div>
       <div id="zona-estudiantes"></div>
     `;
     const inputTema = document.getElementById("input-tema");
     inputTema.value = guardada.tema || "";
+    const inputLlegada = document.getElementById("input-llegada");
+    const inputSalida = document.getElementById("input-salida");
+    inputLlegada.value = guardada.horaLlegada || "";
+    inputSalida.value = guardada.horaSalida || "";
+    const esGestionVobo = ["coordinador", "secretaria", "admin", "master"].includes(rol);
+    const bloqueadoPorVobo = !!guardada.vobo && rol === "profesor";
+    [inputTema, inputLlegada, inputSalida].forEach((el) => { el.disabled = !edicionDesbloqueada || bloqueadoPorVobo; });
     const labelTema = document.getElementById("label-tema");
     const refrescarLabelTema = () => {
       const esSp = !!(document.getElementById("chk-speaking")?.checked);
@@ -515,38 +529,75 @@
     botonGuardar.className = "boton-primario";
     botonGuardar.textContent = "Guardar asistencia de este día";
     botonGuardar.style.display = edicionDesbloqueada ? "block" : "none";
-    botonGuardar.addEventListener("click", async () => {
+    // voboNuevo: undefined = conservar el que haya; null = quitar; objeto = poner.
+    async function guardar(voboNuevo) {
       const aviso = document.getElementById("aviso-asistencia");
+      aviso.style.color = "";
       aviso.textContent = "Guardando...";
       const esSpeaking = !!(chkSpeaking && chkSpeaking.checked) && !chkFestivo.checked;
       const speakingRealizadas = Object.fromEntries(Object.entries(guardada.speakingRealizada || {}).filter(([, v]) => v));
+      const vobo = voboNuevo === undefined ? (guardada.vobo || null) : voboNuevo;
+      const datos = {
+        fecha: fechaActivaTexto,
+        festivo: chkFestivo.checked,
+        numBloques, bloqueMin,
+        ausencias: chkFestivo.checked ? {} : (guardada.ausencias || {}),
+        speaking: esSpeaking,
+        speakingRealizada: esSpeaking ? speakingRealizadas : {},
+        tema: chkFestivo.checked ? "" : inputTema.value.trim().slice(0, 300),
+        horaLlegada: chkFestivo.checked ? "" : inputLlegada.value,
+        horaSalida: chkFestivo.checked ? "" : inputSalida.value
+      };
+      if (vobo) datos.vobo = vobo;
       try {
-        await setDoc(doc(db, "clases", grupoActual.claseAncla, "sesiones", fechaActivaTexto), {
-          fecha: fechaActivaTexto,
-          festivo: chkFestivo.checked,
-          numBloques, bloqueMin,
-          ausencias: chkFestivo.checked ? {} : (guardada.ausencias || {}),
-          speaking: esSpeaking,
-          speakingRealizada: esSpeaking ? speakingRealizadas : {},
-          tema: chkFestivo.checked ? "" : inputTema.value.trim().slice(0, 300)
-        });
-        sesionesGuardadas[fechaActivaTexto] = { fecha: fechaActivaTexto, festivo: chkFestivo.checked, numBloques, bloqueMin, ausencias: guardada.ausencias || {}, speaking: esSpeaking, speakingRealizada: esSpeaking ? speakingRealizadas : {}, tema: chkFestivo.checked ? "" : inputTema.value.trim().slice(0, 300) };
-        await registrarLog(usuario, rol, "Guardó asistencia", `${fechaActivaTexto} — ${grupoActual.etiqueta}`);
+        await setDoc(doc(db, "clases", grupoActual.claseAncla, "sesiones", fechaActivaTexto), datos);
+        sesionesGuardadas[fechaActivaTexto] = datos;
+        await registrarLog(usuario, rol, voboNuevo ? "Dio visto bueno de asistencia docente" : (voboNuevo === null ? "Quitó visto bueno de asistencia docente" : "Guardó asistencia"), `${fechaActivaTexto} — ${grupoActual.etiqueta}`);
         pintarFechas();
         pintarDia();
-        document.getElementById("aviso-asistencia").textContent = "Asistencia guardada correctamente.";
+        document.getElementById("aviso-asistencia").textContent = voboNuevo ? "Visto bueno registrado." : "Asistencia guardada correctamente.";
         document.getElementById("aviso-asistencia").style.color = "#2E6E4E";
       } catch (error) {
-        if (error.code === "permission-denied") {
-          aviso.style.color = "var(--error)";
-          aviso.textContent = "No se pudo guardar: este período académico ya está cerrado. Pide a Master que lo reabra si es necesario.";
-        } else {
-          aviso.style.color = "var(--error)";
-          aviso.textContent = `No se pudo guardar (${error.code || error.message}).`;
-        }
+        aviso.style.color = "var(--error)";
+        aviso.textContent = error.code === "permission-denied"
+          ? "No se pudo guardar: este período académico ya está cerrado o no tienes permiso. Pide a Master que lo reabra si es necesario."
+          : `No se pudo guardar (${error.code || error.message}).`;
       }
-    });
+    }
+    botonGuardar.addEventListener("click", () => guardar(undefined));
     cuerpo.appendChild(botonGuardar);
+
+    // Visto bueno de asistencia docente (solo coordinación, secretaría, admin y Master).
+    const estadoVobo = document.getElementById("estado-vobo");
+    if (guardada.festivo) {
+      estadoVobo.textContent = "";
+    } else if (guardada.vobo) {
+      estadoVobo.innerHTML = `<span style="color:#2d6a58; font-weight:600;">✔ Visto bueno de ${guardada.vobo.porNombre || guardada.vobo.por}</span> <span style="color:var(--tinta-suave);">(${(guardada.vobo.fecha || "").slice(0, 10)})</span>`;
+    } else {
+      estadoVobo.innerHTML = `<span style="color:var(--tinta-suave);">Sin visto bueno todavía.</span>`;
+    }
+    if (esGestionVobo && !guardada.festivo) {
+      const botonVobo = document.createElement("button");
+      botonVobo.type = "button";
+      botonVobo.className = "boton-secundario";
+      botonVobo.style.marginLeft = "8px";
+      if (guardada.vobo) {
+        botonVobo.textContent = "Quitar visto bueno";
+        botonVobo.addEventListener("click", () => guardar(null));
+      } else {
+        botonVobo.textContent = "✔ Dar visto bueno al profesor";
+        botonVobo.addEventListener("click", () => {
+          const aviso = document.getElementById("aviso-asistencia");
+          if (!inputTema.value.trim() || !inputLlegada.value || !inputSalida.value) {
+            aviso.style.color = "var(--error)";
+            aviso.textContent = "Para dar el visto bueno hacen falta el tema, la hora de llegada y la hora de salida.";
+            return;
+          }
+          guardar({ por: usuario.email, porNombre: perfil?.nombre || usuario.email, fecha: new Date().toISOString() });
+        });
+      }
+      cuerpo.appendChild(botonVobo);
+    }
 
     const aviso = document.createElement("p");
     aviso.className = "aviso";

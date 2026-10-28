@@ -59,6 +59,7 @@ const MENU_POR_ROL = {
     ["Asistencia (revisión)", "asistencia.html"],
     ["Habilitación", "habilitacion.html"],
     ["Alertas de inasistencia", "alertas-asistencia.html"],
+    ["Control de horas docentes", "horas-docentes.html"],
     ["Accesos y usuarios", "usuarios.html"],
     ["Log de cambios", "logs.html"]
   ],
@@ -76,6 +77,7 @@ const MENU_POR_ROL = {
     ["Asistencia (revisión)", "asistencia.html"],
     ["Habilitación", "habilitacion.html"],
     ["Alertas de inasistencia", "alertas-asistencia.html"],
+    ["Control de horas docentes", "horas-docentes.html"],
     ["Accesos y usuarios", "usuarios.html"]
   ],
   coordinador: [
@@ -90,6 +92,7 @@ const MENU_POR_ROL = {
     ["Asistencia (revisión)", "asistencia.html"],
     ["Habilitación", "habilitacion.html"],
     ["Alertas de inasistencia", "alertas-asistencia.html"],
+    ["Control de horas docentes", "horas-docentes.html"],
     ["Accesos y usuarios", "usuarios.html"]
   ],
   secretaria: [
@@ -103,11 +106,13 @@ const MENU_POR_ROL = {
     ["Asistencia (revisión)", "asistencia.html"],
     ["Habilitación", "habilitacion.html"],
     ["Alertas de inasistencia", "alertas-asistencia.html"],
+    ["Control de horas docentes", "horas-docentes.html"],
     ["Accesos y usuarios", "usuarios.html"]
   ],
   profesor: [
     ["Notas", "notas.html"],
-    ["Asistencia", "asistencia.html"]
+    ["Asistencia", "asistencia.html"],
+    ["Mis horas", "horas-docentes.html"]
   ]
 };
 
