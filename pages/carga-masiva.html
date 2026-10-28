@@ -116,6 +116,7 @@
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { datosDirectorio, moverEstudiante } from "../js/matricula.js?v=1";
+  import { claveGrupo as claveDeGrupo } from "../js/grupos.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, doc, setDoc, addDoc, deleteField, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -608,7 +609,7 @@ Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo`;
           const previos = prev.docs.map((d) => ({ id: d.id, ...d.data() })).filter((e) =>
             e.estado !== "movido" && e.claseId !== clase.id &&
             e.anio === clase.anio && e.periodo === clase.periodo && e.ciclo === clase.ciclo &&
-            !(clase.grupoDistanciaId && e.claseId && clases.some((c) => c.id === e.claseId && c.grupoDistanciaId === clase.grupoDistanciaId)));
+            !(e.claseId && clases.some((c) => c.id === e.claseId && claveDeGrupo(c) === claveDeGrupo(clase) && claveDeGrupo(c) !== c.id)));
           if (previos.length) {
             await moverEstudiante({ est: previos[0], destino: clase, usuario, rol });
             movidoDe = previos[0].claseTexto || previos[0].claseId;

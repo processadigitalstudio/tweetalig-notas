@@ -71,6 +71,7 @@
 
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
+  import { claveGrupo as claveDeGrupo } from "../js/grupos.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, getDoc, doc, setDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
   import { badgeReporte, separarMovidos, montarPanelProfesor, cargarEstudiantesDeClases } from "../js/matricula.js?v=1";
@@ -171,7 +172,7 @@
 
     const porClave = {};
     clases.forEach((c) => {
-      const clave = c.grupoDistanciaId || c.id;
+      const clave = claveDeGrupo(c);
       if (!porClave[clave]) porClave[clave] = [];
       porClave[clave].push(c);
     });
