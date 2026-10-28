@@ -182,7 +182,7 @@
       const sedes = clasesGrupo.map((c) => c.ciudadNombre).join(", ");
       return {
         key,
-        etiqueta: `${primera.nivel} - ${primera.grupo} (${sedes}) — ${primera.anio}-${primera.periodo} Ciclo ${primera.ciclo}`,
+        etiqueta: `${primera.programaNombre ? primera.programaNombre + " · " : ""}${primera.nivel} - ${primera.grupo} (${sedes}) — ${primera.anio}-${primera.periodo} Ciclo ${primera.ciclo}`,
         clases: clasesGrupo
       };
     });

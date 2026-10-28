@@ -193,7 +193,7 @@
         key,
         claseAncla: clasesGrupo[0].id,
         esDistancia: (primera.programaNombre || "").toLowerCase().includes("distancia"),
-        etiqueta: `${primera.nivel} - ${primera.grupo} (${sedes}) — ${primera.anio}-${primera.periodo} Ciclo ${primera.ciclo}`,
+        etiqueta: `${primera.programaNombre ? primera.programaNombre + " · " : ""}${primera.nivel} - ${primera.grupo} (${sedes}) — ${primera.anio}-${primera.periodo} Ciclo ${primera.ciclo}`,
         clases: clasesGrupo
       };
     });
@@ -374,6 +374,7 @@
         (fechaTexto === fechaActivaTexto ? " activa" : "") +
         (guardada?.festivo ? " es-festivo" : "") +
         (guardada?.speaking && !guardada?.festivo ? " es-speaking" : "");
+      if (guardada?.tema) btn.title = guardada.tema;
       btn.innerHTML = `<span class="dia-semana">${DIAS_CORTOS[s.fecha.getDay()]}</span>${s.fecha.getDate()}/${s.fecha.getMonth() + 1}${guardada?.speaking && !guardada?.festivo ? '<span class="etiqueta-speaking">🎤 Speaking</span>' : ""}`;
       btn.addEventListener("click", () => {
         fechaActivaTexto = fechaTexto;
@@ -431,8 +432,19 @@
         <input type="checkbox" id="chk-speaking" ${guardada.speaking ? "checked" : ""} ${edicionDesbloqueada ? "" : "disabled"}>
         🎤 Esta es una Speaking session (marca quién la realizó)
       </label>` : ""}
+      <div id="caja-tema" style="margin:10px 0;">
+        <label for="input-tema" id="label-tema" style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin-bottom:4px;"></label>
+        <input type="text" id="input-tema" maxlength="300" value="" ${edicionDesbloqueada ? "" : "disabled"} placeholder="Ej. Present perfect, páginas 24-26" style="width:100%; max-width:560px; font-family:var(--fuente-cuerpo); font-size:13.5px; padding:8px 10px; border:1px solid var(--linea); border-radius:7px; background:var(--fondo); color:var(--tinta);">
+      </div>
       <div id="zona-estudiantes"></div>
     `;
+    const inputTema = document.getElementById("input-tema");
+    inputTema.value = guardada.tema || "";
+    const labelTema = document.getElementById("label-tema");
+    const refrescarLabelTema = () => {
+      const esSp = !!(document.getElementById("chk-speaking")?.checked);
+      labelTema.textContent = esSp ? "🎤 Tema del Speaking" : "Tema dado en la clase";
+    };
 
     const chkFestivo = document.getElementById("chk-festivo");
     const chkSpeaking = document.getElementById("chk-speaking");
@@ -491,8 +503,10 @@
     }
 
     chkFestivo.addEventListener("change", pintarTablaEstudiantes);
+    refrescarLabelTema();
     if (chkSpeaking) chkSpeaking.addEventListener("change", () => {
       guardada.speaking = chkSpeaking.checked;
+      refrescarLabelTema();
       pintarTablaEstudiantes();
     });
     pintarTablaEstudiantes();
@@ -513,9 +527,10 @@
           numBloques, bloqueMin,
           ausencias: chkFestivo.checked ? {} : (guardada.ausencias || {}),
           speaking: esSpeaking,
-          speakingRealizada: esSpeaking ? speakingRealizadas : {}
+          speakingRealizada: esSpeaking ? speakingRealizadas : {},
+          tema: chkFestivo.checked ? "" : inputTema.value.trim().slice(0, 300)
         });
-        sesionesGuardadas[fechaActivaTexto] = { fecha: fechaActivaTexto, festivo: chkFestivo.checked, numBloques, bloqueMin, ausencias: guardada.ausencias || {}, speaking: esSpeaking, speakingRealizada: esSpeaking ? speakingRealizadas : {} };
+        sesionesGuardadas[fechaActivaTexto] = { fecha: fechaActivaTexto, festivo: chkFestivo.checked, numBloques, bloqueMin, ausencias: guardada.ausencias || {}, speaking: esSpeaking, speakingRealizada: esSpeaking ? speakingRealizadas : {}, tema: chkFestivo.checked ? "" : inputTema.value.trim().slice(0, 300) };
         await registrarLog(usuario, rol, "Guardó asistencia", `${fechaActivaTexto} — ${grupoActual.etiqueta}`);
         pintarFechas();
         pintarDia();
