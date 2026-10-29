@@ -148,7 +148,7 @@
             profesor: ancla.docenteNombre || ancla.docenteCorreo, correo: ancla.docenteCorreo,
             clase: `${ancla.programaNombre ? ancla.programaNombre + " - " : ""}${ancla.nivel} - ${ancla.grupo}`,
             nivel: ancla.nivel || "", grupo: ancla.grupo || "", observaciones: s.observaciones || "",
-            sedes, tema: s.tema || "", llegada: s.horaLlegada || "", salida: s.horaSalida || "",
+            sedes, tema: s.tema || "", speaking: !!s.speaking, llegada: s.horaLlegada || "", salida: s.horaSalida || "",
             horas: horasDe(s), vobo: s.vobo || null, sesion: s
           });
         });
@@ -161,6 +161,12 @@
     filas = resultado.sort((a, b) => a.profesor.localeCompare(b.profesor) || a.fecha.localeCompare(b.fecha) || a.clase.localeCompare(b.clase));
     mensaje.textContent = filas.length ? "" : "No hay días de clase registrados en ese rango (los días se registran cuando el profesor guarda su asistencia).";
     pintar();
+  }
+
+  // En la columna "Unit, lesson and page": si el día fue Speaking session, se indica.
+  function textoTema(f) {
+    if (f.speaking) return f.tema ? `Speaking session - ${f.tema}` : "Speaking session";
+    return f.tema || "";
   }
 
   function estadoFila(f) {
@@ -196,7 +202,7 @@
       const d = new Date(f.fecha + "T00:00:00");
       const tr = document.createElement("tr");
       tr.innerHTML = `<td class="num">${DIAS[d.getDay()]} ${f.fecha}</td><td>${esc(f.profesor)}</td><td>${esc(f.nivel)}</td><td>${esc(f.grupo)}</td><td>${esc(f.sedes)}</td>
-        <td class="num">${dosDec(f.horas)}</td><td>${esc(f.tema) || "—"}</td><td>${esc(f.observaciones) || ""}</td>
+        <td class="num">${dosDec(f.horas)}</td><td>${esc(textoTema(f)) || "—"}</td><td>${esc(f.observaciones) || ""}</td>
         <td>${f.vobo ? esc(f.vobo.porNombre || f.vobo.por) : "—"}</td><td class="num">${f.llegada && f.salida ? esc(f.llegada) + " - " + esc(f.salida) : "—"}</td>
         <td><span class="estado ${cls}">${txt}</span></td>`;
       if (puedeAprobar) {
@@ -260,7 +266,7 @@
       [],
       ["Date", "Level", "Group", "Learning hours", "Unit , lesson and page", "Observations", "Supervisor", "In - Out"]
     ].concat(filas.map((f) => [
-      f.fecha, f.nivel, f.grupo, Number(f.horas), f.tema, f.observaciones,
+      f.fecha, f.nivel, f.grupo, Number(f.horas), textoTema(f), f.observaciones,
       f.vobo ? (f.vobo.porNombre || f.vobo.por) : "", f.llegada && f.salida ? f.llegada + " - " + f.salida : ""
     ]));
     matriz.push(["TOTAL HORAS", "", "", Number(total), "", "", "", ""]);
@@ -328,7 +334,7 @@
         startY: 120,
         head: [["Date", "Level", "Group", "Learning hours", "Unit , lesson and page", "Observations", "Supervisor", "In - Out"]],
         body: grupoFilas.map((f) => [
-          f.fecha, f.nivel, f.grupo, dosDec(f.horas), f.tema || "", f.observaciones || "",
+          f.fecha, f.nivel, f.grupo, dosDec(f.horas), textoTema(f), f.observaciones || "",
           f.vobo ? (f.vobo.porNombre || f.vobo.por) : "", f.llegada && f.salida ? `${f.llegada} - ${f.salida}` : ""
         ]),
         foot: [["TOTAL HORAS", "", "", dosDec(total), "", "", "", ""]],
