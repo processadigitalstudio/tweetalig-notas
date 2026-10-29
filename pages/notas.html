@@ -331,11 +331,12 @@
     const av = document.createElement("span");
     av.style.cssText = "font-size:13px;";
     barra.appendChild(b); barra.appendChild(av);
-    const abajo = document.getElementById(idAvisoAbajo);
-    if (abajo) {
-      const copiar = () => { av.textContent = abajo.textContent; av.style.color = abajo.style.color; };
-      new MutationObserver(copiar).observe(abajo, { childList: true, characterData: true, subtree: true, attributes: true });
-    }
+    const obs = new MutationObserver(() => {
+      if (!barra.isConnected) { obs.disconnect(); return; }
+      const abajo = document.getElementById(idAvisoAbajo);
+      if (abajo) { av.textContent = abajo.textContent; av.style.color = abajo.style.color; }
+    });
+    obs.observe(document.body, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["style"] });
     return barra;
   }
 
