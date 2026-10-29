@@ -187,6 +187,7 @@
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { claveGrupo as claveDeGrupo } from "../js/grupos.js?v=1";
+  import { seleccionarPorDefecto } from "../js/selectores.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, addDoc, updateDoc, deleteDoc, getDoc, doc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -689,6 +690,7 @@
       total === totalGeneral ? `${total} clase(s).` : `${total} de ${totalGeneral} clase(s) — filtro activo.`;
   }
 
+  ["docente", "programa", "ciudad"].forEach((id) => seleccionarPorDefecto(document.getElementById(id)));
   const tarjetaCrear = document.getElementById("tarjeta-crear-clase");
   document.getElementById("boton-nueva-clase").addEventListener("click", () => {
     tarjetaCrear.style.display = "block";

@@ -242,13 +242,15 @@
       }
       filaMover.innerHTML = `<td colspan="8">
         <b>Mover a ${est.apellido} ${est.nombre}</b> (hoy en ${est.claseTexto || "—"}) a:
-        <select class="sel-destino">${destinos.map((c, i) => `<option value="${i}">${etiquetaDestino(c)}</option>`).join("")}</select>
+        <select class="sel-destino"><option value="">Selecciona la clase...</option>${destinos.map((c, i) => `<option value="${i}">${etiquetaDestino(c)}</option>`).join("")}</select>
         <button type="button" class="confirmar">Mover</button>
         <p style="font-size:12px; color:var(--tinta-suave); margin:6px 0 0;">Sus notas y asistencia quedan en la clase anterior como historial; en la clase nueva empieza en blanco.</p>
         <span class="msg-mover" style="font-size:12.5px;"></span>
       </td>`;
       filaMover.querySelector(".confirmar").addEventListener("click", async (ev) => {
-        const destino = destinos[Number(filaMover.querySelector(".sel-destino").value)];
+        const valorDestino = filaMover.querySelector(".sel-destino").value;
+        if (valorDestino === "") { alert("Selecciona primero la clase a la que lo vas a mover."); return; }
+        const destino = destinos[Number(valorDestino)];
         if (!confirm(`¿Mover a ${est.apellido} ${est.nombre} a ${etiquetaDestino(destino)}?`)) return;
         ev.target.disabled = true;
         try {

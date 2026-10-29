@@ -206,11 +206,13 @@
           return;
         }
         zona.innerHTML = `
-          Mover a <select class="sel-destino">${destinos.map((c, i) => `<option value="${i}">${escapar(etiquetaDestino(c))}</option>`).join("")}</select>
+          Mover a <select class="sel-destino"><option value="">Selecciona la clase...</option>${destinos.map((c, i) => `<option value="${i}">${escapar(etiquetaDestino(c))}</option>`).join("")}</select>
           <button type="button" class="principal confirmar">Confirmar movimiento</button>
           <p style="font-size:12px; color:var(--tinta-suave); margin:6px 0 0;">Sus notas y asistencia quedan en la clase anterior como historial; en la nueva empieza en blanco.</p>`;
         zona.querySelector(".confirmar").addEventListener("click", async (ev) => {
-          const destino = destinos[Number(zona.querySelector(".sel-destino").value)];
+          const valorDestino = zona.querySelector(".sel-destino").value;
+        if (valorDestino === "") { alert("Selecciona primero la clase a la que lo vas a mover."); return; }
+        const destino = destinos[Number(valorDestino)];
           if (!confirm(`¿Mover a ${r.estudianteNombre} a ${etiquetaDestino(destino)}?`)) return;
           ev.target.disabled = true;
           try {

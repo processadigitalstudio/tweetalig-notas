@@ -118,6 +118,7 @@
   import { datosDirectorio, moverEstudiante } from "../js/matricula.js?v=1";
   import { claveGrupo as claveDeGrupo } from "../js/grupos.js?v=1";
   import { descargarTabla } from "../js/exportar.js?v=1";
+  import { seleccionarPorDefecto } from "../js/selectores.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, doc, setDoc, addDoc, deleteField, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -245,6 +246,8 @@ Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co,Martes-Jueves 18:00-20:00`;
   });
 
   let filasClasesArchivo = [];
+  seleccionarPorDefecto(document.getElementById("cl-programa"));
+  seleccionarPorDefecto(document.getElementById("est-programa"));
   const inputArchivoClases = document.getElementById("cl-archivo-csv");
   const botonProcesarClases = document.getElementById("cl-boton-procesar");
 
