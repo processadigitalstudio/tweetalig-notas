@@ -43,6 +43,9 @@
       <label style="font-size:13px; color:var(--tinta-suave); display:flex; gap:6px; align-items:center;">
         <input type="checkbox" id="chk-movidos"> Mostrar historial de estudiantes movidos de clase
       </label>
+      <label style="font-size:13px; color:var(--tinta-suave); display:flex; gap:6px; align-items:center;">
+        <input type="checkbox" id="chk-danados"> Solo nombres con caracteres dañados (�)
+      </label>
       <button type="button" id="boton-directorio" style="display:none; font-size:12.5px; padding:6px 10px; border:1px dashed var(--azul-profundo); background:none; border-radius:6px; cursor:pointer; color:var(--azul-profundo);">Actualizar directorio de cédulas</button>
       <span id="aviso-directorio" style="font-size:12.5px;"></span>
     </div>
@@ -62,8 +65,8 @@
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { db } from "../js/firebase-config.js?v=3";
-  import { collection, getDocs, doc, deleteDoc, setDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-  import { cargarDestinos, etiquetaDestino, moverEstudiante, datosDirectorio } from "../js/matricula.js?v=1";
+  import { collection, getDocs, doc, deleteDoc, setDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { cargarDestinos, etiquetaDestino, moverEstudiante, datosDirectorio, normalizar } from "../js/matricula.js?v=1";
 
   const { usuario, rol, perfil } = await requireAuth(["master", "admin", "coordinador", "secretaria"]);
 
@@ -124,6 +127,7 @@
 
     const filtrados = todos.filter((e) => {
       if (e.estado === "movido" && !verMovidos) return false;
+      if (document.getElementById("chk-danados").checked && !/\uFFFD/.test(`${e.nombre || ""}${e.apellido || ""}`)) return false;
       const coincideTexto = !texto ||
         (e.nombre || "").toLowerCase().includes(texto) ||
         (e.apellido || "").toLowerCase().includes(texto) ||
@@ -155,12 +159,13 @@
         <td>${e.correo || "—"}</td>
         <td>${e.claseTexto || "—"}${movido ? `<br><span style="font-size:11.5px;">Movido a ${e.movidoATexto || "otra clase"}</span>` : ""}</td>
         <td>${e.ciudadNombre || "—"}</td>
-        <td style="white-space:nowrap;">${movido ? "" : `<button class="btn-mover" data-id="${e.id}">Mover</button><button class="btn-borrar" data-id="${e.id}" data-nombre="${e.nombre} ${e.apellido}">Quitar</button>`}</td>
+        <td style="white-space:nowrap;">${movido ? "" : `<button class="btn-mover" data-id="${e.id}">Mover</button><button class="btn-corregir" data-id="${e.id}" style="color:var(--azul-profundo); margin-right:10px;">Corregir nombre</button><button class="btn-borrar" data-id="${e.id}" data-nombre="${e.nombre} ${e.apellido}">Quitar</button>`}</td>
       `;
       cuerpo.appendChild(fila);
     });
 
     cuerpo.querySelectorAll(".btn-mover").forEach((b) => b.addEventListener("click", () => abrirMover(b)));
+    cuerpo.querySelectorAll(".btn-corregir").forEach((b) => b.addEventListener("click", () => abrirCorregir(b)));
 
     cuerpo.querySelectorAll(".btn-borrar").forEach((b) => b.addEventListener("click", async () => {
       if (confirm(`¿Quitar a ${b.dataset.nombre} de esta clase?`)) {
@@ -169,6 +174,52 @@
         await cargarEstudiantes();
       }
     }));
+  }
+
+  // Corrige nombre y apellido (por ejemplo los que quedaron con "�"). Se aplica a
+  // todas las matrículas de esa cédula y al buscador de cédulas.
+  function abrirCorregir(boton) {
+    const est = todos.find((x) => x.id === boton.dataset.id);
+    if (!est) return;
+    const filaActual = boton.closest("tr");
+    const previa = filaActual.nextElementSibling;
+    if (previa && previa.classList.contains("fila-corregir")) { previa.remove(); return; }
+    const fila = document.createElement("tr");
+    fila.className = "fila-corregir";
+    const esc = (t) => String(t || "").replace(/"/g, "&quot;");
+    fila.innerHTML = `<td colspan="8" style="background:#f4f7f9; padding:10px;">
+      <span style="font-size:12.5px; color:var(--tinta-suave);">Corregir nombre de la cédula ${est.cedula}: </span>
+      <input type="text" class="corr-nombre" value="${esc(est.nombre)}" placeholder="Nombre" style="padding:6px 8px; width:200px;">
+      <input type="text" class="corr-apellido" value="${esc(est.apellido)}" placeholder="Apellido" style="padding:6px 8px; width:200px;">
+      <button type="button" class="corr-guardar">Guardar</button>
+      <button type="button" class="corr-cancelar">Cancelar</button>
+      <span class="corr-aviso" style="font-size:12.5px; margin-left:8px;"></span>
+    </td>`;
+    filaActual.after(fila);
+    fila.querySelector(".corr-cancelar").addEventListener("click", () => fila.remove());
+    fila.querySelector(".corr-guardar").addEventListener("click", async () => {
+      const nombre = fila.querySelector(".corr-nombre").value.trim();
+      const apellido = fila.querySelector(".corr-apellido").value.trim();
+      const aviso = fila.querySelector(".corr-aviso");
+      if (!nombre || !apellido) { aviso.style.color = "var(--error)"; aviso.textContent = "Escribe nombre y apellido."; return; }
+      if (/\uFFFD/.test(nombre + apellido)) { aviso.style.color = "var(--error)"; aviso.textContent = "Todavía tiene el rombo (�)."; return; }
+      aviso.style.color = ""; aviso.textContent = "Guardando...";
+      try {
+        const matriculas = todos.filter((x) => x.cedula === est.cedula);
+        for (const m of matriculas) await updateDoc(doc(db, "estudiantes", m.id), { nombre, apellido });
+        try {
+          await setDoc(doc(db, "directorio_estudiantes", String(est.cedula)),
+            { cedula: est.cedula, nombre, apellido, busqueda: normalizar(`${apellido} ${nombre}`), busquedaInv: normalizar(`${nombre} ${apellido}`) },
+            { merge: true });
+        } catch (e) { console.warn("No se pudo actualizar el directorio:", e); }
+        await registrarLog(usuario, rol, "Corrigió nombre de estudiante", `${est.cedula}: ${est.apellido} ${est.nombre} → ${apellido} ${nombre}`);
+        matriculas.forEach((m) => { m.nombre = nombre; m.apellido = apellido; });
+        pintarLista();
+      } catch (error) {
+        aviso.style.color = "var(--error)";
+        aviso.textContent = error.code === "permission-denied" ? "No tienes permiso o el período está cerrado." : `No se pudo guardar (${error.code || error.message}).`;
+      }
+    });
   }
 
   // Fila desplegable con las clases a las que se puede mover el estudiante.
@@ -261,6 +312,7 @@
   }
 
   document.getElementById("chk-movidos").addEventListener("change", pintarLista);
+  document.getElementById("chk-danados").addEventListener("change", pintarLista);
   document.getElementById("filtro-texto").addEventListener("input", pintarLista);
   document.getElementById("filtro-sede").addEventListener("change", pintarLista);
   document.getElementById("filtro-clase").addEventListener("change", pintarLista);
