@@ -149,20 +149,13 @@
         return (b1 - a1) || (b2 - a2) || (b3 - a3);
       });
     const select = document.getElementById("f-periodo");
-    select.innerHTML = "";
+    select.innerHTML = '<option value="">Selecciona el período...</option>';
     claves.forEach((k) => {
       const [a, p, c] = k.split("-");
       const opt = document.createElement("option");
       opt.value = k; opt.textContent = `${a}-${p} / Ciclo ${c}`;
       select.appendChild(opt);
     });
-    // Por defecto: el período activo más reciente.
-    try {
-      const snapActivos = await getDocs(query(collection(db, "periodos"), where("activo", "==", true)));
-      const activos = snapActivos.docs.map((d) => d.id).filter((id) => claves.includes(id));
-      activos.sort((a, b) => claves.indexOf(a) - claves.indexOf(b));
-      if (activos.length) select.value = activos[0];
-    } catch (e) { /* si falla, queda el más reciente */ }
   }
 
   async function poblarSedes() {
@@ -226,6 +219,11 @@
     document.getElementById("chips").innerHTML = "";
 
     const clavePeriodo = document.getElementById("f-periodo").value;
+    if (!clavePeriodo) {
+      filas = [];
+      contador.textContent = "Selecciona un período para ver el reporte.";
+      return;
+    }
     const clases = todasLasClases.filter((c) => `${c.anio}-${c.periodo}-${c.ciclo}` === clavePeriodo);
 
     const grupos = {};
