@@ -54,7 +54,8 @@
     <p id="mensaje" style="font-size:13px; color: var(--tinta-suave);"></p>
     <div class="resumen-total" id="resumen" style="display:none;"></div>
     <div class="acciones-pagina" style="display:none; gap:8px; margin-bottom:12px;" id="acciones">
-      <button type="button" class="boton-secundario" id="boton-csv">Descargar (Excel/CSV)</button>
+      <select id="formato-descarga" style="font-family:var(--fuente-cuerpo); font-size:12.5px; padding:7px 8px; border:1px solid var(--linea); border-radius:6px; background:var(--fondo); color:var(--tinta);"><option value="xlsx">Excel (.xlsx)</option><option value="csv">CSV (texto)</option></select>
+      <button type="button" class="boton-secundario" id="boton-csv">Descargar tabla</button>
       <button type="button" class="boton-verde" id="boton-pdf">Descargar PDF protegido (por clase)</button>
       <button type="button" class="boton-verde" id="boton-aprobar-todos" style="display:none;">Dar visto bueno a todos los completos</button>
     </div>
@@ -69,6 +70,7 @@
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, doc, setDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
   import { claveGrupo } from "../js/grupos.js?v=1";
+  import { descargarTabla } from "../js/exportar.js?v=1";
 
   const { usuario, rol, perfil } = await requireAuth(["profesor", "master", "admin", "coordinador", "secretaria"]);
   const esProfesor = rol === "profesor";
@@ -247,28 +249,22 @@
     pintar();
   });
 
-  document.getElementById("boton-csv").addEventListener("click", () => {
-    const celda = (t) => `"${String(t ?? "").replace(/"/g, '""')}"`;
-    const fila = (arr) => arr.map(celda).join(",");
+  document.getElementById("boton-csv").addEventListener("click", async () => {
     const profes = [...new Set(filas.map((f) => f.profesor))].join(" / ");
     const desde = document.getElementById("f-desde").value, hasta = document.getElementById("f-hasta").value;
-    const lineas = [
-      fila(["FORMATO REPORTE DE ACTIVIDADES DIARIAS - DAILY ACTIVITY REPORT", "", "", "", "", "", "", "Código: F-GAC-04"]),
-      fila(["PROCESO GESTIÓN ACADÉMICA", "", "", "", "", "", "", "Versión: 02"]),
-      fila(["Profesor: " + profes, "", "", "", "", "", "", "Período: " + desde + " a " + hasta]),
-      "",
-      fila(["Date", "Level", "Group", "Learning hours", "Unit , lesson and page", "Observations", "Supervisor", "In - Out"])
-    ].concat(filas.map((f) => fila([
-      f.fecha, f.nivel, f.grupo, dosDec(f.horas), f.tema, f.observaciones,
-      f.vobo ? (f.vobo.porNombre || f.vobo.por) : "", f.llegada && f.salida ? f.llegada + " - " + f.salida : ""
-    ])));
     const total = filas.filter((f) => f.vobo).reduce((a, f) => a + f.horas, 0);
-    lineas.push(fila(["TOTAL HORAS", "", "", dosDec(total), "", "", "", ""]));
-    const blob = new Blob(["\uFEFF" + lineas.join("\r\n")], { type: "text/csv;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `reporte-diario-actividades-${desde}_a_${hasta}.csv`;
-    a.click(); URL.revokeObjectURL(a.href);
+    const matriz = [
+      ["FORMATO REPORTE DE ACTIVIDADES DIARIAS - DAILY ACTIVITY REPORT", "", "", "", "", "", "", "Código: F-GAC-04"],
+      ["PROCESO GESTIÓN ACADÉMICA", "", "", "", "", "", "", "Versión: 02"],
+      ["Profesor: " + profes, "", "", "", "", "", "", "Período: " + desde + " a " + hasta],
+      [],
+      ["Date", "Level", "Group", "Learning hours", "Unit , lesson and page", "Observations", "Supervisor", "In - Out"]
+    ].concat(filas.map((f) => [
+      f.fecha, f.nivel, f.grupo, Number(f.horas), f.tema, f.observaciones,
+      f.vobo ? (f.vobo.porNombre || f.vobo.por) : "", f.llegada && f.salida ? f.llegada + " - " + f.salida : ""
+    ]));
+    matriz.push(["TOTAL HORAS", "", "", Number(total), "", "", "", ""]);
+    await descargarTabla(matriz, `reporte-diario-actividades-${desde}_a_${hasta}`, document.getElementById("formato-descarga").value, "Actividades");
   });
   document.getElementById("boton-pdf").addEventListener("click", descargarPDF);
 

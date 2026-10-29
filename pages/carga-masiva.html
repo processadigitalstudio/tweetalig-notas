@@ -68,7 +68,7 @@
       <input type="file" id="cl-archivo-csv" accept=".csv">
       <br>
       <button class="boton-secundario" id="cl-boton-procesar" disabled>Procesar archivo</button>
-      <button class="boton-secundario" id="cl-boton-descargar-reporte" style="display:none;">Descargar reporte (CSV)</button>
+      <button class="boton-secundario" id="cl-boton-descargar-reporte" style="display:none;">Descargar reporte (Excel)</button>
       <div class="resultado" id="cl-resultado"></div>
     </div>
 
@@ -106,7 +106,7 @@
       <input type="file" id="archivo-csv" accept=".csv">
       <div class="resultado" id="vista-previa"></div>
       <button class="boton-secundario" id="boton-procesar" disabled>Confirmar y procesar archivo</button>
-      <button class="boton-secundario" id="boton-descargar-reporte-est" style="display:none;">Descargar reporte (CSV)</button>
+      <button class="boton-secundario" id="boton-descargar-reporte-est" style="display:none;">Descargar reporte (Excel)</button>
       <div class="resultado" id="resultado"></div>
     </div>
   </main>
@@ -117,6 +117,7 @@
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { datosDirectorio, moverEstudiante } from "../js/matricula.js?v=1";
   import { claveGrupo as claveDeGrupo } from "../js/grupos.js?v=1";
+  import { descargarTabla } from "../js/exportar.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, doc, setDoc, addDoc, deleteField, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -174,14 +175,7 @@
   function descargarReporteCSV(resultados, nombreArchivo) {
     const filas = [["resultado", "detalle"]];
     resultados.forEach((r) => filas.push([r.ok ? "Éxito" : "Error", r.texto]));
-    const csv = filas.map((fila) => fila.map((v) => `"${(v || "").toString().replace(/"/g, '""')}"`).join(",")).join("\n");
-    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = nombreArchivo;
-    a.click();
-    URL.revokeObjectURL(url);
+    descargarTabla(filas, nombreArchivo.replace(/\.csv$/i, ""), "xlsx", "Resultado");
   }
 
   const DIAS_VALIDOS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];

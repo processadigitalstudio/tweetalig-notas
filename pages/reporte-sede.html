@@ -98,7 +98,10 @@
 
     <div class="chips" id="chips"></div>
     <p class="contador" id="contador"></p>
-    <button type="button" class="boton-secundario" id="boton-csv" style="margin-bottom:12px;">Descargar lo que se ve (CSV)</button>
+    <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px; flex-wrap:wrap;">
+      <select id="formato-descarga" style="font-family:var(--fuente-cuerpo); font-size:12.5px; padding:7px 8px; border:1px solid var(--linea); border-radius:6px; background:var(--fondo); color:var(--tinta);"><option value="xlsx">Excel (.xlsx)</option><option value="csv">CSV (texto)</option></select>
+      <button type="button" class="boton-secundario" id="boton-csv">Descargar lo que se ve</button>
+    </div>
     <div class="contenedor-tabla"><table class="tabla-reporte" id="tabla"></table></div>
   </main>
 </div>
@@ -106,6 +109,7 @@
 <script type="module">
   import { requireAuth } from "../js/auth.js?v=3";
   import { claveGrupo as claveDeGrupo } from "../js/grupos.js?v=1";
+  import { descargarTabla } from "../js/exportar.js?v=1";
   import { calcularUmbrales, estadoInasistencia, ETIQUETA_ESTADO } from "../js/umbrales.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, getDoc, doc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
@@ -433,18 +437,9 @@
     document.getElementById("zona-umbrales").style.display = pestana === "asistencia" ? "flex" : "none";
   }
 
-  function descargarCSV() {
-    const celda = (c) => {
-      const texto = (c && typeof c === "object") ? c.texto : c;
-      return `"${String(texto ?? "").replace(/"/g, '""')}"`;
-    };
-    const lineas = [encabezadoActual.map(celda).join(",")].concat(cuerpoActual.map((f) => f.map(celda).join(",")));
-    const blob = new Blob(["﻿" + lineas.join("\r\n")], { type: "text/csv;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `reporte-sede-${pestana}-${document.getElementById("f-periodo").value}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+  async function descargarCSV() {
+    const formato = document.getElementById("formato-descarga").value;
+    await descargarTabla([encabezadoActual].concat(cuerpoActual), `reporte-sede-${pestana}-${document.getElementById("f-periodo").value}`, formato, pestana === "asistencia" ? "Inasistencias" : "Notas");
   }
 
   function cambiarPestana(nueva) {
