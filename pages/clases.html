@@ -79,6 +79,8 @@
       Una clase es la combinación de nivel + grupo + profesor + horario + sede. Los estudiantes se matriculan a una clase existente al subir el CSV.
     </p>
 
+    <button type="button" id="boton-nueva-clase" class="boton-primario" style="width:auto; padding:10px 18px; margin-bottom:14px;">+ Nueva clase</button>
+
     <div class="barra-filtros">
       <div class="campo-filtro">
         <label for="filtro-texto-clases">Buscar</label>
@@ -110,8 +112,11 @@
       <tbody id="lista-clases"></tbody>
     </table>
 
-    <div class="form-tarjeta">
-      <h3 style="font-family: var(--fuente-display); color: var(--azul-profundo); margin: 0;">Crear clase</h3>
+    <div class="form-tarjeta" id="tarjeta-crear-clase" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="font-family: var(--fuente-display); color: var(--azul-profundo); margin: 0;">Crear clase</h3>
+        <button type="button" id="boton-cerrar-crear" style="background:none; border:none; color:var(--tinta-suave); cursor:pointer; font-size:13px;">Cerrar ✕</button>
+      </div>
 
       <label style="margin-top: 0;">Período académico</label>
       <div class="fila-triple">
@@ -683,6 +688,13 @@
     document.getElementById("contador-clases").textContent =
       total === totalGeneral ? `${total} clase(s).` : `${total} de ${totalGeneral} clase(s) — filtro activo.`;
   }
+
+  const tarjetaCrear = document.getElementById("tarjeta-crear-clase");
+  document.getElementById("boton-nueva-clase").addEventListener("click", () => {
+    tarjetaCrear.style.display = "block";
+    tarjetaCrear.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  document.getElementById("boton-cerrar-crear").addEventListener("click", () => { tarjetaCrear.style.display = "none"; });
 
   document.getElementById("boton-guardar").addEventListener("click", async () => {
     const anio = Number(document.getElementById("anio").value);
