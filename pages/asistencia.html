@@ -83,6 +83,7 @@
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { claveGrupo as claveDeGrupo } from "../js/grupos.js?v=1";
+  import { calcularUmbrales, estadoInasistencia, ETIQUETA_ESTADO } from "../js/umbrales.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, getDoc, doc, setDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
   import { badgeReporte, separarMovidos, montarPanelProfesor, cargarEstudiantesDeClases } from "../js/matricula.js?v=1";
@@ -245,6 +246,10 @@
 
     try {
       const primera = grupoActual.clases[0];
+      try {
+        const sp = primera.programaId ? await getDoc(doc(db, "programas", primera.programaId)) : null;
+        grupoActual.umbrales = sp && sp.exists() ? calcularUmbrales(sp.data(), primera.nivel) : null;
+      } catch (e) { grupoActual.umbrales = null; }
       const idPeriodo = `${primera.anio}-${primera.periodo}-${primera.ciclo}`;
       const snapPeriodo = await getDoc(doc(db, "periodos", idPeriodo));
 
@@ -639,14 +644,17 @@
 
     const tabla = document.createElement("table");
     tabla.className = "tabla-asistencia";
-    tabla.innerHTML = `<thead><tr><th>No.</th><th>ID</th><th>Estudiante</th><th>Horas de inasistencia</th>${muestraSpeaking ? `<th>🎤 Speaking realizadas (de ${totalSpeaking})</th>` : ""}</tr></thead><tbody></tbody>`;
+    tabla.innerHTML = `<thead><tr><th>No.</th><th>ID</th><th>Estudiante</th><th>Horas de inasistencia</th>${grupoActual.umbrales ? `<th>Estado (pierde con más de ${Math.round(grupoActual.umbrales.perdida * 100) / 100} h)</th>` : ""}${muestraSpeaking ? `<th>🎤 Speaking realizadas (de ${totalSpeaking})</th>` : ""}</tr></thead><tbody></tbody>`;
     const tbody = tabla.querySelector("tbody");
 
     estudiantesActuales.forEach((est, idx) => {
       const horas = horasTotales[est.cedula] || 0;
-      const alerta = horas >= 2 ? ` style="color:var(--error); font-weight:600;"` : "";
+      const umb = grupoActual.umbrales;
+      const estado = umb ? estadoInasistencia(horas, umb) : (horas >= 2 ? "alerta1" : "ok");
+      const color = estado === "perdida" ? "#8a3a22" : (estado === "alerta2" ? "#8a4b12" : (estado === "alerta1" ? "#7a5d00" : ""));
+      const alerta = estado !== "ok" ? ` style="color:${color}; font-weight:600;"` : "";
       const fila = document.createElement("tr");
-      fila.innerHTML = `<td>${idx + 1}</td><td>${est.cedula}</td><td>${est.apellido} ${est.nombre}${badgeReporte(est)}</td><td${alerta}>${horas.toFixed(2)}${horas >= 2 ? " ⚠" : ""}</td>${muestraSpeaking ? `<td>${speakingHechas[est.cedula] || 0}</td>` : ""}`;
+      fila.innerHTML = `<td>${idx + 1}</td><td>${est.cedula}</td><td>${est.apellido} ${est.nombre}${badgeReporte(est)}</td><td${alerta}>${horas.toFixed(2)}${estado !== "ok" ? " ⚠" : ""}</td>${umb ? `<td${alerta}>${ETIQUETA_ESTADO[estado]}</td>` : ""}${muestraSpeaking ? `<td>${speakingHechas[est.cedula] || 0}</td>` : ""}`;
       tbody.appendChild(fila);
     });
 
@@ -655,7 +663,7 @@
       const horas = horasTotales[est.cedula] || 0;
       const fila = document.createElement("tr");
       fila.style.cssText = "opacity:0.55;";
-      fila.innerHTML = `<td>—</td><td>${est.cedula}</td><td>${est.apellido} ${est.nombre} <span style="font-size:11px;">(movido a ${est.movidoATexto || "otra clase"})</span></td><td>${horas.toFixed(2)}</td>${muestraSpeaking ? `<td>${speakingHechas[est.cedula] || 0}</td>` : ""}`;
+      fila.innerHTML = `<td>—</td><td>${est.cedula}</td><td>${est.apellido} ${est.nombre} <span style="font-size:11px;">(movido a ${est.movidoATexto || "otra clase"})</span></td><td>${horas.toFixed(2)}</td>${grupoActual.umbrales ? "<td></td>" : ""}${muestraSpeaking ? `<td>${speakingHechas[est.cedula] || 0}</td>` : ""}`;
       tbody.appendChild(fila);
     });
 

@@ -107,6 +107,16 @@
       <div class="sedes-check" id="sedes-check"></div>
       <p class="ts" style="font-size: 12px; color: var(--tinta-suave); margin-top: 4px;">Si no marcas ninguna, aplica para todas las sedes.</p>
 
+      <h4 style="margin:18px 0 4px;">Horas del curso e inasistencias</h4>
+      <p class="ts" style="font-size: 12px; color: var(--tinta-suave); margin: 0 0 8px;">Escribe las horas de cada nivel (1 bloque = 1 hora). Con esto las alertas y la pérdida por inasistencia se calculan solas.</p>
+      <div id="lista-horas-nivel"></div>
+      <button type="button" class="boton-secundario" id="boton-agregar-nivel-horas">+ Agregar nivel</button>
+      <div style="display:flex; gap:14px; flex-wrap:wrap; margin-top:12px;">
+        <div><label for="pct-alerta1">Alerta 1 (%)</label><input type="number" id="pct-alerta1" min="1" max="100" step="0.5" value="5" style="width:90px;"></div>
+        <div><label for="pct-alerta2">Alerta 2 (%)</label><input type="number" id="pct-alerta2" min="1" max="100" step="0.5" value="8" style="width:90px;"></div>
+        <div><label for="pct-perdida">Pérdida (%)</label><input type="number" id="pct-perdida" min="1" max="100" step="0.5" value="10" style="width:90px;"></div>
+      </div>
+
       <div id="lista-cortes"></div>
       <button type="button" class="boton-secundario" id="boton-agregar-corte">+ Agregar corte</button>
       <p class="suma-porcentaje" id="suma-cortes"></p>
@@ -251,6 +261,20 @@
     actualizarSumaCortes();
   });
 
+  function crearFilaHorasNivel(dato) {
+    const fila = document.createElement("div");
+    fila.className = "fila-horas-nivel";
+    fila.style.cssText = "display:flex; gap:8px; align-items:center; margin-bottom:6px;";
+    fila.innerHTML = `
+      <input type="text" class="input-nivel-horas" placeholder="Nivel (ej. A1)" style="width:150px;" value="${(dato?.nivel || "").replace(/"/g, "&quot;")}">
+      <input type="number" class="input-horas-curso" placeholder="Horas" min="1" step="1" style="width:100px;" value="${dato?.horas || ""}">
+      <span style="font-size:12px; color:var(--tinta-suave);">horas del curso</span>
+      <button type="button" class="boton-secundario btn-quitar-nivel-horas" style="padding:4px 8px;">Quitar</button>`;
+    fila.querySelector(".btn-quitar-nivel-horas").addEventListener("click", () => fila.remove());
+    document.getElementById("lista-horas-nivel").appendChild(fila);
+  }
+  document.getElementById("boton-agregar-nivel-horas").addEventListener("click", () => crearFilaHorasNivel());
+
   function leerFormulario() {
     const nombre = document.getElementById("nombre-programa").value.trim();
     const anio = Number(document.getElementById("anio-programa").value);
@@ -270,11 +294,22 @@
       };
     });
 
-    return { nombre, anio, periodo, ciclo, sedes: sedesMarcadas, cortes };
+    const horasPorNivel = [...document.querySelectorAll(".fila-horas-nivel")].map((f) => ({
+      nivel: f.querySelector(".input-nivel-horas").value.trim(),
+      horas: Number(f.querySelector(".input-horas-curso").value) || 0
+    })).filter((x) => x.nivel && x.horas > 0);
+    const pctAlerta1 = Number(document.getElementById("pct-alerta1").value) || 5;
+    const pctAlerta2 = Number(document.getElementById("pct-alerta2").value) || 8;
+    const pctPerdida = Number(document.getElementById("pct-perdida").value) || 10;
+
+    return { nombre, anio, periodo, ciclo, sedes: sedesMarcadas, cortes, horasPorNivel, pctAlerta1, pctAlerta2, pctPerdida };
   }
 
   function validar(datos) {
     if (!datos.nombre) return "Escribe el nombre del programa.";
+    if (!(datos.pctAlerta1 < datos.pctAlerta2 && datos.pctAlerta2 < datos.pctPerdida)) return "Los porcentajes deben ir en orden: Alerta 1 menor que Alerta 2, y Alerta 2 menor que Pérdida.";
+    const nivelesHoras = datos.horasPorNivel.map((x) => x.nivel.toLowerCase());
+    if (new Set(nivelesHoras).size !== nivelesHoras.length) return "Hay un nivel repetido en las horas del curso.";
     if (datos.cortes.length === 0) return "Agrega al menos un corte.";
     const sumaCortes = datos.cortes.reduce((a, c) => a + c.peso, 0);
     if (sumaCortes !== 100) return "Los pesos de los cortes deben sumar 100%.";
@@ -307,6 +342,11 @@
       i.checked = (datos.sedes || []).includes(i.value);
     });
 
+    document.getElementById("lista-horas-nivel").innerHTML = "";
+    (datos.horasPorNivel || []).forEach((x) => crearFilaHorasNivel(x));
+    document.getElementById("pct-alerta1").value = datos.pctAlerta1 || 5;
+    document.getElementById("pct-alerta2").value = datos.pctAlerta2 || 8;
+    document.getElementById("pct-perdida").value = datos.pctPerdida || 10;
     document.getElementById("lista-cortes").innerHTML = "";
     (datos.cortes || []).forEach((c) => crearBloqueCorte(c));
     actualizarSumaCortes();
@@ -319,6 +359,10 @@
     document.getElementById("nombre-programa").value = "";
     document.querySelectorAll("#sedes-check input").forEach((i) => (i.checked = false));
     document.getElementById("lista-cortes").innerHTML = "";
+    document.getElementById("lista-horas-nivel").innerHTML = "";
+    document.getElementById("pct-alerta1").value = 5;
+    document.getElementById("pct-alerta2").value = 8;
+    document.getElementById("pct-perdida").value = 10;
     document.getElementById("boton-cancelar-edicion").style.display = "none";
     crearBloqueCorte();
     actualizarSumaCortes();

@@ -37,6 +37,7 @@
   .estado { font-size: 11.5px; font-weight: 600; padding: 2px 9px; border-radius: 10px; white-space: nowrap; }
   .estado.ok { background: #e3f4ee; color: #2d6a58; border: 1px solid #5db69c; }
   .estado.alerta { background: #fbf0c9; color: #7a5d00; border: 1px solid #e6c14f; }
+  .estado.alerta2 { background: #f9dfc4; color: #8a4b12; border: 1px solid #e29a4f; }
   .estado.perdida { background: #f8e1da; color: #8a3a22; border: 1px solid #d48167; }
   .estado.sin { background: #eceff3; color: #4a5766; border: 1px solid #a9b3c1; }
   .boton-secundario {
@@ -91,8 +92,8 @@
     </div>
 
     <div id="zona-umbrales" class="barra-filtros" style="margin-bottom:10px;">
-      <div class="campo-filtro"><label for="u-alerta">Horas para alerta</label><input type="number" id="u-alerta" value="2" min="0.5" step="0.5"></div>
-      <div class="campo-filtro"><label for="u-perdida">Horas para pérdida</label><input type="number" id="u-perdida" value="6" min="0.5" step="0.5"></div>
+      <div class="campo-filtro"><label for="u-alerta">Alerta (horas, si el programa no tiene horas)</label><input type="number" id="u-alerta" value="2" min="0.5" step="0.5"></div>
+      <div class="campo-filtro"><label for="u-perdida">Pérdida (horas, si el programa no tiene horas)</label><input type="number" id="u-perdida" value="6" min="0.5" step="0.5"></div>
     </div>
 
     <div class="chips" id="chips"></div>
@@ -105,6 +106,7 @@
 <script type="module">
   import { requireAuth } from "../js/auth.js?v=3";
   import { claveGrupo as claveDeGrupo } from "../js/grupos.js?v=1";
+  import { calcularUmbrales, estadoInasistencia, ETIQUETA_ESTADO } from "../js/umbrales.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, getDoc, doc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
   import { cargarEstudiantesDeClases } from "../js/matricula.js?v=1";
@@ -294,6 +296,7 @@
             profesor: clase.docenteNombre || "—",
             ciudadId: clase.ciudadId, sede: clase.ciudadNombre || "—",
             programa: clase.programaNombre || "—",
+            umbrales: calcularUmbrales(programa, clase.nivel),
             esDistancia, totalSpeaking, speaking: speakingHechas[e.cedula] || 0,
             horas: horas[e.cedula] || 0,
             llenas, cortesCompletos, totalCortes, notaFinal, estadoNotas
@@ -312,6 +315,14 @@
   }
 
   // ───────── Pintado ─────────
+  // Estado de inasistencia: por programa y nivel si hay horas configuradas; si no, por los límites manuales.
+  function estadoDe(f) {
+    if (f.umbrales) return estadoInasistencia(f.horas, f.umbrales);
+    const ua = Number(document.getElementById("u-alerta").value) || 2;
+    const up = Number(document.getElementById("u-perdida").value) || 6;
+    return estadoInasistencia(f.horas, { alerta1: ua - 1e-9, alerta2: null, perdida: up - 1e-9 });
+  }
+
   function filasFiltradas() {
     const sede = document.getElementById("f-sede").value;
     const programa = document.getElementById("f-programa").value;
@@ -326,8 +337,8 @@
       if (claseId && f.claseId !== claseId) return false;
       if (texto && !(normalizar(`${f.apellido} ${f.nombre}`).includes(texto) || normalizar(`${f.nombre} ${f.apellido}`).includes(texto) || String(f.cedula).includes(texto))) return false;
       if (pestana === "asistencia") {
-        if (chipActivo === "alerta" && !(f.horas >= uAlerta && f.horas < uPerdida)) return false;
-        if (chipActivo === "perdida" && !(f.horas >= uPerdida)) return false;
+        if (chipActivo === "alerta" && !["alerta1", "alerta2"].includes(estadoDe(f))) return false;
+        if (chipActivo === "perdida" && estadoDe(f) !== "perdida") return false;
         if (chipActivo === "con" && !(f.horas > 0)) return false;
       } else {
         if (chipActivo !== "todos" && f.estadoNotas !== chipActivo) return false;
@@ -343,8 +354,8 @@
     const chips = pestana === "asistencia"
       ? [["todos", `Todos (${base.length})`],
          ["con", `Con inasistencias (${cuenta((f) => f.horas > 0)})`],
-         ["alerta", `En alerta (${cuenta((f) => f.horas >= uAlerta && f.horas < uPerdida)})`],
-         ["perdida", `En pérdida (${cuenta((f) => f.horas >= uPerdida)})`]]
+         ["alerta", `En alerta (${cuenta((f) => ["alerta1", "alerta2"].includes(estadoDe(f)))})`],
+         ["perdida", `En pérdida (${cuenta((f) => estadoDe(f) === "perdida")})`]]
       : [["todos", `Todos (${base.length})`],
          ["sin", `Sin notas (${cuenta((f) => f.estadoNotas === "sin")})`],
          ["parcial", `Con notas parciales (${cuenta((f) => f.estadoNotas === "parcial")})`],
@@ -381,11 +392,12 @@
     let encabezado, cuerpo;
 
     if (pestana === "asistencia") {
-      encabezado = ["No.", "Estudiante", "Cédula", "Clase", "Profesor", "Sede", "Programa", "Horas de inasistencia", "Estado"];
-      if (hayDistancia) encabezado.splice(8, 0, "Speaking realizadas");
+      encabezado = ["No.", "Estudiante", "Cédula", "Clase", "Profesor", "Sede", "Programa", "Horas de inasistencia", "Pierde con más de", "Estado"];
+      if (hayDistancia) encabezado.splice(9, 0, "Speaking realizadas");
       cuerpo = lista.map((f, i) => {
-        const estado = f.horas >= uPerdida ? ["perdida", "Pérdida"] : (f.horas >= uAlerta ? ["alerta", "Alerta"] : ["ok", "Al día"]);
-        const fila = [i + 1, `${f.apellido} ${f.nombre}`, f.cedula, f.claseTexto, f.profesor, f.sede, f.programa, f.horas.toFixed(2)];
+        const est = estadoDe(f);
+        const estado = [est, ETIQUETA_ESTADO[est]];
+        const fila = [i + 1, `${f.apellido} ${f.nombre}`, f.cedula, f.claseTexto, f.profesor, f.sede, f.programa, f.horas.toFixed(2), f.umbrales ? `${Math.round(f.umbrales.perdida * 100) / 100} h (de ${f.umbrales.horasCurso})` : "manual"];
         if (hayDistancia) fila.push(f.esDistancia ? `${f.speaking} de ${f.totalSpeaking}` : "—");
         fila.push({ estado: estado[0], texto: estado[1] });
         return fila;

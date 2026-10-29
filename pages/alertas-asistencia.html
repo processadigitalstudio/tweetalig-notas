@@ -116,6 +116,7 @@
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { claveGrupo as claveDeGrupo } from "../js/grupos.js?v=1";
+  import { calcularUmbrales, estadoInasistencia, ETIQUETA_ESTADO } from "../js/umbrales.js?v=1";
   import { cargarEstudiantesDeClases } from "../js/matricula.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, getDoc, doc, setDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
@@ -257,6 +258,13 @@ Tweetalig Centro de Idiomas`;
       alertaActuales = [];
       perdidaActuales = [];
 
+      // Programas (para las horas del curso y los porcentajes de cada nivel)
+      const cacheProgramas = {};
+      await Promise.all([...new Set(clases.map((c) => c.programaId).filter(Boolean))].map(async (pid) => {
+        try { const sp = await getDoc(doc(db, "programas", pid)); cacheProgramas[pid] = sp.exists() ? sp.data() : null; }
+        catch (e) { cacheProgramas[pid] = null; }
+      }));
+
       await Promise.all(Object.values(porGrupo).map(async (grupo) => {
         grupo.sort((a, b) => (a.id < b.id ? -1 : 1));
         const claseAncla = grupo[0].id;
@@ -280,9 +288,14 @@ Tweetalig Centro de Idiomas`;
           });
         });
 
+        // Límites: por programa y nivel si están configurados; si no, los manuales de esta pantalla.
+        const umbPrograma = calcularUmbrales(cacheProgramas[grupo[0].programaId], grupo[0].nivel);
+        const umb = umbPrograma || { alerta1: umbralAlerta - 1e-9, alerta2: null, perdida: umbralPerdida - 1e-9 };
+
         estudiantes.forEach((est) => {
           const horas = horasTotales[est.cedula] || 0;
-          if (horas < umbralAlerta) return;
+          const estado = estadoInasistencia(horas, umb);
+          if (estado === "ok") return;
 
           const registro = {
             cedula: est.cedula, nombre: est.nombre, apellido: est.apellido, correo: est.correo || "",
@@ -290,10 +303,11 @@ Tweetalig Centro de Idiomas`;
             claseTexto: `${grupo[0].nivel} - ${grupo[0].grupo}`,
             ciudadNombre: est.ciudadNombre || grupo[0].ciudadNombre,
             docenteNombre: grupo[0].docenteNombre,
-            horas
+            horas, estado, horasCurso: umbPrograma?.horasCurso || null,
+            limitePerdida: umbPrograma ? umbPrograma.perdida : null
           };
 
-          if (horas >= umbralPerdida) {
+          if (estado === "perdida") {
             perdidaActuales.push({ ...registro, notificado: notificadosPerdida.has(est.cedula) });
           } else {
             alertaActuales.push({ ...registro, notificado: notificadosAlerta.has(est.cedula) });
@@ -321,7 +335,7 @@ Tweetalig Centro de Idiomas`;
     const tabla = document.createElement("table");
     tabla.className = "tabla-al";
     tabla.innerHTML = `
-      <thead><tr><th>No.</th><th>ID</th><th>Estudiante</th><th>Correo</th><th>Clase</th><th>Sede</th><th>Profesor</th><th>Horas ausente</th><th>Aviso</th></tr></thead>
+      <thead><tr><th>No.</th><th>ID</th><th>Estudiante</th><th>Correo</th><th>Clase</th><th>Sede</th><th>Profesor</th><th>Horas ausente</th><th>Límite pérdida</th><th>Nivel</th><th>Aviso</th></tr></thead>
       <tbody></tbody>
     `;
     const tbody = tabla.querySelector("tbody");
@@ -336,6 +350,8 @@ Tweetalig Centro de Idiomas`;
         <td>${c.ciudadNombre || "—"}</td>
         <td>${c.docenteNombre || "—"}</td>
         <td class="col-horas">${c.horas.toFixed(2)}</td>
+        <td>${c.limitePerdida != null ? "más de " + (Math.round(c.limitePerdida * 100) / 100) + " h (de " + c.horasCurso + ")" : "manual"}</td>
+        <td>${ETIQUETA_ESTADO[c.estado] || ""}</td>
         <td class="${c.notificado ? "estado-enviado" : "estado-pendiente"}">${c.notificado ? "Enviado" : "Pendiente"}</td>
       `;
       tbody.appendChild(fila);
