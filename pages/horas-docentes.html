@@ -144,7 +144,7 @@
           resultado.push({
             anclaId: ancla.id, fecha,
             profesor: ancla.docenteNombre || ancla.docenteCorreo, correo: ancla.docenteCorreo,
-            clase: `${ancla.programaNombre ? ancla.programaNombre + " · " : ""}${ancla.nivel} - ${ancla.grupo}`,
+            clase: `${ancla.programaNombre ? ancla.programaNombre + " - " : ""}${ancla.nivel} - ${ancla.grupo}`,
             nivel: ancla.nivel || "", grupo: ancla.grupo || "", observaciones: s.observaciones || "",
             sedes, tema: s.tema || "", llegada: s.horaLlegada || "", salida: s.horaSalida || "",
             horas: horasDe(s), vobo: s.vobo || null, sesion: s
@@ -325,7 +325,7 @@
       pdf.text(`Profesor: ${f0.profesor}`, 40, 76);
       pdf.text(`Período del informe: ${desde} a ${hasta}`, 40, 92);
       pdf.setFont("helvetica", "normal"); pdf.setFontSize(10);
-      pdf.text(`Clase: ${f0.clase}${f0.sedes ? "  ·  Sede(s): " + f0.sedes : ""}`, 40, 108);
+      pdf.text(`Clase: ${f0.clase}${f0.sedes ? "   |   Sede(s): " + f0.sedes : ""}`, 40, 108);
 
       const total = grupoFilas.filter((f) => f.vobo).reduce((a, f) => a + f.horas, 0);
       pdf.autoTable({
