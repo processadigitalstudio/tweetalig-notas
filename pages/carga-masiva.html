@@ -248,10 +248,23 @@ Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co,Martes-Jueves 18:00-20:00`;
   const inputArchivoClases = document.getElementById("cl-archivo-csv");
   const botonProcesarClases = document.getElementById("cl-boton-procesar");
 
-  inputArchivoClases.addEventListener("change", () => {
+  // Lee el archivo con la codificación correcta: UTF-8 si es válido; si no
+  // (Excel en español suele guardar en Windows-1252), así no se pierden tildes ni la Ñ.
+  async function leerArchivoTexto(archivo) {
+    const bytes = await archivo.arrayBuffer();
+    let texto;
+    try {
+      texto = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch (e) {
+      texto = new TextDecoder("windows-1252").decode(bytes);
+    }
+    return texto.replace(/^\uFEFF/, "");
+  }
+
+  inputArchivoClases.addEventListener("change", async () => {
     const archivo = inputArchivoClases.files[0];
     if (!archivo) return;
-    Papa.parse(archivo, {
+    Papa.parse(await leerArchivoTexto(archivo), {
       header: true,
       skipEmptyLines: true,
       complete: (resultado) => {
@@ -539,10 +552,10 @@ Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo`;
     contenedor.appendChild(tabla);
   }
 
-  inputArchivo.addEventListener("change", () => {
+  inputArchivo.addEventListener("change", async () => {
     const archivo = inputArchivo.files[0];
     if (!archivo) return;
-    Papa.parse(archivo, {
+    Papa.parse(await leerArchivoTexto(archivo), {
       header: true,
       skipEmptyLines: true,
       complete: async (resultado) => {
