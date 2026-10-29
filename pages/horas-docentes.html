@@ -55,19 +55,15 @@
     <div class="resumen-total" id="resumen" style="display:none;"></div>
     <div class="acciones-pagina" style="display:none; gap:8px; margin-bottom:12px;" id="acciones">
       <button type="button" class="boton-secundario" id="boton-csv">Descargar (Excel/CSV)</button>
-      <button type="button" class="boton-secundario" id="boton-imprimir">Imprimir / guardar PDF</button>
+      <button type="button" class="boton-verde" id="boton-pdf">Descargar PDF protegido (por clase)</button>
       <button type="button" class="boton-verde" id="boton-aprobar-todos" style="display:none;">Dar visto bueno a todos los completos</button>
-    </div>
-    <div class="solo-impresion">
-      <table>
-        <tr><td colspan="2"><strong>FORMATO REPORTE DE ACTIVIDADES DIARIAS<br>DAILY ACTIVITY REPORT</strong></td><td>Código: F-GAC-04<br>Versión: 02</td></tr>
-        <tr><td>PROCESO GESTIÓN ACADÉMICA</td><td colspan="2" id="imp-datos"></td></tr>
-      </table>
     </div>
     <div class="contenedor-tabla"><table class="tabla-horas" id="tabla"></table></div>
   </main>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { db } from "../js/firebase-config.js?v=3";
@@ -274,11 +270,90 @@
     a.download = `reporte-diario-actividades-${desde}_a_${hasta}.csv`;
     a.click(); URL.revokeObjectURL(a.href);
   });
-  document.getElementById("boton-imprimir").addEventListener("click", () => {
-    const profes = [...new Set(filas.map((f) => f.profesor))].join(" / ");
-    document.getElementById("imp-datos").textContent = `Profesor: ${profes} · Período: ${document.getElementById("f-desde").value} a ${document.getElementById("f-hasta").value}`;
-    window.print();
-  });
+  document.getElementById("boton-pdf").addEventListener("click", descargarPDF);
+
+  function descargarPDF() {
+    if (!window.jspdf || !filas.length) return;
+    const quien = perfil?.nombre ? `${perfil.nombre} (${usuario.email})` : usuario.email;
+    const ahora = new Date();
+    const sello = ahora.toLocaleString("es-CO", { timeZone: "America/Bogota", dateStyle: "short", timeStyle: "short" });
+    const desde = document.getElementById("f-desde").value, hasta = document.getElementById("f-hasta").value;
+    const claveAleatoria = Array.from(crypto.getRandomValues(new Uint8Array(16))).map((b) => b.toString(16).padStart(2, "0")).join("");
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({
+      orientation: "landscape", unit: "pt", format: "a4",
+      encryption: { userPassword: "", ownerPassword: claveAleatoria, userPermissions: ["print"] }
+    });
+    pdf.setProperties({ title: `Reporte de actividades diarias ${desde} a ${hasta}`, author: "Tweetalig Centro de Idiomas", subject: "F-GAC-04" });
+
+    // Una sección por clase (profesor + nivel + grupo)
+    const secciones = new Map();
+    filas.forEach((f) => {
+      const k = `${f.correo}|${f.anclaId}`;
+      if (!secciones.has(k)) secciones.set(k, []);
+      secciones.get(k).push(f);
+    });
+    const lista = [...secciones.values()].sort((a, b) =>
+      a[0].profesor.localeCompare(b[0].profesor) || a[0].nivel.localeCompare(b[0].nivel, "es", { numeric: true }) || a[0].grupo.localeCompare(b[0].grupo));
+
+    const W = pdf.internal.pageSize.getWidth(), H = pdf.internal.pageSize.getHeight();
+    const marcaAgua = () => {
+      pdf.saveGraphicsState();
+      pdf.setGState(new pdf.GState({ opacity: 0.10 }));
+      pdf.setTextColor(44, 61, 77);
+      pdf.setFontSize(20);
+      const txt = `Generado por ${quien} - ${sello}`;
+      for (let y = 120; y < H + 100; y += 150) {
+        for (let x = -60; x < W; x += 380) pdf.text(txt, x, y, { angle: 25 });
+      }
+      pdf.restoreGraphicsState();
+    };
+
+    lista.forEach((grupoFilas, idx) => {
+      if (idx > 0) pdf.addPage();
+      const f0 = grupoFilas[0];
+      grupoFilas.sort((a, b) => a.fecha.localeCompare(b.fecha));
+
+      pdf.setTextColor(44, 61, 77);
+      pdf.setFont("helvetica", "bold"); pdf.setFontSize(13);
+      pdf.text("FORMATO REPORTE DE ACTIVIDADES DIARIAS - DAILY ACTIVITY REPORT", 40, 38);
+      pdf.setFont("helvetica", "normal"); pdf.setFontSize(9);
+      pdf.text("PROCESO GESTIÓN ACADÉMICA", 40, 52);
+      pdf.text("Código: F-GAC-04   Versión: 02", W - 40, 38, { align: "right" });
+      pdf.setFont("helvetica", "bold"); pdf.setFontSize(11);
+      pdf.text(`Profesor: ${f0.profesor}`, 40, 76);
+      pdf.text(`Período del informe: ${desde} a ${hasta}`, 40, 92);
+      pdf.setFont("helvetica", "normal"); pdf.setFontSize(10);
+      pdf.text(`Clase: ${f0.clase}${f0.sedes ? "  ·  Sede(s): " + f0.sedes : ""}`, 40, 108);
+
+      const total = grupoFilas.filter((f) => f.vobo).reduce((a, f) => a + f.horas, 0);
+      pdf.autoTable({
+        startY: 120,
+        head: [["Date", "Level", "Group", "Learning hours", "Unit , lesson and page", "Observations", "Supervisor", "In - Out"]],
+        body: grupoFilas.map((f) => [
+          f.fecha, f.nivel, f.grupo, dosDec(f.horas), f.tema || "", f.observaciones || "",
+          f.vobo ? (f.vobo.porNombre || f.vobo.por) : "", f.llegada && f.salida ? `${f.llegada} - ${f.salida}` : ""
+        ]),
+        foot: [["TOTAL (días con visto bueno)", "", "", dosDec(total), "", "", "", ""]],
+        theme: "grid",
+        styles: { fontSize: 8.5, cellPadding: 4, textColor: [30, 40, 50], lineColor: [180, 190, 200] },
+        headStyles: { fillColor: [93, 182, 156], textColor: 255 },
+        footStyles: { fillColor: [44, 61, 77], textColor: 255 },
+        columnStyles: { 3: { halign: "center" }, 7: { halign: "center" } },
+        margin: { left: 40, right: 40, bottom: 40 },
+        didDrawPage: () => {
+          marcaAgua();
+          pdf.setFontSize(7.5); pdf.setTextColor(110, 120, 130);
+          pdf.text(`Generado por ${quien} el ${sello}. Documento protegido contra edición.`, 40, H - 18);
+        }
+      });
+    });
+
+    pdf.save(`reporte-diario-actividades_${desde}_a_${hasta}.pdf`);
+    registrarLog(usuario, rol, "Descargó reporte de actividades diarias (PDF)", `${desde} a ${hasta} — ${lista.length} clase(s)`).catch(() => {});
+  }
+
   document.getElementById("boton-consultar").addEventListener("click", consultar);
 
   await cargarClases();
