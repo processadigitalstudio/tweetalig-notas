@@ -23,7 +23,8 @@
   .boton-verde { font-family: var(--fuente-cuerpo); font-size: 13px; font-weight: 600; color: #fff; background: var(--verde-marca); border: none; border-radius: 7px; padding: 9px 16px; cursor: pointer; }
   .boton-verde:disabled { opacity: .5; cursor: default; }
   .boton-secundario { font-family: var(--fuente-cuerpo); font-size: 12.5px; font-weight: 500; color: var(--azul-profundo); background: none; border: 1px dashed var(--azul-profundo); border-radius: 6px; padding: 8px 12px; cursor: pointer; }
-  @media print { .app-nav, .barra-filtros, .acciones-pagina { display: none !important; } .app-contenido { padding: 0 !important; } }
+  .solo-impresion { display: none; }
+  @media print { .solo-impresion { display: block; margin-bottom: 14px; font-size: 12px; } .solo-impresion table { width:100%; border-collapse: collapse; } .solo-impresion td { border: 1px solid #999; padding: 5px 8px; } .app-nav, .barra-filtros, .acciones-pagina { display: none !important; } .app-contenido { padding: 0 !important; } }
 </style>
 </head>
 <body>
@@ -39,7 +40,7 @@
     <h2>Control de horas docentes</h2>
     <p style="color: var(--tinta-suave); max-width: 720px; margin-top: -8px; font-size: 13.5px;">
       Cada día de clase tiene su tema, hora de llegada, hora de salida y visto bueno de coordinación.
-      Las horas a pagar se cuentan por <strong>bloques</strong> (45 min en presencial, 60 min en distancia) solo en los días con visto bueno.
+      Las <strong>Learning hours</strong> son los bloques de cada día (45 min en presencial, 60 min en distancia) y solo cuentan en los días con visto bueno. La descarga sigue el formato F-GAC-04.
       Elige profesor y fechas para ver y descargar el detalle para la cuenta de cobro.
     </p>
 
@@ -56,6 +57,12 @@
       <button type="button" class="boton-secundario" id="boton-csv">Descargar (Excel/CSV)</button>
       <button type="button" class="boton-secundario" id="boton-imprimir">Imprimir / guardar PDF</button>
       <button type="button" class="boton-verde" id="boton-aprobar-todos" style="display:none;">Dar visto bueno a todos los completos</button>
+    </div>
+    <div class="solo-impresion">
+      <table>
+        <tr><td colspan="2"><strong>FORMATO REPORTE DE ACTIVIDADES DIARIAS<br>DAILY ACTIVITY REPORT</strong></td><td>Código: F-GAC-04<br>Versión: 02</td></tr>
+        <tr><td>PROCESO GESTIÓN ACADÉMICA</td><td colspan="2" id="imp-datos"></td></tr>
+      </table>
     </div>
     <div class="contenedor-tabla"><table class="tabla-horas" id="tabla"></table></div>
   </main>
@@ -112,8 +119,8 @@
     document.getElementById("f-hasta").value = fechaLocal(new Date(hoy.getTime() - hoy.getTimezoneOffset() * 60000));
   }
 
-  function horasDe(s) { return (s.numBloques || 1) * (s.bloqueMin || 60) / 60; }
-  function dosDec(n) { return (Math.round(n * 100) / 100).toFixed(2); }
+  function horasDe(s) { return s.numBloques || 1; } // Learning hours = número de bloques (1, 2, 3...)
+  function dosDec(n) { return String(Math.round(n * 100) / 100); }
 
   async function consultar() {
     const mensaje = document.getElementById("mensaje");
@@ -142,6 +149,7 @@
             anclaId: ancla.id, fecha,
             profesor: ancla.docenteNombre || ancla.docenteCorreo, correo: ancla.docenteCorreo,
             clase: `${ancla.programaNombre ? ancla.programaNombre + " · " : ""}${ancla.nivel} - ${ancla.grupo}`,
+            nivel: ancla.nivel || "", grupo: ancla.grupo || "", observaciones: s.observaciones || "",
             sedes, tema: s.tema || "", llegada: s.horaLlegada || "", salida: s.horaSalida || "",
             horas: horasDe(s), vobo: s.vobo || null, sesion: s
           });
@@ -179,19 +187,20 @@
     const porProf = {};
     aprobadas.forEach((f) => { porProf[f.profesor] = (porProf[f.profesor] || 0) + f.horas; });
     resumen.style.display = "block";
-    resumen.innerHTML = `<strong>Horas con visto bueno (a pagar): ${dosDec(totalAprob)} h</strong> · Pendientes de visto bueno: ${dosDec(totalPend)} h` +
-      (Object.keys(porProf).length > 1 ? "<br>" + Object.entries(porProf).map(([n, h]) => `${esc(n)}: ${dosDec(h)} h`).join(" · ") : "");
+    resumen.innerHTML = `<strong>Learning hours con visto bueno (a pagar): ${dosDec(totalAprob)}</strong> · Pendientes de visto bueno: ${dosDec(totalPend)}` +
+      (Object.keys(porProf).length > 1 ? "<br>" + Object.entries(porProf).map(([n, h]) => `${esc(n)}: ${dosDec(h)}`).join(" · ") : "");
 
-    const columnas = ["Fecha", "Profesor", "Clase", "Sede(s)", "Tema", "Llegada", "Salida", "Horas (bloques)", "Estado"];
+    const columnas = ["Date", "Profesor", "Level", "Group", "Sede(s)", "Learning hours", "Unit, lesson and page", "Observations", "Supervisor", "In - Out", "Estado"];
     tabla.innerHTML = `<thead><tr>${columnas.map((c) => `<th>${c}</th>`).join("")}${puedeAprobar ? "<th></th>" : ""}</tr></thead>`;
     const tb = document.createElement("tbody");
-    filas.forEach((f, i) => {
+    filas.forEach((f) => {
       const [cls, txt] = estadoFila(f);
       const d = new Date(f.fecha + "T00:00:00");
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td class="num">${DIAS[d.getDay()]} ${f.fecha}</td><td>${esc(f.profesor)}</td><td>${esc(f.clase)}</td><td>${esc(f.sedes)}</td>
-        <td>${esc(f.tema) || "—"}</td><td class="num">${esc(f.llegada) || "—"}</td><td class="num">${esc(f.salida) || "—"}</td>
-        <td class="num">${dosDec(f.horas)}</td><td><span class="estado ${cls}">${txt}</span></td>`;
+      tr.innerHTML = `<td class="num">${DIAS[d.getDay()]} ${f.fecha}</td><td>${esc(f.profesor)}</td><td>${esc(f.nivel)}</td><td>${esc(f.grupo)}</td><td>${esc(f.sedes)}</td>
+        <td class="num">${dosDec(f.horas)}</td><td>${esc(f.tema) || "—"}</td><td>${esc(f.observaciones) || ""}</td>
+        <td>${f.vobo ? esc(f.vobo.porNombre || f.vobo.por) : "—"}</td><td class="num">${f.llegada && f.salida ? esc(f.llegada) + " - " + esc(f.salida) : "—"}</td>
+        <td><span class="estado ${cls}">${txt}</span></td>`;
       if (puedeAprobar) {
         const td = document.createElement("td");
         const completo = f.tema && f.llegada && f.salida;
@@ -243,21 +252,33 @@
   });
 
   document.getElementById("boton-csv").addEventListener("click", () => {
-    const cab = ["Fecha", "Profesor", "Clase", "Sede(s)", "Tema", "Hora de llegada", "Hora de salida", "Horas (bloques)", "Estado", "Visto bueno por"];
     const celda = (t) => `"${String(t ?? "").replace(/"/g, '""')}"`;
-    const lineas = [cab.map(celda).join(",")].concat(filas.map((f) => [
-      f.fecha, f.profesor, f.clase, f.sedes, f.tema, f.llegada, f.salida, dosDec(f.horas),
-      f.vobo ? "Con visto bueno" : "Sin visto bueno", f.vobo ? (f.vobo.porNombre || f.vobo.por) : ""
-    ].map(celda).join(",")));
+    const fila = (arr) => arr.map(celda).join(",");
+    const profes = [...new Set(filas.map((f) => f.profesor))].join(" / ");
+    const desde = document.getElementById("f-desde").value, hasta = document.getElementById("f-hasta").value;
+    const lineas = [
+      fila(["FORMATO REPORTE DE ACTIVIDADES DIARIAS - DAILY ACTIVITY REPORT", "", "", "", "", "", "", "Código: F-GAC-04"]),
+      fila(["PROCESO GESTIÓN ACADÉMICA", "", "", "", "", "", "", "Versión: 02"]),
+      fila(["Profesor: " + profes, "", "", "", "", "", "", "Período: " + desde + " a " + hasta]),
+      "",
+      fila(["Date", "Level", "Group", "Learning hours", "Unit , lesson and page", "Observations", "Supervisor", "In - Out"])
+    ].concat(filas.map((f) => fila([
+      f.fecha, f.nivel, f.grupo, dosDec(f.horas), f.tema, f.observaciones,
+      f.vobo ? (f.vobo.porNombre || f.vobo.por) : "", f.llegada && f.salida ? f.llegada + " - " + f.salida : ""
+    ])));
     const total = filas.filter((f) => f.vobo).reduce((a, f) => a + f.horas, 0);
-    lineas.push(["", "", "", "", "", "", "TOTAL horas con visto bueno", dosDec(total), "", ""].map(celda).join(","));
-    const blob = new Blob(["﻿" + lineas.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    lineas.push(fila(["TOTAL (con visto bueno)", "", "", dosDec(total), "", "", "", ""]));
+    const blob = new Blob(["\uFEFF" + lineas.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `horas-docentes-${document.getElementById("f-desde").value}_a_${document.getElementById("f-hasta").value}.csv`;
+    a.download = `reporte-diario-actividades-${desde}_a_${hasta}.csv`;
     a.click(); URL.revokeObjectURL(a.href);
   });
-  document.getElementById("boton-imprimir").addEventListener("click", () => window.print());
+  document.getElementById("boton-imprimir").addEventListener("click", () => {
+    const profes = [...new Set(filas.map((f) => f.profesor))].join(" / ");
+    document.getElementById("imp-datos").textContent = `Profesor: ${profes} · Período: ${document.getElementById("f-desde").value} a ${document.getElementById("f-hasta").value}`;
+    window.print();
+  });
   document.getElementById("boton-consultar").addEventListener("click", consultar);
 
   await cargarClases();

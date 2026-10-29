@@ -434,7 +434,7 @@
       </label>` : ""}
       <div id="caja-tema" style="margin:10px 0;">
         <label for="input-tema" id="label-tema" style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin-bottom:4px;"></label>
-        <input type="text" id="input-tema" maxlength="300" value="" ${edicionDesbloqueada ? "" : "disabled"} placeholder="Ej. Present perfect, páginas 24-26" style="width:100%; max-width:560px; font-family:var(--fuente-cuerpo); font-size:13.5px; padding:8px 10px; border:1px solid var(--linea); border-radius:7px; background:var(--fondo); color:var(--tinta);">
+        <input type="text" id="input-tema" maxlength="300" value="" ${edicionDesbloqueada ? "" : "disabled"} placeholder="Ej. Unit 3, Lesson 2, p. 24-26" style="width:100%; max-width:560px; font-family:var(--fuente-cuerpo); font-size:13.5px; padding:8px 10px; border:1px solid var(--linea); border-radius:7px; background:var(--fondo); color:var(--tinta);">
       </div>
       <div id="caja-horas" style="margin:10px 0; display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end;">
         <div><label for="input-llegada" style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin-bottom:4px;">Hora de llegada</label>
@@ -443,21 +443,27 @@
           <input type="time" id="input-salida" style="font-size:13.5px; padding:7px 9px; border:1px solid var(--linea); border-radius:7px; background:var(--fondo); color:var(--tinta);"></div>
         <div id="estado-vobo" style="font-size:13px;"></div>
       </div>
+      <div style="margin:10px 0;">
+        <label for="input-observaciones" style="display:block; font-size:13px; font-weight:500; color:var(--tinta-suave); margin-bottom:4px;">Observaciones (opcional)</label>
+        <textarea id="input-observaciones" rows="2" maxlength="500" placeholder="Algo que quieras dejar anotado de esta clase..." style="width:100%; max-width:560px; font-family:var(--fuente-cuerpo); font-size:13.5px; padding:8px 10px; border:1px solid var(--linea); border-radius:7px; background:var(--fondo); color:var(--tinta);"></textarea>
+      </div>
       <div id="zona-estudiantes"></div>
     `;
     const inputTema = document.getElementById("input-tema");
     inputTema.value = guardada.tema || "";
+    const inputObs = document.getElementById("input-observaciones");
+    inputObs.value = guardada.observaciones || "";
     const inputLlegada = document.getElementById("input-llegada");
     const inputSalida = document.getElementById("input-salida");
     inputLlegada.value = guardada.horaLlegada || "";
     inputSalida.value = guardada.horaSalida || "";
     const esGestionVobo = ["coordinador", "secretaria", "admin", "master"].includes(rol);
     const bloqueadoPorVobo = !!guardada.vobo && rol === "profesor";
-    [inputTema, inputLlegada, inputSalida].forEach((el) => { el.disabled = !edicionDesbloqueada || bloqueadoPorVobo; });
+    [inputTema, inputObs, inputLlegada, inputSalida].forEach((el) => { el.disabled = !edicionDesbloqueada || bloqueadoPorVobo; });
     const labelTema = document.getElementById("label-tema");
     const refrescarLabelTema = () => {
       const esSp = !!(document.getElementById("chk-speaking")?.checked);
-      labelTema.textContent = esSp ? "🎤 Tema del Speaking" : "Tema dado en la clase";
+      labelTema.textContent = esSp ? "🎤 Tema del Speaking" : "Unit, lesson and page (tema dado en la clase)";
     };
 
     const chkFestivo = document.getElementById("chk-festivo");
@@ -546,7 +552,8 @@
         speakingRealizada: esSpeaking ? speakingRealizadas : {},
         tema: chkFestivo.checked ? "" : inputTema.value.trim().slice(0, 300),
         horaLlegada: chkFestivo.checked ? "" : inputLlegada.value,
-        horaSalida: chkFestivo.checked ? "" : inputSalida.value
+        horaSalida: chkFestivo.checked ? "" : inputSalida.value,
+        observaciones: inputObs.value.trim().slice(0, 500)
       };
       if (vobo) datos.vobo = vobo;
       try {
