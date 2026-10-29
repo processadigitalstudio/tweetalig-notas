@@ -83,6 +83,7 @@
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { claveGrupo as claveDeGrupo } from "../js/grupos.js?v=1";
+  import { montarSelectorProfesor } from "../js/selector-profesor.js?v=1";
   import { calcularUmbrales, estadoInasistencia, ETIQUETA_ESTADO } from "../js/umbrales.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, getDoc, doc, setDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
@@ -123,56 +124,19 @@
   let gruposClase = [];
 
   if (rol === "master" || rol === "admin" || rol === "coordinador" || rol === "secretaria") {
-    document.getElementById("selector-profesor").style.display = "block";
-    const selectProf = document.getElementById("profesor-vista");
-
-    const misSedesA = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
-    const snapProf = await getDocs(
-      (rol === "coordinador" || rol === "secretaria") && misSedesA.length > 0
-        ? query(collection(db, "usuarios"), where("rol", "==", "profesor"), where("ciudadIds", "array-contains-any", misSedesA))
-        : query(collection(db, "usuarios"), where("rol", "==", "profesor"))
-    );
-    let profesores = snapProf.docs;
-    // Profesores creados con el formato antiguo (una sola sede) también deben aparecer.
-    if ((rol === "coordinador" || rol === "secretaria") && misSedesA.length > 0) {
-      try {
-        const snapViejos = await getDocs(query(collection(db, "usuarios"), where("rol", "==", "profesor"), where("ciudadId", "in", misSedesA)));
-        const ya = new Set(profesores.map((d) => d.id));
-        snapViejos.docs.forEach((d) => { if (!ya.has(d.id)) profesores.push(d); });
-        profesores.sort((a, b) => (a.data().nombre || "").localeCompare(b.data().nombre || ""));
-      } catch (e) { console.warn("No se pudieron leer profesores del formato antiguo:", e); }
-    }
-
-    selectProf.innerHTML = "";
-    profesores.forEach((d) => {
-      const opt = document.createElement("option");
-      opt.value = d.id;
-      opt.textContent = d.data().nombre;
-      selectProf.appendChild(opt);
+    const correoDesdeUrl = new URLSearchParams(window.location.search).get("correo");
+    const { correoInicial } = await montarSelectorProfesor({
+      db, rol, perfil, correoDesdeUrl,
+      alCambiar: async (correo) => { correoActivo = correo; await cargarGrupos(); }
     });
-
-    const params = new URLSearchParams(window.location.search);
-    const correoDesdeUrl = params.get("correo");
-    if (correoDesdeUrl && [...selectProf.options].some((o) => o.value === correoDesdeUrl)) {
-      selectProf.value = correoDesdeUrl;
-      correoActivo = correoDesdeUrl;
-    } else if (selectProf.options.length > 0) {
-      correoActivo = selectProf.options[0].value;
-    } else {
-      correoActivo = null;
-    }
-
-    selectProf.addEventListener("change", async () => {
-      correoActivo = selectProf.value;
-      await cargarGrupos();
-    });
+    correoActivo = correoInicial;
   }
 
   async function cargarGrupos() {
     if (!correoActivo) {
       document.getElementById("panel-estudiantes").innerHTML = "";
-      document.getElementById("selector-clase").innerHTML = "<option value=''>No hay profesores en tu sede</option>";
-      document.getElementById("contenido-asistencia").innerHTML = "<p style='color:var(--tinta-suave);'>No hay profesores registrados en tu sede todavía.</p>";
+      document.getElementById("selector-clase").innerHTML = "<option value=''>Selecciona un profesor primero</option>";
+      document.getElementById("contenido-asistencia").innerHTML = "<p style='color:var(--tinta-suave);'>Selecciona un profesor para ver sus clases.</p>";
       return;
     }
     const q = query(collection(db, "clases"), where("docenteCorreo", "==", correoActivo));
@@ -207,6 +171,11 @@
       document.getElementById("panel-estudiantes").innerHTML = "";
       return;
     }
+    if (gruposClase.length > 1) {
+      const ph = document.createElement("option");
+      ph.value = ""; ph.textContent = "Selecciona la clase...";
+      select.appendChild(ph);
+    }
     gruposClase.forEach((g) => {
       const opt = document.createElement("option");
       opt.value = g.key;
@@ -216,13 +185,24 @@
 
     const params = new URLSearchParams(window.location.search);
     const grupoDesdeUrl = params.get("grupo");
-    const claveInicial = (grupoDesdeUrl && gruposClase.some((g) => g.key === grupoDesdeUrl)) ? grupoDesdeUrl : gruposClase[0].key;
+    const claveInicial = (grupoDesdeUrl && gruposClase.some((g) => g.key === grupoDesdeUrl)) ? grupoDesdeUrl : (gruposClase.length === 1 ? gruposClase[0].key : "");
     select.value = claveInicial;
+    if (!claveInicial) {
+      document.getElementById("contenido-asistencia").innerHTML = "<p style='color:var(--tinta-suave);'>Selecciona una clase.</p>";
+      document.getElementById("panel-estudiantes").innerHTML = "";
+      return;
+    }
 
     await cargarCalendario(claveInicial);
   }
 
-  document.getElementById("selector-clase").addEventListener("change", (e) => cargarCalendario(e.target.value));
+  document.getElementById("selector-clase").addEventListener("change", (e) => {
+    if (e.target.value) cargarCalendario(e.target.value);
+    else {
+      document.getElementById("contenido-asistencia").innerHTML = "<p style='color:var(--tinta-suave);'>Selecciona una clase.</p>";
+      document.getElementById("panel-estudiantes").innerHTML = "";
+    }
+  });
 
   let fechasSesion = []; // [{fecha: Date, horario: {...}, bloqueMin, numBloques}]
   let fechaActivaTexto = null;
