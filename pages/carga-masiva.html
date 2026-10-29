@@ -258,7 +258,11 @@ Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co,Martes-Jueves 18:00-20:00`;
     } catch (e) {
       texto = new TextDecoder("windows-1252").decode(bytes);
     }
-    return texto.replace(/^\uFEFF/, "");
+    texto = texto.replace(/^\uFEFF/, "");
+    if (texto.includes("\uFFFD")) {
+      alert("Ojo: este archivo ya trae caracteres dañados (�). Las tildes y la Ñ se perdieron al GUARDAR el archivo, antes de subirlo. Ábrelo en Excel, corrige esas letras, guárdalo como 'CSV UTF-8' y súbelo otra vez.");
+    }
+    return texto;
   }
 
   inputArchivoClases.addEventListener("change", async () => {
