@@ -359,7 +359,7 @@
         const clave = `c${corteActivoIndex}n${ni}`;
         const valorActual = (notasGuardadas[est.cedula] || {})[clave] ?? "";
         const soloLectura = edicionDesbloqueada ? "" : "disabled";
-        celdas += `<td><input type="text" inputmode="decimal" class="input-nota" data-cedula="${est.cedula}" data-clave="${clave}" value="${valorActual}" placeholder="1.0-5.0" ${soloLectura}></td>`;
+        celdas += `<td><input type="text" inputmode="decimal" class="input-nota" data-cedula="${est.cedula}" data-clave="${clave}" value="${valorActual}" placeholder="0.0-5.0" ${soloLectura}></td>`;
       });
       celdas += `<td class="col-promedio" id="prom-${est.cedula}">${formatear(calcularPromedioCorte(est.cedula, corteActivoIndex))}</td>`;
       fila.innerHTML = celdas;
@@ -385,7 +385,7 @@
             return;
           }
           num = Math.round(num * 10) / 10; // un solo decimal
-          if (num < 1) num = 1;
+          if (num < 0) num = 0;
           if (num > 5) num = 5;
           notasGuardadas[cedula][clave] = num;
         }
