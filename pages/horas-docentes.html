@@ -263,7 +263,7 @@
       f.vobo ? (f.vobo.porNombre || f.vobo.por) : "", f.llegada && f.salida ? f.llegada + " - " + f.salida : ""
     ])));
     const total = filas.filter((f) => f.vobo).reduce((a, f) => a + f.horas, 0);
-    lineas.push(fila(["TOTAL (con visto bueno)", "", "", dosDec(total), "", "", "", ""]));
+    lineas.push(fila(["TOTAL HORAS", "", "", dosDec(total), "", "", "", ""]));
     const blob = new Blob(["\uFEFF" + lineas.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -335,7 +335,7 @@
           f.fecha, f.nivel, f.grupo, dosDec(f.horas), f.tema || "", f.observaciones || "",
           f.vobo ? (f.vobo.porNombre || f.vobo.por) : "", f.llegada && f.salida ? `${f.llegada} - ${f.salida}` : ""
         ]),
-        foot: [["TOTAL (días con visto bueno)", "", "", dosDec(total), "", "", "", ""]],
+        foot: [["TOTAL HORAS", "", "", dosDec(total), "", "", "", ""]],
         theme: "grid",
         styles: { fontSize: 8.5, cellPadding: 4, textColor: [30, 40, 50], lineColor: [180, 190, 200] },
         headStyles: { fillColor: [93, 182, 156], textColor: 255 },
