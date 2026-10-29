@@ -53,6 +53,7 @@
 
     <p id="mensaje" style="font-size:13px; color: var(--tinta-suave);"></p>
     <div class="resumen-total" id="resumen" style="display:none;"></div>
+    <div id="panel-cedulas" style="margin:0 0 12px;"></div>
     <div class="acciones-pagina" style="display:none; gap:8px; margin-bottom:12px;" id="acciones">
       <select id="formato-descarga" style="font-family:var(--fuente-cuerpo); font-size:12.5px; padding:7px 8px; border:1px solid var(--linea); border-radius:6px; background:var(--fondo); color:var(--tinta);"><option value="xlsx">Excel (.xlsx)</option><option value="csv">CSV (texto)</option></select>
       <button type="button" class="boton-secundario" id="boton-csv">Descargar tabla</button>
@@ -68,7 +69,7 @@
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { db } from "../js/firebase-config.js?v=3";
-  import { collection, getDocs, doc, setDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { collection, getDocs, getDoc, doc, setDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
   import { claveGrupo } from "../js/grupos.js?v=1";
   import { descargarTabla } from "../js/exportar.js?v=1";
 
@@ -83,6 +84,7 @@
 
   let clases = [];
   let filas = [];
+  let cedulas = {}; // correo (minúscula) -> cédula del profesor
 
   async function cargarClases() {
     let snap;
@@ -158,6 +160,12 @@
       mensaje.textContent = `No se pudo cargar (${e.code || e.message}).`;
       return;
     }
+    // Cédulas de los profesores del resultado (necesarias para la cuenta de cobro).
+    cedulas = {};
+    await Promise.all([...new Set(resultado.map((f) => (f.correo || "").toLowerCase()))].map(async (c) => {
+      try { const su = await getDoc(doc(db, "usuarios", c)); cedulas[c] = su.exists() ? (su.data().cedula || "") : ""; }
+      catch (e) { cedulas[c] = cedulas[c] || ""; }
+    }));
     filas = resultado.sort((a, b) => a.profesor.localeCompare(b.profesor) || a.fecha.localeCompare(b.fecha) || a.clase.localeCompare(b.clase));
     mensaje.textContent = filas.length ? "" : "No hay días de clase registrados en ese rango (los días se registran cuando el profesor guarda su asistencia).";
     pintar();
@@ -179,7 +187,7 @@
     const tabla = document.getElementById("tabla");
     const acciones = document.getElementById("acciones");
     const resumen = document.getElementById("resumen");
-    if (filas.length === 0) { tabla.innerHTML = ""; acciones.style.display = "none"; resumen.style.display = "none"; return; }
+    if (filas.length === 0) { tabla.innerHTML = ""; acciones.style.display = "none"; resumen.style.display = "none"; document.getElementById("panel-cedulas").innerHTML = ""; return; }
     acciones.style.display = "flex";
 
     const aprobadas = filas.filter((f) => f.vobo);
@@ -218,11 +226,62 @@
       tb.appendChild(tr);
     });
     tabla.appendChild(tb);
+    pintarPanelCedulas();
 
     const btnTodos = document.getElementById("boton-aprobar-todos");
     const completos = filas.filter((f) => !f.vobo && f.tema && f.llegada && f.salida);
     btnTodos.style.display = puedeAprobar && completos.length ? "inline-block" : "none";
     btnTodos.textContent = `Dar visto bueno a los ${completos.length} días completos`;
+  }
+
+  function cedulaDe(correo) { return cedulas[(correo || "").toLowerCase()] || ""; }
+
+  async function guardarCedula(correo, valor) {
+    const limpia = String(valor || "").replace(/[.\s]/g, "");
+    if (!/^\d{5,12}$/.test(limpia)) throw new Error("La cédula debe tener solo números (entre 5 y 12 dígitos).");
+    try { await updateDoc(doc(db, "usuarios", correo.toLowerCase()), { cedula: limpia }); }
+    catch (e) { if (e.code === "not-found") throw new Error("Este profesor no tiene usuario en el portal. Créalo primero en Profesores."); throw e; }
+    cedulas[correo.toLowerCase()] = limpia;
+    await registrarLog(usuario, rol, "Registró cédula de profesor", correo);
+  }
+
+  // Antes de aprobar horas de un profesor hace falta su cédula: si no está, se pide.
+  async function asegurarCedula(correo, nombre) {
+    if (cedulaDe(correo)) return true;
+    const entrada = prompt(`Para la cuenta de cobro hace falta la cédula de ${nombre}.\nEscríbela (solo números):`);
+    if (entrada === null) return false;
+    try { await guardarCedula(correo, entrada); pintar(); return true; }
+    catch (e) { alert(e.message || "No se pudo guardar la cédula."); return false; }
+  }
+
+  function pintarPanelCedulas() {
+    const panel = document.getElementById("panel-cedulas");
+    panel.innerHTML = "";
+    const profesores = new Map();
+    filas.forEach((f) => profesores.set((f.correo || "").toLowerCase(), f.profesor));
+    if (profesores.size === 0) return;
+    const caja = document.createElement("div");
+    caja.style.cssText = "font-size:13px; display:flex; flex-direction:column; gap:6px;";
+    profesores.forEach((nombre, correo) => {
+      const fila = document.createElement("div");
+      fila.style.cssText = "display:flex; gap:8px; align-items:center; flex-wrap:wrap;";
+      const actual = cedulaDe(correo);
+      if (puedeAprobar) {
+        fila.innerHTML = `<span><b>${esc(nombre)}</b> — Cédula:</span>
+          <input type="text" inputmode="numeric" value="${esc(actual)}" placeholder="Sin cédula" style="font-size:13px; padding:5px 8px; border:1px solid var(--linea); border-radius:6px; width:150px;">
+          <button type="button" class="boton-secundario" style="padding:5px 10px;">Guardar cédula</button>
+          <span class="msg" style="font-size:12px;"></span>`;
+        const input = fila.querySelector("input"), msg = fila.querySelector(".msg");
+        fila.querySelector("button").addEventListener("click", async () => {
+          try { await guardarCedula(correo, input.value); msg.style.color = "#2d6a58"; msg.textContent = "Guardada."; }
+          catch (e) { msg.style.color = "var(--error)"; msg.textContent = e.code === "permission-denied" ? "No tienes permiso." : (e.message || e.code); }
+        });
+      } else {
+        fila.innerHTML = `<span><b>${esc(nombre)}</b> — Cédula: ${esc(actual) || "pendiente (la registra coordinación al aprobar)"}</span>`;
+      }
+      caja.appendChild(fila);
+    });
+    panel.appendChild(caja);
   }
 
   async function aplicarVobo(f, aprobar) {
@@ -234,6 +293,7 @@
   }
 
   async function cambiarVobo(f, aprobar) {
+    if (aprobar && !(await asegurarCedula(f.correo, f.profesor))) return;
     try {
       await aplicarVobo(f, aprobar);
       await registrarLog(usuario, rol, aprobar ? "Dio visto bueno de asistencia docente" : "Quitó visto bueno de asistencia docente", `${f.fecha} — ${f.profesor} — ${f.clase}`);
@@ -247,6 +307,9 @@
 
   document.getElementById("boton-aprobar-todos").addEventListener("click", async () => {
     const completos = filas.filter((f) => !f.vobo && f.tema && f.llegada && f.salida);
+    const profesDelLote = new Map();
+    completos.forEach((f) => profesDelLote.set((f.correo || "").toLowerCase(), f.profesor));
+    for (const [correo, nombre] of profesDelLote) { if (!(await asegurarCedula(correo, nombre))) return; }
     if (!confirm(`¿Dar visto bueno a ${completos.length} día(s)?`)) return;
     let fallos = 0;
     for (const f of completos) { try { await aplicarVobo(f, true); } catch (e) { fallos++; } }
@@ -256,7 +319,7 @@
   });
 
   document.getElementById("boton-csv").addEventListener("click", async () => {
-    const profes = [...new Set(filas.map((f) => f.profesor))].join(" / ");
+    const profes = [...new Map(filas.map((f) => [f.correo, `${f.profesor}${cedulaDe(f.correo) ? " (C.C. " + cedulaDe(f.correo) + ")" : ""}`])).values()].join(" / ");
     const desde = document.getElementById("f-desde").value, hasta = document.getElementById("f-hasta").value;
     const total = filas.filter((f) => f.vobo).reduce((a, f) => a + f.horas, 0);
     const matriz = [
@@ -324,7 +387,7 @@
       pdf.text("PROCESO GESTIÓN ACADÉMICA", 40, 52);
       pdf.text("Código: F-GAC-04   Versión: 02", W - 40, 38, { align: "right" });
       pdf.setFont("helvetica", "bold"); pdf.setFontSize(11);
-      pdf.text(`Profesor: ${f0.profesor}`, 40, 76);
+      pdf.text(`Profesor: ${f0.profesor}${cedulaDe(f0.correo) ? "   |   C.C. " + cedulaDe(f0.correo) : ""}`, 40, 76);
       pdf.text(`Período del informe: ${desde} a ${hasta}`, 40, 92);
       pdf.setFont("helvetica", "normal"); pdf.setFontSize(10);
       pdf.text(`Clase: ${f0.clase}${f0.sedes ? "   |   Sede(s): " + f0.sedes : ""}`, 40, 108);
