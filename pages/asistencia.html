@@ -399,6 +399,26 @@
     contenedor.appendChild(div);
   }
 
+  // Botón de guardar también arriba; el aviso del de abajo se copia aquí.
+  function duplicarGuardarArriba(textoBoton, alClic, idAvisoAbajo) {
+    const barra = document.createElement("div");
+    barra.style.cssText = "display:flex; gap:12px; align-items:center; margin:0 0 12px; flex-wrap:wrap;";
+    const b = document.createElement("button");
+    b.className = "boton-primario";
+    b.textContent = textoBoton;
+    b.style.cssText = "width:auto; padding:10px 18px;";
+    b.addEventListener("click", alClic);
+    const av = document.createElement("span");
+    av.style.cssText = "font-size:13px;";
+    barra.appendChild(b); barra.appendChild(av);
+    const abajo = document.getElementById(idAvisoAbajo);
+    if (abajo) {
+      const copiar = () => { av.textContent = abajo.textContent; av.style.color = abajo.style.color; };
+      new MutationObserver(copiar).observe(abajo, { childList: true, characterData: true, subtree: true, attributes: true });
+    }
+    return barra;
+  }
+
   function pintarDia() {
     const cuerpo = document.getElementById("cuerpo-dia");
     const sesionInfo = fechasSesion.find((s) => formatoFecha(s.fecha) === fechaActivaTexto);
@@ -558,6 +578,7 @@
     }
     botonGuardar.addEventListener("click", () => guardar(undefined));
     cuerpo.appendChild(botonGuardar);
+    if (edicionDesbloqueada) cuerpo.insertBefore(duplicarGuardarArriba("Guardar asistencia de este día", () => guardar(undefined), "aviso-asistencia"), cuerpo.firstChild);
 
     // Visto bueno de asistencia docente (solo coordinación, secretaría, admin y Master).
     const estadoVobo = document.getElementById("estado-vobo");

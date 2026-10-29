@@ -319,6 +319,26 @@
     return total;
   }
 
+  // Botón de guardar también arriba; el aviso del de abajo se copia aquí.
+  function duplicarGuardarArriba(textoBoton, alClic, idAvisoAbajo) {
+    const barra = document.createElement("div");
+    barra.style.cssText = "display:flex; gap:12px; align-items:center; margin:0 0 12px; flex-wrap:wrap;";
+    const b = document.createElement("button");
+    b.className = "boton-primario";
+    b.textContent = textoBoton;
+    b.style.cssText = "width:auto; padding:10px 18px;";
+    b.addEventListener("click", alClic);
+    const av = document.createElement("span");
+    av.style.cssText = "font-size:13px;";
+    barra.appendChild(b); barra.appendChild(av);
+    const abajo = document.getElementById(idAvisoAbajo);
+    if (abajo) {
+      const copiar = () => { av.textContent = abajo.textContent; av.style.color = abajo.style.color; };
+      new MutationObserver(copiar).observe(abajo, { childList: true, characterData: true, subtree: true, attributes: true });
+    }
+    return barra;
+  }
+
   function pintarTablaCorte() {
     const corte = programaActual.cortes[corteActivoIndex];
     const cuerpo = document.getElementById("cuerpo-planilla");
@@ -347,6 +367,8 @@
     });
 
     cuerpo.innerHTML = "";
+    const barraArriba = edicionDesbloqueada ? duplicarGuardarArriba("Guardar notas de este corte", guardarNotas, "aviso-notas") : null;
+    if (barraArriba) cuerpo.appendChild(barraArriba);
     cuerpo.appendChild(tabla);
 
     tabla.querySelectorAll(".input-nota").forEach((input) => {
