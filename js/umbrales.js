@@ -1,7 +1,7 @@
 // Límites de inasistencia por programa y nivel.
 // El programa guarda: horasPorNivel [{nivel, horas}], pctAlerta1, pctAlerta2, pctPerdida.
 // 1 bloque = 1 hora. Se pierde / alerta cuando las horas de inasistencia SUPERAN
-// el porcentaje de las horas del curso (ej. 96 h al 10 % -> con 10 h ya se pierde).
+// el límite (porcentaje de las horas del curso, redondeado hacia arriba): 96 h al 10 % -> límite 10, pierde con 11 h.
 export const PCT_POR_DEFECTO = { alerta1: 5, alerta2: 8, perdida: 10 };
 
 export function normalizarNivel(n) {
@@ -16,7 +16,10 @@ export function calcularUmbrales(programa, nivel) {
   const p1 = Number(programa.pctAlerta1) || PCT_POR_DEFECTO.alerta1;
   const p2 = Number(programa.pctAlerta2) || PCT_POR_DEFECTO.alerta2;
   const pp = Number(programa.pctPerdida) || PCT_POR_DEFECTO.perdida;
-  return { horasCurso: horas, alerta1: horas * p1 / 100, alerta2: horas * p2 / 100, perdida: horas * pp / 100, pct: { alerta1: p1, alerta2: p2, perdida: pp } };
+  // Los límites se redondean hacia arriba (se condona la fracción): 96 h al 10 % = 9,6 -> 10,
+  // así con 10 horas de inasistencia aún no pierde; pierde con 11. 80 h al 10 % = 8 -> pierde con 9.
+  const arriba = (x) => Math.ceil(Math.round(x * 1e6) / 1e6);
+  return { horasCurso: horas, alerta1: arriba(horas * p1 / 100), alerta2: arriba(horas * p2 / 100), perdida: arriba(horas * pp / 100), pct: { alerta1: p1, alerta2: p2, perdida: pp } };
 }
 
 // umbrales: resultado de calcularUmbrales, o {alerta1,alerta2,perdida} manuales de respaldo.
