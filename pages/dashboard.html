@@ -35,6 +35,7 @@
 
 <script type="module">
   import { requireAuth } from "../js/auth.js?v=3";
+  import { leerClases } from "../js/clases-lectura.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -91,13 +92,11 @@
       // en vez de uno por uno, y luego armar los bloques en orden.
       const bloques = await Promise.all(snapPeriodos.docs.map(async (dPeriodo) => {
         const per = dPeriodo.data();
-        const q = query(
-          collection(db, "clases"),
+        const snapClases = await leerClases(db, rol, perfil, [
           where("anio", "==", per.anio),
           where("periodo", "==", per.periodo),
           where("ciclo", "==", per.ciclo)
-        );
-        const snapClases = await getDocs(q);
+        ]);
 
         const bloque = document.createElement("div");
         bloque.className = "bloque-periodo";

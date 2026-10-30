@@ -119,6 +119,7 @@
   import { claveGrupo as claveDeGrupo } from "../js/grupos.js?v=1";
   import { descargarTabla } from "../js/exportar.js?v=1";
   import { seleccionarPorDefecto } from "../js/selectores.js?v=1";
+  import { leerClases } from "../js/clases-lectura.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, doc, setDoc, addDoc, deleteField, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -314,10 +315,9 @@ Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co,Martes-Jueves 18:00-20:00`;
 
     // Clases que ya existen para este mismo período+programa — para no duplicar
     // si el mismo archivo se sube dos veces (se compara por sede+nivel+grupo).
-    const snapClasesExistentes = await getDocs(query(
-      collection(db, "clases"),
+    const snapClasesExistentes = await leerClases(db, rol, perfil, [
       where("anio", "==", anio), where("periodo", "==", periodo), where("ciclo", "==", ciclo), where("programaId", "==", programaId)
-    ));
+    ]);
     const clasesExistentes = snapClasesExistentes.docs.map((d) => d.data());
     function claseYaExiste(ciudadId, nivel, grupo) {
       return clasesExistentes.some((c) =>
@@ -377,6 +377,7 @@ Sincelejo,B1.2,AA,juan.perez@tweetalig.edu.co,Martes-Jueves 18:00-20:00`;
         ciudadId: ciudad.id,
         ciudadNombre: ciudad.nombre,
         programaId, programaNombre,
+        esDistancia: String(programaNombre || "").toLowerCase().includes("distancia"),
         estudiantes: []
       });
       clasesExistentes.push({ ciudadId: ciudad.id, nivel, grupo }); // por si el archivo repite la misma fila
@@ -491,7 +492,7 @@ Carlos,Martínez Ruiz,1102345680,carlos.martinez@example.com,B1.2,AA,Sincelejo`;
     const periodo = Number(document.getElementById("periodo").value);
     const ciclo = Number(document.getElementById("ciclo").value);
     const programaId = document.getElementById("est-programa").value;
-    const snapClases = await getDocs(collection(db, "clases"));
+    const snapClases = await leerClases(db, rol, perfil);
     return snapClases.docs
       .map((d) => ({ id: d.id, ...d.data() }))
       .filter((c) => c.anio === anio && c.periodo === periodo && c.ciclo === ciclo && (!programaId || c.programaId === programaId));

@@ -115,9 +115,10 @@
 
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
-  import { claveGrupo as claveDeGrupo } from "../js/grupos.js?v=1";
+  import { claveGrupo as claveDeGrupo, anclaDelGrupo } from "../js/grupos.js?v=2";
   import { calcularUmbrales, estadoInasistencia, ETIQUETA_ESTADO } from "../js/umbrales.js?v=1";
   import { cargarEstudiantesDeClases } from "../js/matricula.js?v=1";
+  import { leerClases } from "../js/clases-lectura.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, getDoc, doc, setDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -228,16 +229,14 @@ Tweetalig Centro de Idiomas`;
     document.getElementById("contenido-perdida").innerHTML = "";
 
     try {
-      let qClases = query(
-        collection(db, "clases"),
-        where("anio", "==", anio), where("periodo", "==", periodo), where("ciclo", "==", ciclo)
-      );
-      const snapClases = await getDocs(qClases);
+      const snapClases = await leerClases(db, rol, perfil, [where("anio", "==", anio), where("periodo", "==", periodo), where("ciclo", "==", ciclo)], { incluirDistancia: true });
       let clases = snapClases.docs.map((d) => ({ id: d.id, ...d.data() }));
+      let clasesOtrasSedes = []; // clases a distancia de otras sedes: solo sirven para ubicar la clase ancla del grupo
 
       const misSedesAl = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
       const restringidoPorSede = (rol === "coordinador" || rol === "secretaria") && misSedesAl.length > 0;
-      if (restringidoPorSede) clases = clases.filter((c) => misSedesAl.includes(c.ciudadId));
+      if (restringidoPorSede) { clasesOtrasSedes = clases.filter((c) => !misSedesAl.includes(c.ciudadId)); clases = clases.filter((c) => misSedesAl.includes(c.ciudadId)); }
+      else if ((rol === "coordinador" || rol === "secretaria")) { clasesOtrasSedes = clases; clases = []; }
       else if (sedeFiltro) clases = clases.filter((c) => c.ciudadId === sedeFiltro);
       if (programaFiltro) clases = clases.filter((c) => c.programaId === programaFiltro);
 
@@ -267,7 +266,7 @@ Tweetalig Centro de Idiomas`;
 
       await Promise.all(Object.values(porGrupo).map(async (grupo) => {
         grupo.sort((a, b) => (a.id < b.id ? -1 : 1));
-        const claseAncla = grupo[0].id;
+        const claseAncla = anclaDelGrupo(grupo, clasesOtrasSedes);
 
         const [listaEst, snapSesiones] = await Promise.all([
           cargarEstudiantesDeClases(grupo, rol, perfil),

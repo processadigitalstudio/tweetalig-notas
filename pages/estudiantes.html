@@ -64,6 +64,7 @@
 
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
+  import { leerClases } from "../js/clases-lectura.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, doc, deleteDoc, setDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
   import { cargarDestinos, etiquetaDestino, moverEstudiante, datosDirectorio, normalizar } from "../js/matricula.js?v=1";
@@ -82,7 +83,7 @@
       selectSede.appendChild(opt);
     });
 
-    const snapClases = await getDocs(collection(db, "clases"));
+    const snapClases = await leerClases(db, rol, perfil);
     const selectClase = document.getElementById("filtro-clase");
     snapClases.forEach((d) => {
       const c = d.data();
@@ -280,7 +281,7 @@
       try {
         // Para cada cédula se toma su matrícula MÁS RECIENTE que siga activa
         // (no movida) y se guarda en qué clase está, con el nombre de su profesor.
-        const snapClases = await getDocs(collection(db, "clases"));
+        const snapClases = await leerClases(db, rol, perfil);
         const clasesPorId = {};
         snapClases.forEach((d) => { clasesPorId[d.id] = { id: d.id, ...d.data() }; });
         const clavePeriodo = (e) => (Number(e.anio) || 0) * 10000 + (Number(e.periodo) || 0) * 100 + (Number(e.ciclo) || 0);

@@ -13,3 +13,10 @@ export function claveGrupo(c) {
   }
   return c.id;
 }
+
+// Clase donde se guardan las sesiones del grupo: la de id más bajo entre TODAS las clases del
+// grupo (incluidas las de otras sedes que no se muestran), para que todos vean la misma lista.
+export function anclaDelGrupo(grupo, otras = []) {
+  const k = claveGrupo(grupo[0]);
+  return [...grupo, ...otras.filter((e) => claveGrupo(e) === k)].map((c) => c.id).sort()[0];
+}

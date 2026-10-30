@@ -80,6 +80,10 @@
     </p>
 
     <button type="button" id="boton-nueva-clase" class="boton-primario" style="width:auto; padding:10px 18px; margin-bottom:14px;">+ Nueva clase</button>
+    <span id="zona-marcar-distancia" style="display:none; margin-left:10px;">
+      <button type="button" id="boton-marcar-distancia" class="boton-secundario" style="margin-bottom:14px;">Marcar clases a distancia (una sola vez)</button>
+      <span id="aviso-marcar-distancia" style="font-size:13px; margin-left:8px;"></span>
+    </span>
 
     <div class="barra-filtros">
       <div class="campo-filtro">
@@ -186,7 +190,8 @@
 
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
-  import { claveGrupo as claveDeGrupo } from "../js/grupos.js?v=1";
+  import { claveGrupo as claveDeGrupo, esProgramaDistancia } from "../js/grupos.js?v=2";
+  import { leerClases } from "../js/clases-lectura.js?v=1";
   import { seleccionarPorDefecto } from "../js/selectores.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, addDoc, updateDoc, deleteDoc, getDoc, doc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
@@ -412,7 +417,7 @@
         document.querySelector(".barra-filtros").before(aviso);
       }
     }
-    const snap = await getDocs(collection(db, "clases"));
+    const snap = await leerClases(db, rol, perfil);
     snap.forEach((d) => {
       const c = d.data();
       if (esCoordinacion && !misSedesTabla.includes(c.ciudadId)) return;
@@ -718,6 +723,30 @@
 
   ["docente", "programa", "ciudad"].forEach((id) => seleccionarPorDefecto(document.getElementById(id)));
   const tarjetaCrear = document.getElementById("tarjeta-crear-clase");
+  // Una sola vez: marca en cada clase si es de un programa a distancia (campo esDistancia),
+  // que coordinación necesita para ver bien los grupos a distancia entre sedes.
+  if (rol === "master" || rol === "admin") {
+    document.getElementById("zona-marcar-distancia").style.display = "inline";
+    document.getElementById("boton-marcar-distancia").addEventListener("click", async () => {
+      const av = document.getElementById("aviso-marcar-distancia");
+      av.style.color = "var(--tinta-suave)"; av.textContent = "Revisando clases...";
+      try {
+        const todas = await leerClases(db, rol, perfil);
+        let cambiadas = 0;
+        for (const d of todas.docs) {
+          const c = d.data();
+          const debe = esProgramaDistancia(c);
+          if (c.esDistancia !== debe) { await updateDoc(doc(db, "clases", d.id), { esDistancia: debe }); cambiadas++; }
+        }
+        av.style.color = "#2E6E4E";
+        av.textContent = `Listo: ${cambiadas} clase(s) actualizada(s) de ${todas.size}.`;
+      } catch (e) {
+        av.style.color = "var(--error)";
+        av.textContent = `No se pudo completar (${e.code || e.message}).`;
+      }
+    });
+  }
+
   document.getElementById("boton-nueva-clase").addEventListener("click", () => {
     tarjetaCrear.style.display = "block";
     tarjetaCrear.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -786,6 +815,7 @@
 
         await addDoc(collection(db, "clases"), {
           ...datosBase,
+          esDistancia: true,
           grupo: grupoSede,
           ciudadId, ciudadNombre,
           grupoDistanciaId
@@ -812,6 +842,7 @@
       }
       await addDoc(collection(db, "clases"), {
         ...datosBase,
+        esDistancia: esProgramaDistancia(datosBase),
         grupo,
         ciudadId: selectCiudad.value,
         ciudadNombre: selectCiudad.options[selectCiudad.selectedIndex].textContent

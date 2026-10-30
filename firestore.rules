@@ -110,7 +110,16 @@ service cloud.firestore {
 
     // Colección "clases": nivel + grupo + docente + horario + ciudad + programa + periodo
     match /clases/{claseId} {
-      allow read: if estaLogueado();
+      // Una clase suelta se puede abrir por su id, pero LISTAR clases está limitado:
+      // Master/Admin todas; profesor solo las suyas; coordinación/secretaría las de sus
+      // sedes y las clases a distancia (campo esDistancia), que necesitan para ubicar el grupo.
+      allow get: if estaLogueado();
+      allow list: if estaLogueado() && (
+        esAdminOMaster() ||
+        (miRol() == 'profesor' && resource.data.docenteCorreo == miCorreo()) ||
+        (miRol() in ['coordinador', 'secretaria'] &&
+          (resource.data.ciudadId in misSedes() || resource.data.get('esDistancia', false) == true))
+      );
       allow create: if esGestor();
       // Editar/borrar una clase: bloqueado si su período ya está cerrado
       // (salvo Master, que siempre puede corregir cualquier cosa).

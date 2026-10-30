@@ -68,9 +68,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
+  import { leerClases } from "../js/clases-lectura.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, getDoc, doc, setDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-  import { claveGrupo } from "../js/grupos.js?v=1";
+  import { claveGrupo, anclaDelGrupo } from "../js/grupos.js?v=2";
   import { descargarTabla } from "../js/exportar.js?v=1";
 
   const { usuario, rol, perfil } = await requireAuth(["profesor", "master", "admin", "coordinador", "secretaria"]);
@@ -84,6 +85,7 @@
 
   let clases = [];
   let filas = [];
+  let clasesOtrasSedes = []; // solo para ubicar la clase ancla de grupos a distancia
   let cedulas = {}; // correo (minúscula) -> cédula del profesor
 
   async function cargarClases() {
@@ -91,10 +93,14 @@
     if (esProfesor) {
       snap = await getDocs(query(collection(db, "clases"), where("docenteCorreo", "==", miCorreo)));
     } else {
-      snap = await getDocs(collection(db, "clases"));
+      snap = await leerClases(db, rol, perfil, [], { incluirDistancia: true });
     }
     clases = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((c) => c.docenteCorreo);
-    if (rol === "coordinador" || rol === "secretaria") clases = clases.filter((c) => misSedes.includes(c.ciudadId));
+    clasesOtrasSedes = [];
+    if (rol === "coordinador" || rol === "secretaria") {
+      clasesOtrasSedes = clases.filter((c) => !misSedes.includes(c.ciudadId));
+      clases = clases.filter((c) => misSedes.includes(c.ciudadId));
+    }
   }
 
   function poblarProfesores() {
@@ -138,7 +144,7 @@
     try {
       await Promise.all(Object.values(grupos).map(async (g) => {
         g.sort((a, b) => (a.id < b.id ? -1 : 1));
-        const ancla = g[0];
+        const ancla = clases.concat(clasesOtrasSedes).find((c) => c.id === anclaDelGrupo(g, clasesOtrasSedes)) || g[0];
         const snap = await getDocs(collection(db, "clases", ancla.id, "sesiones"));
         snap.forEach((d) => {
           const s = d.data();

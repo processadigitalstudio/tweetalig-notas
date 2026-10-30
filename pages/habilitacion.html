@@ -108,6 +108,7 @@
 
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
+  import { leerClases } from "../js/clases-lectura.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, getDoc, doc, setDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -240,11 +241,7 @@ Tweetalig Centro de Idiomas`;
     document.getElementById("contenido-perdida").innerHTML = "";
 
     try {
-      let qClases = query(
-        collection(db, "clases"),
-        where("anio", "==", anio), where("periodo", "==", periodo), where("ciclo", "==", ciclo)
-      );
-      const snapClases = await getDocs(qClases);
+      const snapClases = await leerClases(db, rol, perfil, [where("anio", "==", anio), where("periodo", "==", periodo), where("ciclo", "==", ciclo)]);
       let clases = snapClases.docs.map((d) => ({ id: d.id, ...d.data() }));
 
       const misSedesH = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);

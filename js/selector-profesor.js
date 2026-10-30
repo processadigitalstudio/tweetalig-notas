@@ -1,5 +1,6 @@
 // Selector de profesor para coordinación, secretaría, Admin y Master (Notas y Asistencia).
 // Filtra por sede, programa y búsqueda (nombre o correo); arranca en "Selecciona un profesor...".
+import { leerClases } from "./clases-lectura.js?v=1";
 import { collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const sinTildes = (t) => String(t || "").toLowerCase().trim()
@@ -36,7 +37,7 @@ export async function montarSelectorProfesor({ db, rol, perfil, correoDesdeUrl, 
   // Clases (para saber sede y programa de cada profesor).
   let clases = [];
   try {
-    const snapCl = await getDocs(collection(db, "clases"));
+    const snapCl = await leerClases(db, rol, perfil);
     clases = snapCl.docs.map((d) => d.data());
     if (restringido) clases = clases.filter((c) => misSedes.includes(c.ciudadId));
   } catch (e) { console.warn("No se pudieron leer las clases:", e); }

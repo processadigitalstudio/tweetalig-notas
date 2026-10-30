@@ -71,9 +71,10 @@
 
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
-  import { claveGrupo as claveDeGrupo } from "../js/grupos.js?v=1";
+  import { claveGrupo as claveDeGrupo } from "../js/grupos.js?v=2";
   import { mostrarAviso } from "../js/aviso.js?v=1";
   import { montarSelectorProfesor } from "../js/selector-profesor.js?v=1";
+  import { leerClases } from "../js/clases-lectura.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, getDoc, doc, setDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
   import { badgeReporte, separarMovidos, montarPanelProfesor, cargarEstudiantesDeClases } from "../js/matricula.js?v=1";
@@ -131,9 +132,10 @@
       document.getElementById("contenido-notas").innerHTML = "<p style='color:var(--tinta-suave);'>Selecciona un profesor para ver sus clases.</p>";
       return;
     }
-    const q = query(collection(db, "clases"), where("docenteCorreo", "==", correoActivo));
-    const snap = await getDocs(q);
+    const snap = await leerClases(db, rol, perfil, [where("docenteCorreo", "==", correoActivo)], { incluirDistancia: true });
     const clases = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const esCoordNotas = rol === "coordinador" || rol === "secretaria";
+    const misSedesNotas = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
 
     const porClave = {};
     clases.forEach((c) => {
@@ -142,7 +144,9 @@
       porClave[clave].push(c);
     });
 
-    gruposClase = Object.entries(porClave).map(([key, clasesGrupo]) => {
+    gruposClase = Object.entries(porClave)
+      .filter(([, cs]) => !esCoordNotas || cs.some((c) => misSedesNotas.includes(c.ciudadId))) // coordinación: solo grupos con clases de su sede
+      .map(([key, clasesGrupo]) => {
       const primera = clasesGrupo[0];
       const sedes = clasesGrupo.map((c) => c.ciudadNombre).join(", ");
       return {

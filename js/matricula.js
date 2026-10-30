@@ -11,6 +11,7 @@
 // - Coordinación solo puede mover dentro de sus sedes.
 
 import { db } from "./firebase-config.js?v=3";
+import { leerClases } from "./clases-lectura.js?v=1";
 import { registrarLog } from "./auth.js?v=3";
 import {
   collection, doc, getDoc, getDocs, writeBatch, deleteField, query, where, orderBy, limit
@@ -275,12 +276,7 @@ export async function cargarDestinos(est, rol, perfil) {
   if (!snapOrigen.exists()) throw new Error("La clase de origen ya no existe.");
   const origen = snapOrigen.data();
 
-  const q = query(
-    collection(db, "clases"),
-    where("anio", "==", origen.anio),
-    where("periodo", "==", origen.periodo)
-  );
-  const snap = await getDocs(q);
+  const snap = await leerClases(db, rol, perfil, [where("anio", "==", origen.anio), where("periodo", "==", origen.periodo)]);
   let destinos = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((c) => c.id !== est.claseId);
 
   if (rol === "coordinador" || rol === "secretaria") {

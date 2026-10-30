@@ -108,9 +108,10 @@
 
 <script type="module">
   import { requireAuth } from "../js/auth.js?v=3";
-  import { claveGrupo as claveDeGrupo } from "../js/grupos.js?v=1";
+  import { claveGrupo as claveDeGrupo, anclaDelGrupo } from "../js/grupos.js?v=2";
   import { descargarTabla } from "../js/exportar.js?v=1";
   import { calcularUmbrales, estadoInasistencia, ETIQUETA_ESTADO } from "../js/umbrales.js?v=1";
+  import { leerClases } from "../js/clases-lectura.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, getDoc, doc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
   import { cargarEstudiantesDeClases } from "../js/matricula.js?v=1";
@@ -130,6 +131,7 @@
   }
 
   let todasLasClases = [];
+  let clasesOtrasSedes = []; // solo para ubicar la clase ancla de grupos a distancia
   let filas = [];            // un registro por estudiante del período cargado
   let pestana = "asistencia";
   let chipActivo = "todos";
@@ -137,9 +139,13 @@
 
   // ───────── Carga de clases y filtros ─────────
   async function cargarClases() {
-    const snap = await getDocs(collection(db, "clases"));
+    const snap = await leerClases(db, rol, perfil, [], { incluirDistancia: true });
     todasLasClases = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    if (esCoord) todasLasClases = todasLasClases.filter((c) => misSedes.includes(c.ciudadId));
+    clasesOtrasSedes = [];
+    if (esCoord) {
+      clasesOtrasSedes = todasLasClases.filter((c) => !misSedes.includes(c.ciudadId));
+      todasLasClases = todasLasClases.filter((c) => misSedes.includes(c.ciudadId));
+    }
   }
 
   async function poblarPeriodos() {
@@ -245,7 +251,7 @@
     try {
       await Promise.all(Object.values(grupos).map(async (grupo) => {
         grupo.sort((a, b) => (a.id < b.id ? -1 : 1));
-        const ancla = grupo[0].id;
+        const ancla = anclaDelGrupo(grupo, clasesOtrasSedes);
         const esDistancia = (grupo[0].programaNombre || "").toLowerCase().includes("distancia");
 
         const [estudiantesTodos, snapSesiones] = await Promise.all([
