@@ -17,10 +17,14 @@ export async function montarSelectorProfesor({ db, rol, perfil, correoDesdeUrl, 
   const restringido = esCoord && misSedes.length > 0;
 
   // Profesores (usuarios) — incluye el formato antiguo de una sola sede.
-  const snapProf = await getDocs(restringido
-    ? query(collection(db, "usuarios"), where("rol", "==", "profesor"), where("ciudadIds", "array-contains-any", misSedes))
-    : query(collection(db, "usuarios"), where("rol", "==", "profesor")));
-  let docsProf = snapProf.docs;
+  let docsProf = [];
+  let errorUsuarios = null;
+  try {
+    const snapProf = await getDocs(restringido
+      ? query(collection(db, "usuarios"), where("rol", "==", "profesor"), where("ciudadIds", "array-contains-any", misSedes))
+      : query(collection(db, "usuarios"), where("rol", "==", "profesor")));
+    docsProf = snapProf.docs;
+  } catch (e) { errorUsuarios = e; console.warn("No se pudieron leer los profesores:", e); }
   if (restringido) {
     try {
       const viejos = await getDocs(query(collection(db, "usuarios"), where("rol", "==", "profesor"), where("ciudadId", "in", misSedes)));
@@ -75,7 +79,8 @@ export async function montarSelectorProfesor({ db, rol, perfil, correoDesdeUrl, 
     </div>
     <label style="${etq}" for="profesor-vista">Ver como profesor (solo para revisión)</label>
     <select id="profesor-vista" style="${estilo} max-width:460px; width:100%;"></select>
-    <span id="sp-conteo" style="font-size:12px; color:var(--tinta-suave); margin-left:8px;"></span>`;
+    <span id="sp-conteo" style="font-size:12px; color:var(--tinta-suave); margin-left:8px;"></span>
+    ${errorUsuarios ? `<p style="color:var(--error); font-size:12.5px; margin:6px 0 0;">No se pudo leer la lista completa de profesores (${esc(errorUsuarios.code || errorUsuarios.message)}); se muestran los que tienen clases.</p>` : ""}`;
 
   const selSede = document.getElementById("sp-sede");
   const selPrograma = document.getElementById("sp-programa");

@@ -303,8 +303,25 @@
     const q = restringidoPorSede
       ? query(collection(db, "usuarios"), where("rol", "==", "profesor"), where("ciudadIds", "array-contains-any", misSedesCl))
       : query(collection(db, "usuarios"), where("rol", "==", "profesor"));
-    const snap = await getDocs(q);
-    listaProfesores = snap.docs.map((d) => ({ correo: d.id, nombre: d.data().nombre }));
+    let docsProf = [];
+    try {
+      docsProf = (await getDocs(q)).docs;
+      if (restringidoPorSede) {
+        // Profesores creados con el formato antiguo (una sola sede).
+        try {
+          const viejos = await getDocs(query(collection(db, "usuarios"), where("rol", "==", "profesor"), where("ciudadId", "in", misSedesCl)));
+          const ya = new Set(docsProf.map((d) => d.id));
+          viejos.docs.forEach((d) => { if (!ya.has(d.id)) docsProf.push(d); });
+        } catch (e) { console.warn("Profesores del formato antiguo:", e); }
+      }
+    } catch (e) {
+      console.warn("No se pudieron leer los profesores:", e);
+      const av = document.createElement("p");
+      av.style.cssText = "color:var(--error); font-size:13px;";
+      av.textContent = `No se pudo leer la lista de profesores (${e.code || e.message}). Avisa a soporte con este mensaje.`;
+      document.querySelector(".barra-filtros").before(av);
+    }
+    listaProfesores = docsProf.map((d) => ({ correo: d.id, nombre: d.data().nombre })).sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
     if (listaProfesores.length === 0) {
       select.innerHTML = "<option value=''>Registra un profesor primero</option>";
       return;
@@ -858,9 +875,10 @@
   document.getElementById("ciclo").addEventListener("change", cargarProgramas);
   document.getElementById("programa").addEventListener("change", actualizarModoSede);
 
-  await Promise.all([cargarSedes(), cargarProfesores(), cargarProgramas()]);
+  const resultadosInicio = await Promise.allSettled([cargarSedes(), cargarProfesores(), cargarProgramas()]);
+  resultadosInicio.forEach((r) => { if (r.status === "rejected") console.error("Error al preparar la pantalla de clases:", r.reason); });
   actualizarModoSede();
-  await cargarClases();
+  await cargarClases(); // la lista de clases se muestra aunque falle alguno de los desplegables
 </script>
 </body>
 </html>
