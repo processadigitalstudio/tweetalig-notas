@@ -10,7 +10,8 @@ function ponerEstilo() {
   if (estiloPuesto) return; estiloPuesto = true;
   const st = document.createElement("style");
   st.textContent = `
-    .combo-buscable { position: relative; display: block; width: 100%; max-width: 420px; }
+    .combo-buscable { position: relative; box-sizing: border-box; max-width: 100%; vertical-align: middle; }
+    select.combo-oculto { display: none !important; }
     .combo-buscable input.combo-entrada { width: 100%; box-sizing: border-box; padding: 8px 30px 8px 10px; border-radius: 7px; font-family: var(--fuente-cuerpo); font-size: 13px; cursor: text; text-overflow: ellipsis;
       background: #fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path d='M1 1l5 5 5-5' fill='none' stroke='%235C6B78' stroke-width='2'/></svg>") no-repeat right 10px center !important; }
     .combo-buscable .combo-lista { position: absolute; left: 0; right: 0; top: 100%; z-index: 60; max-height: 260px; overflow-y: auto; margin-top: 2px;
@@ -34,9 +35,24 @@ export function hacerBuscable(select, placeholder = "Escribe para buscar...") {
   input.type = "text"; input.className = "combo-entrada"; input.autocomplete = "off";
   const lista = document.createElement("div");
   lista.className = "combo-lista";
+  // Ocupa el ancho disponible (hasta 420 px) o el que la pantalla le haya puesto al desplegable.
+  const cs = getComputedStyle(select);
+  caja.style.display = cs.display === "block" || cs.display === "flex" ? "block" : "inline-block";
+  caja.style.width = select.style.width || "100%";
+  caja.style.maxWidth = select.style.maxWidth || "420px";
+  caja.style.minWidth = "150px";
+  if (select.style.flex) caja.style.flex = select.style.flex;
+  if (select.style.margin) caja.style.margin = select.style.margin;
+  const displayCaja = caja.style.display;
   select.parentNode.insertBefore(caja, select);
   caja.appendChild(input); caja.appendChild(lista);
-  select.style.display = "none";
+  select.classList.add("combo-oculto");
+  const sincronizarEstado = () => {
+    caja.style.display = (select.style.display === "none" || select.hidden) ? "none" : displayCaja;
+    input.disabled = select.disabled;
+  };
+  sincronizarEstado();
+  new MutationObserver(sincronizarEstado).observe(select, { attributes: true, attributeFilter: ["style", "disabled", "hidden"] });
 
   let activo = -1, visibles = [];
   const textoElegido = () => { const o = select.selectedOptions[0]; return o ? o.textContent : ""; };
@@ -88,9 +104,33 @@ export function hacerBuscable(select, placeholder = "Escribe para buscar...") {
     configurable: true
   });
 
+  const descIdx = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "selectedIndex");
+  Object.defineProperty(select, "selectedIndex", {
+    get() { return descIdx.get.call(this); },
+    set(v) { descIdx.set.call(this, v); if (document.activeElement !== input) mostrarElegido(); },
+    configurable: true
+  });
+
   // Si el código vuelve a llenar las opciones, se actualiza el cuadro.
   new MutationObserver(() => { if (document.activeElement !== input) mostrarElegido(); else pintar(); })
     .observe(select, { childList: true });
   select.addEventListener("change", () => { if (document.activeElement !== input) mostrarElegido(); });
   mostrarElegido();
+}
+
+// Aplica el buscador a TODOS los desplegables de la página (también a los que se crean después).
+export function buscablesAutomaticos() {
+  const aplicar = (raiz) => {
+    const lista = raiz.matches?.("select") ? [raiz] : [...(raiz.querySelectorAll?.("select") || [])];
+    lista.forEach((sel) => {
+      if (sel.multiple || sel.size > 1 || sel.dataset.sinBuscador !== undefined || sel.dataset.buscable) return;
+      hacerBuscable(sel, "Escribe para buscar...");
+    });
+  };
+  const iniciar = () => {
+    aplicar(document.body);
+    new MutationObserver((muts) => muts.forEach((m) => m.addedNodes.forEach((n) => { if (n.nodeType === 1) aplicar(n); })))
+      .observe(document.body, { childList: true, subtree: true });
+  };
+  if (document.body) iniciar(); else document.addEventListener("DOMContentLoaded", iniciar);
 }

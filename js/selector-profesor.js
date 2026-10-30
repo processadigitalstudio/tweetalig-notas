@@ -1,7 +1,7 @@
 // Selector de profesor para coordinación, secretaría, Admin y Master (Notas y Asistencia).
 // Filtra por sede, programa y búsqueda (nombre o correo); arranca en "Selecciona un profesor...".
 import { leerClases } from "./clases-lectura.js?v=1";
-import { hacerBuscable } from "./buscable.js?v=2";
+import { hacerBuscable } from "./buscable.js?v=3";
 import { collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const sinTildes = (t) => String(t || "").toLowerCase().trim()
