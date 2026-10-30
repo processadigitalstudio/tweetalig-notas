@@ -1,6 +1,7 @@
 // Selector de profesor para coordinación, secretaría, Admin y Master (Notas y Asistencia).
 // Filtra por sede, programa y búsqueda (nombre o correo); arranca en "Selecciona un profesor...".
 import { leerClases } from "./clases-lectura.js?v=1";
+import { hacerBuscable } from "./buscable.js?v=2";
 import { collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const sinTildes = (t) => String(t || "").toLowerCase().trim()
@@ -87,6 +88,7 @@ export async function montarSelectorProfesor({ db, rol, perfil, correoDesdeUrl, 
   const selPrograma = document.getElementById("sp-programa");
   const buscar = document.getElementById("sp-buscar");
   const selProf = document.getElementById("profesor-vista");
+  hacerBuscable(selProf, "Escribe para buscar un profesor...");
   const conteo = document.getElementById("sp-conteo");
 
   function filtrados() {
