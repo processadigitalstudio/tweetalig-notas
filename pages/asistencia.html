@@ -578,6 +578,7 @@
         aviso.textContent = error.code === "permission-denied"
           ? "No se pudo guardar: este período académico ya está cerrado o no tienes permiso. Pide a Master que lo reabra si es necesario."
           : `No se pudo guardar (${error.code || error.message}).`;
+        mostrarAviso("NO se guardó la asistencia: " + aviso.textContent, "error");
       }
     }
     botonGuardar.addEventListener("click", () => guardar(undefined));

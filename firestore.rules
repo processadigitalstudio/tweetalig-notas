@@ -136,7 +136,12 @@ service cloud.firestore {
           (
             (
               esAdminOMaster() ||
-              (miRol() in ['coordinador', 'secretaria'] && get(/databases/$(database)/documents/clases/$(claseId)).data.ciudadId in misSedes()) ||
+              // Coordinación: clase de su sede, o grupo a distancia (la lista de un grupo
+              // a distancia se guarda en la clase ancla, que puede ser de otra sede).
+              (miRol() in ['coordinador', 'secretaria'] && (
+                get(/databases/$(database)/documents/clases/$(claseId)).data.ciudadId in misSedes() ||
+                get(/databases/$(database)/documents/clases/$(claseId)).data.get('programaNombre', '').lower().matches('.*distancia.*')
+              )) ||
               (miRol() == 'profesor' && get(/databases/$(database)/documents/clases/$(claseId)).data.docenteCorreo == miCorreo() && voboIntacto())
             ) && periodoEstaActivo(get(/databases/$(database)/documents/clases/$(claseId)).data)
           )
