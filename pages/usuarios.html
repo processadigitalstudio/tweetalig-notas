@@ -197,9 +197,13 @@
         const sedesDeEsteUsuario = u.ciudadIds || (u.ciudadId ? [u.ciudadId] : []);
         if (!sedesDeEsteUsuario.includes(filtroSedeActual)) return;
       }
-      const cargoOSede = (u.rol === "admin" || u.rol === "master")
+      const sedesIdsUsuario = u.ciudadIds || (u.ciudadId ? [u.ciudadId] : []);
+      let cargoOSede = (u.rol === "admin" || u.rol === "master")
         ? (u.cargo || (u.rol === "master" ? "Master" : "Admin"))
         : (u.ciudadNombres ? u.ciudadNombres.join(", ") : (u.ciudadNombre || "—"));
+      if ((u.rol === "coordinador" || u.rol === "secretaria") && sedesIdsUsuario.length === 0) {
+        cargoOSede += ' <span style="color:var(--error); font-weight:600;">⚠ sin sede asignada: no verá clases ni estudiantes. Quítale el acceso y créalo de nuevo con su sede.</span>';
+      }
       let botonAccion = u.rol === "master"
         ? `<span style="color: var(--tinta-suave); font-size: 12px;">Protegida</span>`
         : `<button class="btn-borrar" data-id="${d.id}">Quitar acceso</button>`;

@@ -386,6 +386,15 @@
     clasesCache = {};
     const misSedesTabla = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
     const esCoordinacion = (rol === "coordinador" || rol === "secretaria");
+    if (esCoordinacion && misSedesTabla.length === 0) {
+      if (!document.getElementById("aviso-sin-sede")) {
+        const aviso = document.createElement("p");
+        aviso.id = "aviso-sin-sede";
+        aviso.style.cssText = "color:var(--error); font-weight:600;";
+        aviso.textContent = "Tu usuario no tiene una sede asignada, por eso no aparecen clases. Pídele a Master que revise tu acceso.";
+        document.querySelector(".barra-filtros").before(aviso);
+      }
+    }
     const snap = await getDocs(collection(db, "clases"));
     snap.forEach((d) => {
       const c = d.data();
