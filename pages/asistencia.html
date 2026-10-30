@@ -416,7 +416,11 @@
     const obs = new MutationObserver(() => {
       if (!barra.isConnected) { obs.disconnect(); return; }
       const abajo = document.getElementById(idAvisoAbajo);
-      if (abajo) { av.textContent = abajo.textContent; av.style.color = abajo.style.color; }
+      if (abajo) {
+        // Solo se escribe si cambió: si no, el propio cambio reactiva el observador (bucle infinito).
+        if (av.textContent !== abajo.textContent) av.textContent = abajo.textContent;
+        if (av.style.color !== abajo.style.color) av.style.color = abajo.style.color;
+      }
     });
     obs.observe(document.body, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["style"] });
     return barra;
