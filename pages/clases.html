@@ -193,6 +193,7 @@
   import { claveGrupo as claveDeGrupo, esProgramaDistancia } from "../js/grupos.js?v=2";
   import { leerClases } from "../js/clases-lectura.js?v=1";
   import { seleccionarPorDefecto } from "../js/selectores.js?v=1";
+  import { hacerBuscable } from "../js/buscable.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, addDoc, updateDoc, deleteDoc, getDoc, doc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -334,7 +335,7 @@
     listaProfesores.forEach((p) => {
       const opt = document.createElement("option");
       opt.value = p.correo;
-      opt.textContent = p.nombre;
+      opt.textContent = `${p.nombre || p.correo} — ${p.correo}`;
       select.appendChild(opt);
     });
   }
@@ -722,6 +723,7 @@
   }
 
   ["docente", "programa", "ciudad"].forEach((id) => seleccionarPorDefecto(document.getElementById(id)));
+  hacerBuscable(document.getElementById("docente"), "Buscar profesor por nombre o correo...");
   const tarjetaCrear = document.getElementById("tarjeta-crear-clase");
   // Una sola vez: marca en cada clase si es de un programa a distancia (campo esDistancia),
   // que coordinación necesita para ver bien los grupos a distancia entre sedes.

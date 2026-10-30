@@ -71,6 +71,7 @@
   import { leerClases } from "../js/clases-lectura.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, getDoc, doc, setDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { hacerBuscable } from "../js/buscable.js?v=1";
   import { claveGrupo, anclaDelGrupo } from "../js/grupos.js?v=2";
   import { descargarTabla } from "../js/exportar.js?v=1";
 
@@ -111,9 +112,10 @@
     sel.innerHTML = "";
     if (!esProfesor) sel.innerHTML = '<option value="">Todos los profesores</option>';
     lista.forEach(([correo, nombre]) => {
-      const o = document.createElement("option"); o.value = correo; o.textContent = nombre; sel.appendChild(o);
+      const o = document.createElement("option"); o.value = correo; o.textContent = nombre === correo ? nombre : `${nombre} — ${correo}`; sel.appendChild(o);
     });
     if (esProfesor) document.getElementById("caja-profesor").style.display = "none";
+    else hacerBuscable(sel, "Buscar profesor por nombre o correo...");
   }
 
   function fechaLocal(d) { return d.toISOString().slice(0, 10); }

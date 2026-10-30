@@ -303,3 +303,15 @@ body {
 /* Acentos dorados — usar con moderación (subrayados, íconos, badges pequeños) */
 .acento-oro { color: var(--oro); }
 .fondo-oro-suave { background: var(--oro-suave); }
+
+/* Campos de formulario: fondo blanco y borde visible para que no se confundan con el fondo de la página */
+select,
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="range"]),
+textarea {
+  background-color: #FFFFFF !important;
+  border: 1px solid #B9C4C0 !important;
+  color: var(--tinta);
+}
+select:focus, input:focus, textarea:focus { outline: 2px solid var(--verde-marca); outline-offset: 0; }
+select { cursor: pointer; }
+.buscador-select { display: block; width: 100%; max-width: 420px; box-sizing: border-box; margin-bottom: 6px; padding: 8px 10px; border-radius: 7px; font-family: var(--fuente-cuerpo); font-size: 13px; }
