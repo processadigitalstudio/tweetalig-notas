@@ -496,7 +496,7 @@
         for (let b = 0; b < numBloques; b++) {
           celdas += `<td class="celda-bloque"><input type="checkbox" class="chk-bloque" data-cedula="${est.cedula}" data-bloque="${b}" ${marcados[b] ? "checked" : ""} ${edicionDesbloqueada ? "" : "disabled"}></td>`;
         }
-        celdas += `<td class="col-horas" id="horas-${est.cedula}">${((marcados.filter(Boolean).length) * bloqueMin / 60).toFixed(2)}</td>`;
+        celdas += `<td class="col-horas" id="horas-${est.cedula}">${(marcados.filter(Boolean).length).toFixed(2)}</td>`;
         if (hayColSpeaking) {
           celdas += `<td class="celda-bloque"><input type="checkbox" class="chk-speaking-realizada" data-cedula="${est.cedula}" ${guardada.speakingRealizada?.[est.cedula] ? "checked" : ""} ${edicionDesbloqueada ? "" : "disabled"}></td>`;
         }
@@ -522,7 +522,7 @@
           if (!guardada.ausencias) guardada.ausencias = {};
           if (!guardada.ausencias[cedula]) guardada.ausencias[cedula] = new Array(numBloques).fill(false);
           guardada.ausencias[cedula][b] = chk.checked;
-          const totalHoras = guardada.ausencias[cedula].filter(Boolean).length * bloqueMin / 60;
+          const totalHoras = guardada.ausencias[cedula].filter(Boolean).length; // 1 bloque = 1 hora de inasistencia
           document.getElementById(`horas-${cedula}`).textContent = totalHoras.toFixed(2);
         });
       });
@@ -636,11 +636,10 @@
           if (hecho) speakingHechas[cedula] = (speakingHechas[cedula] || 0) + 1;
         });
       }
-      const bloqueMin = sesion.bloqueMin || 60;
       Object.entries(sesion.ausencias || {}).forEach(([cedula, marcados]) => {
         if (horasTotales[cedula] === undefined) horasTotales[cedula] = 0;
         const bloquesMarcados = (marcados || []).filter(Boolean).length;
-        horasTotales[cedula] += bloquesMarcados * bloqueMin / 60;
+        horasTotales[cedula] += bloquesMarcados; // 1 bloque = 1 hora de inasistencia
       });
     });
 

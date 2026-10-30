@@ -281,10 +281,9 @@ Tweetalig Centro de Idiomas`;
         snapSesiones.forEach((d) => {
           const sesion = d.data();
           if (sesion.festivo) return;
-          const bloqueMin = sesion.bloqueMin || 60;
           Object.entries(sesion.ausencias || {}).forEach(([cedula, marcados]) => {
             const bloquesMarcados = (marcados || []).filter(Boolean).length;
-            horasTotales[cedula] = (horasTotales[cedula] || 0) + bloquesMarcados * bloqueMin / 60;
+            horasTotales[cedula] = (horasTotales[cedula] || 0) + bloquesMarcados; // 1 bloque = 1 hora
           });
         });
 

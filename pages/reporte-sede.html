@@ -265,9 +265,8 @@
             totalSpeaking++;
             Object.entries(s.speakingRealizada || {}).forEach(([ced, ok]) => { if (ok) speakingHechas[ced] = (speakingHechas[ced] || 0) + 1; });
           }
-          const bloqueMin = s.bloqueMin || 60;
           Object.entries(s.ausencias || {}).forEach(([ced, marcados]) => {
-            horas[ced] = (horas[ced] || 0) + (marcados || []).filter(Boolean).length * bloqueMin / 60;
+            horas[ced] = (horas[ced] || 0) + (marcados || []).filter(Boolean).length; // 1 bloque = 1 hora
           });
         });
 
