@@ -83,6 +83,7 @@
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { claveGrupo as claveDeGrupo } from "../js/grupos.js?v=1";
+  import { mostrarAviso } from "../js/aviso.js?v=1";
   import { montarSelectorProfesor } from "../js/selector-profesor.js?v=1";
   import { calcularUmbrales, estadoInasistencia, ETIQUETA_ESTADO } from "../js/umbrales.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
@@ -322,6 +323,7 @@
         aviso.textContent = error.code === "permission-denied"
           ? "No se pudo guardar: el período de esta clase está cerrado o no tienes permiso."
           : `No se pudo guardar (${error.code || error.message}).`;
+        mostrarAviso("NO se guardó la asistencia. Revisa el mensaje en rojo.", "error");
       }
     });
     return caja;
@@ -570,6 +572,7 @@
         pintarDia();
         document.getElementById("aviso-asistencia").textContent = voboNuevo ? "Visto bueno registrado." : "Asistencia guardada correctamente.";
         document.getElementById("aviso-asistencia").style.color = "#2E6E4E";
+        mostrarAviso(voboNuevo ? "Visto bueno registrado." : (voboNuevo === null ? "Visto bueno quitado." : `Asistencia del ${fechaActivaTexto} guardada correctamente.`));
       } catch (error) {
         aviso.style.color = "var(--error)";
         aviso.textContent = error.code === "permission-denied"

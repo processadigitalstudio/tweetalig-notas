@@ -72,6 +72,7 @@
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
   import { claveGrupo as claveDeGrupo } from "../js/grupos.js?v=1";
+  import { mostrarAviso } from "../js/aviso.js?v=1";
   import { montarSelectorProfesor } from "../js/selector-profesor.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, getDoc, doc, setDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
@@ -551,13 +552,16 @@
 
       aviso.style.color = "#2E6E4E";
       aviso.textContent = "Notas guardadas correctamente.";
+      mostrarAviso(`Notas guardadas correctamente (${estudiantesActuales.length} estudiante(s)).`);
     } catch (error) {
       if (error.code === "permission-denied") {
         aviso.style.color = "var(--error)";
         aviso.textContent = "No se pudo guardar: este período académico ya está cerrado. Pide a Master que lo reabra si es necesario.";
+        mostrarAviso("NO se guardaron las notas: el período está cerrado.", "error");
       } else {
         aviso.style.color = "var(--error)";
         aviso.textContent = `No se pudo guardar (${error.code || error.message}).`;
+        mostrarAviso(`NO se guardaron las notas (${error.code || error.message}).`, "error");
       }
     }
   }
