@@ -469,6 +469,12 @@
     const inputSalida = document.getElementById("input-salida");
     inputLlegada.value = guardada.horaLlegada || "";
     inputSalida.value = guardada.horaSalida || "";
+    // Si aún no hay horas guardadas, se sugiere el horario de la clase para ese día
+    // (se puede cambiar; solo queda guardado cuando se pulsa guardar).
+    if (edicionDesbloqueada && !guardada.festivo && !(guardada.vobo && rol === "profesor")) {
+      if (!inputLlegada.value && sesionInfo?.horario?.horaInicio) inputLlegada.value = sesionInfo.horario.horaInicio;
+      if (!inputSalida.value && sesionInfo?.horario?.horaFin) inputSalida.value = sesionInfo.horario.horaFin;
+    }
     const esGestionVobo = ["coordinador", "secretaria", "admin", "master"].includes(rol);
     const bloqueadoPorVobo = !!guardada.vobo && rol === "profesor";
     [inputTema, inputObs, inputLlegada, inputSalida].forEach((el) => { el.disabled = !edicionDesbloqueada || bloqueadoPorVobo; });
