@@ -36,6 +36,17 @@
     font-size: 12.5px; color: var(--tinta-suave); background: var(--oro-suave);
     border: 1px solid var(--oro); border-radius: 8px; padding: 12px 14px; max-width: 700px; margin-bottom: 18px;
   }
+  .panel-envio { background: var(--superficie); border: 1px solid var(--linea); border-radius: 8px; padding: 12px 14px; max-width: 700px; margin-bottom: 18px; font-size: 13.5px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .barra-envio { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  .barra-envio .boton-primario { margin-top: 0; }
+  .modal-fondo { position: fixed; inset: 0; background: rgba(44,61,77,.55); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .modal-caja { background: #fff; border-radius: 12px; max-width: 760px; width: 100%; max-height: 90vh; overflow: auto; padding: 22px 24px; }
+  .modal-lista { max-height: 46vh; overflow: auto; border: 1px solid var(--linea); border-radius: 8px; padding: 8px 12px; margin: 12px 0; font-size: 13px; }
+  .modal-lista details { padding: 6px 0; border-bottom: 1px solid var(--linea); }
+  .modal-lista pre { white-space: pre-wrap; font-family: var(--fuente-cuerpo); font-size: 12.5px; background: var(--fondo); padding: 10px; border-radius: 6px; }
+  .modal-botones { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+  .fila-editor { display: grid; grid-template-columns: 1fr; gap: 4px; margin: 8px 0; }
+  .fila-editor input, .fila-editor select { width: 100%; font-family: var(--fuente-cuerpo); font-size: 13.5px; padding: 8px 10px; border-radius: 7px; }
 </style>
 </head>
 <body>
@@ -67,10 +78,14 @@
       <div><label class="etiqueta-campo">Horas para Pérdida</label><input type="number" id="umbral-perdida" value="6" min="0.5" step="0.5"></div>
     </div>
 
-    <div class="nota-script">
-      ⚠ El envío real de correo todavía no está conectado (falta el script de Apps Script por sede,
-      y confirmar el umbral final de pérdida con Dirección Académica). Los botones de abajo
-      <b>registran el aviso y el mensaje ya armado</b>, listos para cuando se conecte el envío real.
+    <div class="panel-envio">
+      <div>Los correos saldrán desde: <b id="correo-remitente"></b></div>
+      <button type="button" class="boton-secundario" id="boton-conectar-gmail">Conectar con Gmail para enviar</button>
+      <span id="estado-gmail" style="font-size:13px;"></span>
+      <div style="flex-basis:100%; font-size:12.5px; color:var(--tinta-suave);">
+        Nada se envía solo: primero eliges a quién, revisas los mensajes y confirmas. Si el nivel y las horas de inasistencia
+        de un estudiante no han cambiado desde el último envío, no se le vuelve a enviar.
+      </div>
     </div>
 
     <!-- ========== ALERTA ========== -->
@@ -80,6 +95,9 @@
 
       <button type="button" class="boton-secundario" id="boton-editar-plantilla-alerta">✎ Editar mensaje de alerta</button>
       <div class="editor-plantilla" id="editor-alerta" style="display:none;">
+        <div class="fila-editor"><label class="etiqueta-campo" for="sede-plantilla-alerta">Sede a la que pertenece este mensaje</label><select id="sede-plantilla-alerta"></select></div>
+        <p id="origen-plantilla-alerta" style="font-size:12.5px; color:var(--tinta-suave); margin:0 0 6px;"></p>
+        <div class="fila-editor"><label class="etiqueta-campo" for="asunto-plantilla-alerta">Asunto del correo</label><input type="text" id="asunto-plantilla-alerta" maxlength="150"></div>
         <div class="botones-marcador">
           <button type="button" class="boton-marcador" data-campo="alerta" data-insertar="{nombre}">{nombre}</button>
           <button type="button" class="boton-marcador" data-campo="alerta" data-insertar="{nivel}">{nivel}</button>
@@ -107,6 +125,9 @@
 
       <button type="button" class="boton-secundario" id="boton-editar-plantilla-perdida">✎ Editar mensaje de pérdida</button>
       <div class="editor-plantilla" id="editor-perdida" style="display:none;">
+        <div class="fila-editor"><label class="etiqueta-campo" for="sede-plantilla-perdida">Sede a la que pertenece este mensaje</label><select id="sede-plantilla-perdida"></select></div>
+        <p id="origen-plantilla-perdida" style="font-size:12.5px; color:var(--tinta-suave); margin:0 0 6px;"></p>
+        <div class="fila-editor"><label class="etiqueta-campo" for="asunto-plantilla-perdida">Asunto del correo</label><input type="text" id="asunto-plantilla-perdida" maxlength="150"></div>
         <div class="botones-marcador">
           <button type="button" class="boton-marcador" data-campo="perdida" data-insertar="{nombre}">{nombre}</button>
           <button type="button" class="boton-marcador" data-campo="perdida" data-insertar="{nivel}">{nivel}</button>
@@ -126,6 +147,17 @@
 
       <div id="contenido-perdida"></div>
     </div>
+
+    <!-- ========== HISTORIAL ========== -->
+    <div class="seccion-tipo">
+      <h3>Historial de envíos <span class="badge-tipo-alerta" style="background:var(--verde-marca-suave); color:var(--verde-marca-hover);">Trazabilidad</span></h3>
+      <p style="color:var(--tinta-suave); font-size:13px; margin-top:0;">Cada correo enviado (también los de prueba y los que fallaron) queda registrado con fecha, destinatario y quién lo envió, para el período elegido arriba.</p>
+      <div class="barra-envio">
+        <select id="formato-envios" style="font-family:var(--fuente-cuerpo); font-size:13px; padding:7px 9px; border-radius:6px;"><option value="xlsx">Excel (.xlsx)</option><option value="csv">CSV (texto)</option></select>
+        <button type="button" class="boton-secundario" id="boton-descargar-envios">Descargar reporte de envíos</button>
+      </div>
+      <div id="contenido-historial"></div>
+    </div>
   </main>
 </div>
 
@@ -135,8 +167,11 @@
   import { calcularUmbrales, estadoInasistencia, ETIQUETA_ESTADO } from "../js/umbrales.js?v=1";
   import { cargarEstudiantesDeClases } from "../js/matricula.js?v=1";
   import { leerClases } from "../js/clases-lectura.js?v=1";
-  import { db } from "../js/firebase-config.js?v=3";
-  import { collection, getDocs, getDoc, doc, setDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { db, auth, DOMINIO_PERMITIDO } from "../js/firebase-config.js?v=3";
+  import { conectarGmail, enviarCorreo, correoValido } from "../js/correo.js?v=1";
+  import { descargarTabla } from "../js/exportar.js?v=1";
+  import { mostrarAviso } from "../js/aviso.js?v=1";
+  import { collection, getDocs, getDoc, doc, setDoc, addDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
   const { usuario, rol, perfil } = await requireAuth(["coordinador", "secretaria", "admin", "master"]);
 
@@ -267,8 +302,8 @@ Tweetalig Centro de Idiomas`;
         getDocs(query(collection(db, "avisos_inasistencia"), where("periodoId", "==", idPeriodoActual))),
         getDocs(query(collection(db, "avisos_perdida_inasistencia"), where("periodoId", "==", idPeriodoActual)))
       ]);
-      const notificadosAlerta = new Set(snapAvisosAlerta.docs.map((d) => d.data().cedula));
-      const notificadosPerdida = new Set(snapAvisosPerdida.docs.map((d) => d.data().cedula));
+      const avisosAlerta = new Map(snapAvisosAlerta.docs.map((d) => [d.data().cedula, d.data()]));
+      const avisosPerdida = new Map(snapAvisosPerdida.docs.map((d) => [d.data().cedula, d.data()]));
 
       alertaActuales = [];
       perdidaActuales = [];
@@ -316,6 +351,7 @@ Tweetalig Centro de Idiomas`;
             nivel: grupo[0].nivel, grupo: grupo[0].grupo,
             claseTexto: `${grupo[0].nivel} - ${grupo[0].grupo}`,
             programaNombre: grupo[0].programaNombre || "",
+            ciudadId: est.ciudadId || grupo[0].ciudadId || "",
             periodoTexto: idPeriodoActual,
             ciudadNombre: est.ciudadNombre || grupo[0].ciudadNombre,
             docenteNombre: grupo[0].docenteNombre,
@@ -324,22 +360,146 @@ Tweetalig Centro de Idiomas`;
           };
 
           if (estado === "perdida") {
-            perdidaActuales.push({ ...registro, notificado: notificadosPerdida.has(est.cedula) });
+            const av = avisosPerdida.get(est.cedula) || null;
+            perdidaActuales.push({ ...registro, aviso: av, notificado: !!(av && av.enviadoRealmente === true && Number(av.horasEnviadas) === horas) });
           } else {
-            alertaActuales.push({ ...registro, notificado: notificadosAlerta.has(est.cedula) });
+            const av = avisosAlerta.get(est.cedula) || null;
+            alertaActuales.push({ ...registro, aviso: av, notificado: !!(av && av.enviadoRealmente === true && Number(av.horasEnviadas) === horas) });
           }
         });
       }));
 
-      pintarTabla("contenido-alerta", alertaActuales, "Registrar alerta de inasistencia", registrarAlertasNormales);
-      pintarTabla("contenido-perdida", perdidaActuales, "Registrar aviso de pérdida", registrarAvisosPerdida);
+      pintarTabla("contenido-alerta", alertaActuales, "alerta");
+      pintarTabla("contenido-perdida", perdidaActuales, "perdida");
+      cargarHistorial();
     } catch (error) {
       console.error("Error cargando alertas:", error);
       document.getElementById("contenido-alerta").innerHTML = `<p style="color:var(--error);">No se pudo cargar (${error.code || error.message}).</p>`;
     }
   }
 
-  function pintarTabla(idContenedor, lista, textoBoton, funcionRegistrar) {
+  const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const esCoordinacion = rol === "coordinador" || rol === "secretaria";
+  const misSedesEd = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
+  const correoPropio = usuario.email.toLowerCase();
+  const mapaSedes = new Map();
+
+  const TIPOS = {
+    alerta:  { doc: "alerta_inasistencia",  coleccion: "avisos_inasistencia",          etiqueta: "Alerta",  asuntoDefecto: "Alerta de inasistencia – Tweetalig Centro de Idiomas",   textoDefecto: PLANTILLA_ALERTA_DEFECTO },
+    perdida: { doc: "perdida_inasistencia", coleccion: "avisos_perdida_inasistencia",  etiqueta: "Pérdida", asuntoDefecto: "Pérdida por inasistencia – Tweetalig Centro de Idiomas", textoDefecto: PLANTILLA_PERDIDA_DEFECTO }
+  };
+
+  // ---------- Conexión con Gmail ----------
+  let gmail = { token: null, expira: 0 };
+  const gmailListo = () => !!gmail.token && Date.now() < gmail.expira;
+  function pintarEstadoGmail() {
+    const el = document.getElementById("estado-gmail");
+    el.textContent = gmailListo() ? "✔ Conectado (vale por cerca de 1 hora)" : "Sin conectar";
+    el.style.color = gmailListo() ? "#2E6E4E" : "var(--tinta-suave)";
+  }
+  // Se llama DIRECTO desde un clic (abre la ventana de permisos de Google).
+  async function asegurarGmail() {
+    if (gmailListo()) return true;
+    try {
+      gmail = await conectarGmail(auth, correoPropio, DOMINIO_PERMITIDO);
+      pintarEstadoGmail();
+      return true;
+    } catch (e) {
+      mostrarAviso("No se pudo conectar con Gmail: " + (e.code || e.message), "error");
+      return false;
+    }
+  }
+  document.getElementById("correo-remitente").textContent = correoPropio;
+  document.getElementById("boton-conectar-gmail").addEventListener("click", asegurarGmail);
+  pintarEstadoGmail();
+
+  // ---------- Mensajes (uno por sede, con respaldo al general y al estándar) ----------
+  const cachePlantillas = new Map();
+  async function obtenerPlantilla(tipo, sedeId) {
+    const clave = `${tipo}|${sedeId || ""}`;
+    if (cachePlantillas.has(clave)) return cachePlantillas.get(clave);
+    const t = TIPOS[tipo];
+    let datos = null, origen = "mensaje estándar";
+    if (sedeId) {
+      try { const sn = await getDoc(doc(db, "plantillas_correo", `${t.doc}__${sedeId}`)); if (sn.exists()) { datos = sn.data(); origen = "propio"; } } catch (e) { /* sin permiso o sin red: se usa el siguiente */ }
+    }
+    if (!datos) {
+      try { const sn = await getDoc(doc(db, "plantillas_correo", t.doc)); if (sn.exists()) { datos = sn.data(); origen = "mensaje general"; } } catch (e) { /* idem */ }
+    }
+    const res = { texto: datos?.texto || t.textoDefecto, asunto: datos?.asunto || t.asuntoDefecto, origen };
+    cachePlantillas.set(clave, res);
+    return res;
+  }
+  async function construirMensaje(tipo, c) {
+    const p = await obtenerPlantilla(tipo, c.ciudadId);
+    return { asunto: resolverPlantilla(p.asunto, c), texto: resolverPlantilla(p.texto, c) };
+  }
+
+  async function cargarMapaSedes() {
+    try { (await getDocs(collection(db, "ciudades"))).forEach((d) => mapaSedes.set(d.id, d.data().nombre || d.id)); } catch (e) { console.warn("No se pudieron leer las sedes:", e); }
+  }
+  function llenarSelectoresDeSede() {
+    ["alerta", "perdida"].forEach((tipo) => {
+      const sel = document.getElementById("sede-plantilla-" + tipo);
+      sel.innerHTML = "";
+      if (!esCoordinacion) sel.insertAdjacentHTML("beforeend", '<option value="">General (sedes sin mensaje propio)</option>');
+      (esCoordinacion ? misSedesEd : [...mapaSedes.keys()]).forEach((id) => {
+        const o = document.createElement("option"); o.value = id; o.textContent = mapaSedes.get(id) || id; sel.appendChild(o);
+      });
+      if (esCoordinacion && sel.options.length) sel.selectedIndex = 0;
+      sel.addEventListener("change", () => cargarEditor(tipo));
+    });
+  }
+  async function cargarEditor(tipo) {
+    cachePlantillas.clear();
+    const sedeId = document.getElementById("sede-plantilla-" + tipo).value;
+    const p = await obtenerPlantilla(tipo, sedeId);
+    document.getElementById("texto-plantilla-" + tipo).value = p.texto;
+    document.getElementById("asunto-plantilla-" + tipo).value = p.asunto;
+    document.getElementById("origen-plantilla-" + tipo).textContent = p.origen === "propio" || !sedeId
+      ? (sedeId ? "Esta sede ya tiene su propio mensaje." : "Este es el mensaje general.")
+      : `Esta sede todavía no tiene mensaje propio: se muestra el ${p.origen}. Al guardar, se crea el de esta sede.`;
+  }
+  async function guardarPlantilla(tipo) {
+    const t = TIPOS[tipo];
+    const sedeId = document.getElementById("sede-plantilla-" + tipo).value;
+    if (esCoordinacion && !sedeId) { mostrarAviso("Tu usuario no tiene sede asignada.", "error"); return; }
+    const datos = {
+      tipo: t.doc,
+      texto: document.getElementById("texto-plantilla-" + tipo).value,
+      asunto: document.getElementById("asunto-plantilla-" + tipo).value.trim() || t.asuntoDefecto,
+      actualizadoPor: correoPropio, fecha: serverTimestamp()
+    };
+    if (sedeId) datos.ciudadId = sedeId;
+    try {
+      await setDoc(doc(db, "plantillas_correo", sedeId ? `${t.doc}__${sedeId}` : t.doc), datos);
+      await registrarLog(usuario, rol, "Actualizó plantilla de correo", `${t.doc}${sedeId ? " — " + (mapaSedes.get(sedeId) || sedeId) : " — general"}`);
+      mostrarAviso(`Mensaje guardado para ${sedeId ? (mapaSedes.get(sedeId) || sedeId) : "las sedes sin mensaje propio"}.`);
+      await cargarEditor(tipo);
+    } catch (e) {
+      mostrarAviso("No se pudo guardar el mensaje (" + (e.code || e.message) + ").", "error");
+    }
+  }
+  [["alerta", "boton-editar-plantilla-alerta", "editor-alerta", "boton-guardar-plantilla-alerta"],
+   ["perdida", "boton-editar-plantilla-perdida", "editor-perdida", "boton-guardar-plantilla-perdida"]].forEach(([tipo, idEditar, idEditor, idGuardar]) => {
+    document.getElementById(idEditar).addEventListener("click", async () => {
+      const editor = document.getElementById(idEditor);
+      const abrir = editor.style.display === "none";
+      editor.style.display = abrir ? "block" : "none";
+      if (abrir) await cargarEditor(tipo);
+    });
+    document.getElementById(idGuardar).addEventListener("click", () => guardarPlantilla(tipo));
+  });
+
+  // ---------- Tabla con selección ----------
+  function estadoAviso(c) {
+    if (!c.correo) return ["Sin correo", "estado-pendiente"];
+    if (c.notificado) return [`Enviado (con ${c.aviso.horasEnviadas} h)`, "estado-enviado"];
+    if (c.aviso?.enviadoRealmente === true) return [`Cambió: se envió con ${c.aviso.horasEnviadas} h, ahora ${c.horas} h`, "estado-pendiente"];
+    return ["Pendiente", "estado-pendiente"];
+  }
+
+  function pintarTabla(idContenedor, lista, tipo) {
     const contenedor = document.getElementById(idContenedor);
     contenedor.innerHTML = "";
 
@@ -351,41 +511,56 @@ Tweetalig Centro de Idiomas`;
     const tabla = document.createElement("table");
     tabla.className = "tabla-al";
     tabla.innerHTML = `
-      <thead><tr><th>No.</th><th>ID</th><th>Estudiante</th><th>Correo</th><th>Clase</th><th>Sede</th><th>Profesor</th><th>Horas ausente</th><th>Límite pérdida</th><th>Nivel</th><th>Aviso</th></tr></thead>
+      <thead><tr><th><input type="checkbox" class="chk-todos" title="Seleccionar todos los que se pueden enviar"></th><th>ID</th><th>Estudiante</th><th>Correo</th><th>Clase</th><th>Sede</th><th>Profesor</th><th>Horas ausente</th><th>Límite pérdida</th><th>Nivel</th><th>Aviso</th></tr></thead>
       <tbody></tbody>
     `;
     const tbody = tabla.querySelector("tbody");
     lista.forEach((c, idx) => {
+      const enviable = !!c.correo && !c.notificado;
+      const [textoEstado, claseEstado] = estadoAviso(c);
       const fila = document.createElement("tr");
       fila.innerHTML = `
-        <td>${idx + 1}</td>
-        <td>${c.cedula}</td>
-        <td>${c.apellido} ${c.nombre}</td>
-        <td>${c.correo || "—"}</td>
-        <td>${c.claseTexto}</td>
-        <td>${c.ciudadNombre || "—"}</td>
-        <td>${c.docenteNombre || "—"}</td>
+        <td><input type="checkbox" class="chk-envio" data-idx="${idx}" ${enviable ? "checked" : "disabled"}></td>
+        <td>${esc(c.cedula)}</td>
+        <td>${esc(c.apellido)} ${esc(c.nombre)}</td>
+        <td>${esc(c.correo) || "—"}</td>
+        <td>${esc(c.claseTexto)}</td>
+        <td>${esc(c.ciudadNombre) || "—"}</td>
+        <td>${esc(c.docenteNombre) || "—"}</td>
         <td class="col-horas">${c.horas.toFixed(2)}</td>
         <td>${c.limitePerdida != null ? "más de " + (Math.round(c.limitePerdida * 100) / 100) + " h (de " + c.horasCurso + ")" : "manual"}</td>
         <td>${ETIQUETA_ESTADO[c.estado] || ""}</td>
-        <td class="${c.notificado ? "estado-enviado" : "estado-pendiente"}">${c.notificado ? "Enviado" : "Pendiente"}</td>
+        <td class="${claseEstado}">${esc(textoEstado)}</td>
       `;
       tbody.appendChild(fila);
     });
     contenedor.appendChild(tabla);
 
-    const pendientes = lista.filter((c) => !c.notificado).length;
-    const boton = document.createElement("button");
-    boton.className = "boton-primario";
-    boton.textContent = pendientes > 0 ? `${textoBoton} — ${pendientes} pendiente(s)` : "Todos ya tienen aviso registrado";
-    boton.disabled = pendientes === 0;
-    boton.addEventListener("click", funcionRegistrar);
-    contenedor.appendChild(boton);
+    const barra = document.createElement("div");
+    barra.className = "barra-envio";
+    const botonRevisar = document.createElement("button");
+    botonRevisar.className = "boton-primario";
+    const botonPrueba = document.createElement("button");
+    botonPrueba.className = "boton-secundario";
+    botonPrueba.textContent = "Enviar correo de prueba a mi correo";
+    barra.appendChild(botonRevisar); barra.appendChild(botonPrueba);
+    contenedor.appendChild(barra);
 
-    const aviso = document.createElement("p");
-    aviso.className = "aviso";
-    aviso.id = idContenedor + "-aviso";
-    contenedor.appendChild(aviso);
+    const seleccionados = () => [...tabla.querySelectorAll(".chk-envio:checked")].map((k) => lista[Number(k.dataset.idx)]);
+    const refrescar = () => {
+      const n = seleccionados().length;
+      botonRevisar.textContent = n > 0 ? `Revisar y enviar (${n})` : "No hay correos pendientes por enviar";
+      botonRevisar.disabled = n === 0;
+    };
+    tabla.querySelector(".chk-todos").addEventListener("change", (e) => {
+      tabla.querySelectorAll(".chk-envio:not(:disabled)").forEach((k) => { k.checked = e.target.checked; });
+      refrescar();
+    });
+    tabla.querySelectorAll(".chk-envio").forEach((k) => k.addEventListener("change", refrescar));
+    refrescar();
+
+    botonRevisar.addEventListener("click", () => abrirRevision(tipo, seleccionados()));
+    botonPrueba.addEventListener("click", () => enviarPrueba(tipo, lista));
   }
 
   function resolverPlantilla(plantilla, c) {
@@ -403,80 +578,172 @@ Tweetalig Centro de Idiomas`;
       .replaceAll("{periodo}", c.periodoTexto || "");
   }
 
-  async function registrarAlertasNormales() {
-    await registrarLote("avisos_inasistencia", alertaActuales, document.getElementById("texto-plantilla-alerta").value, "contenido-alerta-aviso", "Registró alertas de inasistencia", (c) => `${idPeriodoActual}_${c.cedula}`);
-  }
-  async function registrarAvisosPerdida() {
-    await registrarLote("avisos_perdida_inasistencia", perdidaActuales, document.getElementById("texto-plantilla-perdida").value, "contenido-perdida-aviso", "Registró avisos de pérdida por inasistencia", (c) => `${idPeriodoActual}_${c.cedula}`);
+  // ---------- Trazabilidad ----------
+  async function registrarEnvio({ tipo, c, m, para, resultado, error, esPrueba }) {
+    await addDoc(collection(db, "envios_correo"), {
+      periodoId: idPeriodoActual, tipo: TIPOS[tipo].doc, esPrueba: !!esPrueba,
+      cedula: c.cedula || "", nombreCompleto: `${c.apellido || ""} ${c.nombre || ""}`.trim(),
+      correoDestino: para, asunto: m.asunto, mensaje: m.texto,
+      horas: Number(c.horas) || 0, claseTexto: c.claseTexto || "", programaNombre: c.programaNombre || "",
+      ciudadId: c.ciudadId || "", ciudadNombre: c.ciudadNombre || "",
+      enviadoPor: correoPropio, fecha: serverTimestamp(), resultado, error: error || ""
+    });
   }
 
-  async function registrarLote(coleccion, lista, plantilla, idAviso, textoLog, idDoc) {
-    const aviso = document.getElementById(idAviso);
-    aviso.textContent = "Registrando...";
-    aviso.style.color = "var(--tinta-suave)";
+  // ---------- Revisión y envío ----------
+  async function abrirRevision(tipo, sel) {
+    if (sel.length === 0) { mostrarAviso("No hay estudiantes seleccionados.", "error"); return; }
+    const t = TIPOS[tipo];
+    const fondo = document.createElement("div");
+    fondo.className = "modal-fondo";
+    fondo.innerHTML = `
+      <div class="modal-caja">
+        <h3 style="margin:0 0 6px;">Revisar antes de enviar — ${t.etiqueta}</h3>
+        <p style="margin:0; font-size:13.5px;">Se enviarán <b>${sel.length}</b> correo(s) desde <b>${esc(correoPropio)}</b>. Abre cada uno para ver el mensaje exacto. Nada sale hasta que confirmes.</p>
+        <div class="modal-lista" id="modal-lista">Preparando mensajes...</div>
+        <p id="modal-estado" style="font-size:13px; min-height:18px; margin:0 0 10px;"></p>
+        <div class="modal-botones">
+          <button type="button" class="boton-secundario" id="modal-cancelar">Cancelar</button>
+          <button type="button" class="boton-primario" id="modal-confirmar" style="margin-top:0; width:auto; padding:10px 18px;" disabled>Confirmar y enviar ${sel.length}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(fondo);
+    const cerrar = () => fondo.remove();
+    fondo.querySelector("#modal-cancelar").addEventListener("click", cerrar);
 
-    const pendientes = lista.filter((c) => !c.notificado);
-    for (const c of pendientes) {
-      await setDoc(doc(db, coleccion, idDoc(c)), {
-        periodoId: idPeriodoActual,
-        cedula: c.cedula,
-        nombreCompleto: `${c.apellido} ${c.nombre}`,
-        correo: c.correo || "",
-        claseTexto: c.claseTexto,
-        horas: c.horas,
-        mensaje: resolverPlantilla(plantilla, c),
-        registradoPor: usuario.email,
-        fechaRegistro: serverTimestamp(),
-        enviadoRealmente: false
-      });
+    let mensajes;
+    try {
+      mensajes = await Promise.all(sel.map((c) => construirMensaje(tipo, c)));
+    } catch (e) {
+      fondo.querySelector("#modal-lista").textContent = "No se pudieron preparar los mensajes (" + (e.code || e.message) + ").";
+      return;
     }
+    fondo.querySelector("#modal-lista").innerHTML = sel.map((c, i) => `
+      <details>
+        <summary><b>${esc(c.apellido)} ${esc(c.nombre)}</b> → ${esc(c.correo)} · ${c.horas} h · ${esc(c.ciudadNombre || "")}</summary>
+        <div><b>Asunto:</b> ${esc(mensajes[i].asunto)}</div>
+        <pre>${esc(mensajes[i].texto)}</pre>
+      </details>`).join("");
+    const botonOk = fondo.querySelector("#modal-confirmar");
+    botonOk.disabled = false;
 
-    await registrarLog(usuario, rol, textoLog, `${pendientes.length} estudiante(s) — ${idPeriodoActual}`);
-    aviso.style.color = "#2E6E4E";
-    aviso.textContent = `${pendientes.length} aviso(s) registrado(s) con su mensaje ya armado. Falta conectar el envío real (Apps Script).`;
-    await cargarAlertas();
-  }
-
-  // ---------- Editor de plantillas ----------
-  async function cargarPlantilla(tipo, idTextarea, defecto) {
-    const snap = await getDoc(doc(db, "plantillas_correo", tipo));
-    const textarea = document.getElementById(idTextarea);
-    textarea.value = snap.exists() ? snap.data().texto : defecto;
-  }
-
-  function configurarEditor(botonEditarId, editorId, botonGuardarId, textareaId, tipo) {
-    document.getElementById(botonEditarId).addEventListener("click", () => {
-      const editor = document.getElementById(editorId);
-      editor.style.display = editor.style.display === "none" ? "block" : "none";
+    botonOk.addEventListener("click", async () => {
+      if (!(await asegurarGmail())) return; // abre el permiso de Google directamente desde el clic
+      const estado = fondo.querySelector("#modal-estado");
+      botonOk.disabled = true; fondo.querySelector("#modal-cancelar").disabled = true;
+      let ok = 0, fallos = 0, sinRegistro = 0;
+      for (let i = 0; i < sel.length; i++) {
+        const c = sel[i], m = mensajes[i];
+        estado.textContent = `Enviando ${i + 1} de ${sel.length}...`;
+        let resultado = "ok", errorTxt = "";
+        try { await enviarCorreo({ token: gmail.token, para: c.correo, asunto: m.asunto, texto: m.texto }); ok++; }
+        catch (e) { resultado = "error"; errorTxt = e.message || String(e); fallos++; }
+        try {
+          await registrarEnvio({ tipo, c, m, para: c.correo, resultado, error: errorTxt, esPrueba: false });
+          if (resultado === "ok") {
+            await setDoc(doc(db, t.coleccion, `${idPeriodoActual}_${c.cedula}`), {
+              periodoId: idPeriodoActual, cedula: c.cedula, nombreCompleto: `${c.apellido} ${c.nombre}`,
+              correo: c.correo, claseTexto: c.claseTexto, ciudadId: c.ciudadId || "",
+              horas: c.horas, horasEnviadas: c.horas, asunto: m.asunto, mensaje: m.texto,
+              registradoPor: correoPropio, fechaRegistro: serverTimestamp(), fechaEnvio: serverTimestamp(), enviadoRealmente: true
+            });
+          }
+        } catch (e) { sinRegistro++; console.error("No se pudo guardar el registro del envío:", e); }
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      try { await registrarLog(usuario, rol, `Envió correos de ${t.etiqueta.toLowerCase()} por inasistencia`, `${ok} enviados, ${fallos} con error — ${idPeriodoActual}`); } catch (e) { /* el detalle ya quedó en el historial */ }
+      estado.style.color = fallos || sinRegistro ? "var(--error)" : "#2E6E4E";
+      estado.textContent = `Listo: ${ok} enviado(s), ${fallos} con error.` + (sinRegistro ? ` ⚠ ${sinRegistro} se enviaron pero NO se pudo guardar su registro; avisa a Master.` : "") + " Los errores quedan en el historial.";
+      fondo.querySelector("#modal-cancelar").disabled = false;
+      fondo.querySelector("#modal-cancelar").textContent = "Cerrar";
+      mostrarAviso(`${ok} correo(s) enviado(s)${fallos ? `, ${fallos} con error` : ""}.`, fallos ? "error" : "ok");
+      await cargarAlertas();
     });
-    document.getElementById(botonGuardarId).addEventListener("click", async () => {
-      const texto = document.getElementById(textareaId).value;
-      await setDoc(doc(db, "plantillas_correo", tipo), { texto, actualizadoPor: usuario.email, fecha: serverTimestamp() });
-      await registrarLog(usuario, rol, "Actualizó plantilla de correo", tipo);
-      alert("Mensaje guardado.");
-    });
   }
+
+  // ---------- Correo de prueba (llega al correo de quien lo pide) ----------
+  async function enviarPrueba(tipo, lista) {
+    if (!(await asegurarGmail())) return; // abre el permiso de Google directamente desde el clic
+    const base = lista[0] || {
+      nombre: "Nombre", apellido: "Ejemplo", cedula: "0", nivel: "A1", grupo: "1", programaNombre: "Programa de ejemplo",
+      horas: 7, limitePerdida: 10, horasCurso: 96, ciudadNombre: mapaSedes.get(misSedesEd[0]) || "Sede", ciudadId: misSedesEd[0] || "",
+      docenteNombre: "Profesor Ejemplo", periodoTexto: idPeriodoActual, claseTexto: "A1 - 1", correo: ""
+    };
+    const ejemplo = { ...base, periodoTexto: base.periodoTexto || idPeriodoActual };
+    try {
+      const m = await construirMensaje(tipo, ejemplo);
+      const prueba = {
+        asunto: "[PRUEBA] " + m.asunto,
+        texto: `*** CORREO DE PRUEBA: así lo recibiría ${ejemplo.nombre} ${ejemplo.apellido} (${ejemplo.correo || "sin correo"}). No se envió a ningún estudiante. ***\n\n${m.texto}`
+      };
+      let resultado = "ok", errorTxt = "";
+      try { await enviarCorreo({ token: gmail.token, para: correoPropio, asunto: prueba.asunto, texto: prueba.texto }); }
+      catch (e) { resultado = "error"; errorTxt = e.message || String(e); }
+      try { await registrarEnvio({ tipo, c: ejemplo, m: prueba, para: correoPropio, resultado, error: errorTxt, esPrueba: true }); } catch (e) { console.error(e); }
+      if (resultado === "ok") mostrarAviso(`Correo de prueba enviado a ${correoPropio}. Revisa tu bandeja.`);
+      else mostrarAviso("No se pudo enviar la prueba: " + errorTxt, "error");
+      cargarHistorial();
+    } catch (e) {
+      mostrarAviso("No se pudo preparar la prueba (" + (e.code || e.message) + ").", "error");
+    }
+  }
+
+  // ---------- Historial de envíos ----------
+  let enviosActuales = [];
+  const fmtFecha = (ts) => ts?.toDate ? ts.toDate().toLocaleString("es-CO", { timeZone: "America/Bogota" }) : "";
+  async function cargarHistorial() {
+    const cont = document.getElementById("contenido-historial");
+    cont.innerHTML = "<p style='color:var(--tinta-suave);'>Cargando...</p>";
+    try {
+      const base = collection(db, "envios_correo");
+      const filtro = where("periodoId", "==", idPeriodoActual);
+      let docs = [];
+      if (esCoordinacion) {
+        for (let i = 0; i < misSedesEd.length; i += 10) {
+          docs = docs.concat((await getDocs(query(base, filtro, where("ciudadId", "in", misSedesEd.slice(i, i + 10))))).docs);
+        }
+      } else {
+        docs = (await getDocs(query(base, filtro))).docs;
+      }
+      enviosActuales = docs.map((d) => d.data()).sort((a, b) => (b.fecha?.seconds || 0) - (a.fecha?.seconds || 0));
+      if (enviosActuales.length === 0) { cont.innerHTML = "<p style='color:var(--tinta-suave);'>Todavía no hay envíos registrados para este período.</p>"; return; }
+      const filas = enviosActuales.slice(0, 200).map((e) => `
+        <tr><td>${esc(fmtFecha(e.fecha))}</td><td>${e.esPrueba ? "Prueba" : (e.tipo === "perdida_inasistencia" ? "Pérdida" : "Alerta")}</td>
+        <td>${esc(e.nombreCompleto)}</td><td>${esc(e.correoDestino)}</td><td>${esc(e.claseTexto)}</td><td>${e.horas}</td>
+        <td>${esc(e.enviadoPor)}</td><td class="${e.resultado === "ok" ? "estado-enviado" : "estado-pendiente"}">${e.resultado === "ok" ? "Enviado" : "Error"}</td></tr>`).join("");
+      cont.innerHTML = `<table class="tabla-al"><thead><tr><th>Fecha</th><th>Tipo</th><th>Estudiante</th><th>Correo</th><th>Clase</th><th>Horas</th><th>Enviado por</th><th>Resultado</th></tr></thead><tbody>${filas}</tbody></table>
+        <p style="font-size:12.5px; color:var(--tinta-suave);">${enviosActuales.length > 200 ? "Se muestran los 200 más recientes; el reporte descargable trae todos." : `${enviosActuales.length} registro(s).`}</p>`;
+    } catch (e) {
+      cont.innerHTML = `<p style="color:var(--error);">No se pudo cargar el historial (${esc(e.code || e.message)}).</p>`;
+    }
+  }
+  document.getElementById("boton-descargar-envios").addEventListener("click", async () => {
+    if (enviosActuales.length === 0) { mostrarAviso("No hay envíos para descargar en este período.", "error"); return; }
+    const filas = [["Fecha", "Tipo", "Estudiante", "Cédula", "Correo destino", "Sede", "Programa", "Clase", "Horas de inasistencia", "Asunto", "Enviado por", "Resultado", "Detalle del error"]];
+    enviosActuales.forEach((e) => filas.push([
+      fmtFecha(e.fecha), e.esPrueba ? "Prueba" : (e.tipo === "perdida_inasistencia" ? "Pérdida" : "Alerta"),
+      e.nombreCompleto, String(e.cedula || ""), e.correoDestino, e.ciudadNombre || "", e.programaNombre || "", e.claseTexto || "",
+      e.horas, e.asunto || "", e.enviadoPor, e.resultado === "ok" ? "Enviado" : "Error", e.error || ""
+    ]));
+    try { await descargarTabla(filas, `envios-correo-${idPeriodoActual}`, document.getElementById("formato-envios").value, "Envíos"); }
+    catch (e) { mostrarAviso("No se pudo generar el archivo: " + e.message, "error"); }
+  });
 
   document.querySelectorAll(".boton-marcador").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const idTextarea = btn.dataset.campo === "alerta" ? "texto-plantilla-alerta" : "texto-plantilla-perdida";
-      const textarea = document.getElementById(idTextarea);
-      const inicio = textarea.selectionStart;
-      const fin = textarea.selectionEnd;
+      const textarea = document.getElementById(btn.dataset.campo === "alerta" ? "texto-plantilla-alerta" : "texto-plantilla-perdida");
+      const inicio = textarea.selectionStart, fin = textarea.selectionEnd;
       textarea.value = textarea.value.slice(0, inicio) + btn.dataset.insertar + textarea.value.slice(fin);
       textarea.focus();
     });
   });
-
   document.querySelectorAll(".boton-mensaje-estandar").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const esAlerta = btn.dataset.campo === "alerta";
-      document.getElementById(esAlerta ? "texto-plantilla-alerta" : "texto-plantilla-perdida").value = esAlerta ? PLANTILLA_ALERTA_DEFECTO : PLANTILLA_PERDIDA_DEFECTO;
+      const tipo = btn.dataset.campo;
+      document.getElementById("texto-plantilla-" + tipo).value = TIPOS[tipo].textoDefecto;
+      document.getElementById("asunto-plantilla-" + tipo).value = TIPOS[tipo].asuntoDefecto;
     });
   });
-
-  configurarEditor("boton-editar-plantilla-alerta", "editor-alerta", "boton-guardar-plantilla-alerta", "texto-plantilla-alerta", "alerta_inasistencia");
-  configurarEditor("boton-editar-plantilla-perdida", "editor-perdida", "boton-guardar-plantilla-perdida", "texto-plantilla-perdida", "perdida_inasistencia");
 
   document.getElementById("anio").addEventListener("change", async () => { await cargarProgramasDelPeriodo(); await cargarAlertas(); });
   document.getElementById("periodo").addEventListener("change", async () => { await cargarProgramasDelPeriodo(); await cargarAlertas(); });
@@ -488,8 +755,8 @@ Tweetalig Centro de Idiomas`;
 
   cargarSelectoresPeriodo();
   await cargarSedesFiltro();
-  await cargarPlantilla("alerta_inasistencia", "texto-plantilla-alerta", PLANTILLA_ALERTA_DEFECTO);
-  await cargarPlantilla("perdida_inasistencia", "texto-plantilla-perdida", PLANTILLA_PERDIDA_DEFECTO);
+  await cargarMapaSedes();
+  llenarSelectoresDeSede();
   await cargarProgramasDelPeriodo();
   await cargarAlertas();
 </script>

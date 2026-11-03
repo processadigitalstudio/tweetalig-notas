@@ -299,9 +299,29 @@ service cloud.firestore {
     // Colección "plantillas_correo": el texto de cada tipo de aviso
     // (alerta_habilitacion, perdida_habilitacion, alerta_inasistencia,
     // perdida_inasistencia), con marcadores {nombre}, {nivel}, {grupo}.
+    // Cada sede puede tener su propio mensaje: documento "<tipo>__<idSede>" con el
+    // campo ciudadId. Coordinación/secretaría solo escribe el de sus sedes; los
+    // mensajes generales (sin "__") los edita cualquier gestor, como antes.
     match /plantillas_correo/{id} {
       allow read: if esGestor();
-      allow write: if esGestor();
+      allow create, update: if esGestor() && (
+        esAdminOMaster() ||
+        !id.matches('.*__.*') ||
+        (request.resource.data.get('ciudadId', '') in misSedes() &&
+         id.matches('.*__' + request.resource.data.get('ciudadId', '')))
+      );
+      allow delete: if esAdminOMaster();
+    }
+
+    // Registro de cada correo enviado (también pruebas y errores). Solo se puede
+    // CREAR (no editar ni borrar) para que la trazabilidad no se pueda alterar.
+    // Coordinación/secretaría solo crea y lee los de sus sedes.
+    match /envios_correo/{id} {
+      allow create: if esGestor() &&
+        request.resource.data.enviadoPor == miCorreo() &&
+        (esAdminOMaster() || request.resource.data.get('ciudadId', '') in misSedes());
+      allow get, list: if esGestor() && (esAdminOMaster() || resource.data.get('ciudadId', '') in misSedes());
+      allow update, delete: if false;
     }
 
     // Colección "configuracion": legado, ya no se usa activamente.
