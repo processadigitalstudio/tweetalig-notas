@@ -384,6 +384,7 @@ Tweetalig Centro de Idiomas`;
   const misSedesEd = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
   const correoPropio = usuario.email.toLowerCase();
   const mapaSedes = new Map();
+  const NOMBRE_REMITENTE = "Tweetalig Centro de Idiomas";
 
   const TIPOS = {
     alerta:  { doc: "alerta_inasistencia",  coleccion: "avisos_inasistencia",          etiqueta: "Alerta",  asuntoDefecto: "Alerta de inasistencia – Tweetalig Centro de Idiomas",   textoDefecto: PLANTILLA_ALERTA_DEFECTO },
@@ -637,7 +638,7 @@ Tweetalig Centro de Idiomas`;
         const c = sel[i], m = mensajes[i];
         estado.textContent = `Enviando ${i + 1} de ${sel.length}...`;
         let resultado = "ok", errorTxt = "";
-        try { await enviarCorreo({ token: gmail.token, para: c.correo, asunto: m.asunto, texto: m.texto }); ok++; }
+        try { await enviarCorreo({ token: gmail.token, de: correoPropio, nombreDe: NOMBRE_REMITENTE, para: c.correo, asunto: m.asunto, texto: m.texto }); ok++; }
         catch (e) { resultado = "error"; errorTxt = e.message || String(e); fallos++; }
         try {
           await registrarEnvio({ tipo, c, m, para: c.correo, resultado, error: errorTxt, esPrueba: false });
@@ -678,7 +679,7 @@ Tweetalig Centro de Idiomas`;
         texto: `*** CORREO DE PRUEBA: así lo recibiría ${ejemplo.nombre} ${ejemplo.apellido} (${ejemplo.correo || "sin correo"}). No se envió a ningún estudiante. ***\n\n${m.texto}`
       };
       let resultado = "ok", errorTxt = "";
-      try { await enviarCorreo({ token: gmail.token, para: correoPropio, asunto: prueba.asunto, texto: prueba.texto }); }
+      try { await enviarCorreo({ token: gmail.token, de: correoPropio, nombreDe: NOMBRE_REMITENTE, para: correoPropio, asunto: prueba.asunto, texto: prueba.texto }); }
       catch (e) { resultado = "error"; errorTxt = e.message || String(e); }
       try { await registrarEnvio({ tipo, c: ejemplo, m: prueba, para: correoPropio, resultado, error: errorTxt, esPrueba: true }); } catch (e) { console.error(e); }
       if (resultado === "ok") mostrarAviso(`Correo de prueba enviado a ${correoPropio}. Revisa tu bandeja.`);
