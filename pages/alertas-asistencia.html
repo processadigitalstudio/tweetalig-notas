@@ -61,8 +61,8 @@
     <span class="etiqueta-rol">Alertas de inasistencia</span>
     <h2>Estudiantes con horas de inasistencia</h2>
     <p style="color: var(--tinta-suave); max-width: 700px; margin-top: -8px;">
-      Se agrupan por ciclo, sede y programa. Define abajo desde cuántas horas se manda la
-      alerta de advertencia, y desde cuántas se considera pérdida por inasistencia.
+      Se agrupan por ciclo, sede y programa. Los límites de alerta y de pérdida salen de las horas
+      de cada nivel y de los porcentajes configurados en <b>Programas</b>; no se escriben aquí.
     </p>
 
     <div class="selector-periodo">
@@ -73,10 +73,7 @@
       <div><label class="etiqueta-campo">Programa</label><select id="programa"><option value="">Todos los programas</option></select></div>
     </div>
 
-    <div class="fila-umbrales">
-      <div><label class="etiqueta-campo">Horas para Alerta</label><input type="number" id="umbral-alerta" value="2" min="0.5" step="0.5"></div>
-      <div><label class="etiqueta-campo">Horas para Pérdida</label><input type="number" id="umbral-perdida" value="6" min="0.5" step="0.5"></div>
-    </div>
+    <div id="aviso-sin-horas"></div>
 
     <div class="panel-envio">
       <div>Los correos saldrán desde: <b id="correo-remitente"></b></div>
@@ -272,8 +269,7 @@ Tweetalig Centro de Idiomas`;
     const ciclo = Number(document.getElementById("ciclo").value);
     const sedeFiltro = document.getElementById("sede").value;
     const programaFiltro = document.getElementById("programa").value;
-    const umbralAlerta = Number(document.getElementById("umbral-alerta").value) || 2;
-    const umbralPerdida = Number(document.getElementById("umbral-perdida").value) || 6;
+    const sinConfigurar = new Set(); // programa — nivel sin horas definidas en Programas
     idPeriodoActual = `${anio}-${periodo}-${ciclo}`;
 
     document.getElementById("contenido-alerta").innerHTML = "<p style='color:var(--tinta-suave);'>Calculando...</p>";
@@ -339,7 +335,8 @@ Tweetalig Centro de Idiomas`;
 
         // Límites: por programa y nivel si están configurados; si no, los manuales de esta pantalla.
         const umbPrograma = calcularUmbrales(cacheProgramas[grupo[0].programaId], grupo[0].nivel);
-        const umb = umbPrograma || { alerta1: umbralAlerta - 1e-9, alerta2: null, perdida: umbralPerdida - 1e-9 };
+        if (!umbPrograma) { sinConfigurar.add(`${grupo[0].programaNombre || "Sin programa"} — nivel ${grupo[0].nivel}`); return; }
+        const umb = umbPrograma;
 
         estudiantes.forEach((est) => {
           const horas = horasTotales[est.cedula] || 0;
@@ -369,6 +366,10 @@ Tweetalig Centro de Idiomas`;
         });
       }));
 
+      const cajaAviso = document.getElementById("aviso-sin-horas");
+      cajaAviso.innerHTML = sinConfigurar.size === 0 ? "" : `<div class="nota-script" style="border-color:var(--terracota); background:var(--error-fondo);">
+        ⚠ <b>Estos niveles no tienen horas configuradas y no se están evaluando:</b><br>${[...sinConfigurar].sort().map(esc).join("<br>")}<br>
+        Agrégalas en <b>Programas</b> (sección "Horas del curso e inasistencias") y vuelve a cargar esta pantalla.</div>`;
       pintarTabla("contenido-alerta", alertaActuales, "alerta");
       pintarTabla("contenido-perdida", perdidaActuales, "perdida");
       cargarHistorial();
@@ -528,7 +529,7 @@ Tweetalig Centro de Idiomas`;
         <td>${esc(c.ciudadNombre) || "—"}</td>
         <td>${esc(c.docenteNombre) || "—"}</td>
         <td class="col-horas">${c.horas.toFixed(2)}</td>
-        <td>${c.limitePerdida != null ? "más de " + (Math.round(c.limitePerdida * 100) / 100) + " h (de " + c.horasCurso + ")" : "manual"}</td>
+        <td>${"más de " + (Math.round(c.limitePerdida * 100) / 100) + " h (de " + c.horasCurso + ")"}</td>
         <td>${ETIQUETA_ESTADO[c.estado] || ""}</td>
         <td class="${claseEstado}">${esc(textoEstado)}</td>
       `;
@@ -750,8 +751,6 @@ Tweetalig Centro de Idiomas`;
   document.getElementById("ciclo").addEventListener("change", async () => { await cargarProgramasDelPeriodo(); await cargarAlertas(); });
   document.getElementById("sede").addEventListener("change", cargarAlertas);
   document.getElementById("programa").addEventListener("change", cargarAlertas);
-  document.getElementById("umbral-alerta").addEventListener("change", cargarAlertas);
-  document.getElementById("umbral-perdida").addEventListener("change", cargarAlertas);
 
   cargarSelectoresPeriodo();
   await cargarSedesFiltro();
