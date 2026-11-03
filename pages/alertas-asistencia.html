@@ -75,14 +75,11 @@
 
     <div id="aviso-sin-horas"></div>
 
-    <div class="panel-envio">
-      <div>Los correos saldrán desde: <b id="correo-remitente"></b></div>
-      <button type="button" class="boton-secundario" id="boton-conectar-gmail">Conectar con Gmail para enviar</button>
-      <span id="estado-gmail" style="font-size:13px;"></span>
-      <div style="flex-basis:100%; font-size:12.5px; color:var(--tinta-suave);">
-        Nada se envía solo: primero eliges a quién, revisas los mensajes y confirmas. Si el nivel y las horas de inasistencia
-        de un estudiante no han cambiado desde el último envío, no se le vuelve a enviar.
-      </div>
+    <div class="panel-envio" style="display:block;">
+      <div><b>Cada sede envía desde su propia cuenta de Google</b> (la que instaló el script de envío). Nada se envía solo:
+        eliges a quién, revisas los mensajes y confirmas. Si las horas de un estudiante no han cambiado desde el último
+        envío, no se le vuelve a enviar.</div>
+      <div id="lista-config-envio" style="margin-top:8px;"></div>
     </div>
 
     <!-- ========== ALERTA ========== -->
@@ -164,8 +161,8 @@
   import { calcularUmbrales, estadoInasistencia, ETIQUETA_ESTADO } from "../js/umbrales.js?v=1";
   import { cargarEstudiantesDeClases } from "../js/matricula.js?v=1";
   import { leerClases } from "../js/clases-lectura.js?v=1";
-  import { db, auth, DOMINIO_PERMITIDO } from "../js/firebase-config.js?v=3";
-  import { conectarGmail, enviarCorreo, correoValido } from "../js/correo.js?v=1";
+  import { db } from "../js/firebase-config.js?v=3";
+  import { probarScript, enviarPorScript, urlScriptValida } from "../js/correo-script.js?v=1";
   import { descargarTabla } from "../js/exportar.js?v=1";
   import { mostrarAviso } from "../js/aviso.js?v=1";
   import { collection, getDocs, getDoc, doc, setDoc, addDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
@@ -391,29 +388,64 @@ Tweetalig Centro de Idiomas`;
     perdida: { doc: "perdida_inasistencia", coleccion: "avisos_perdida_inasistencia",  etiqueta: "Pérdida", asuntoDefecto: "Pérdida por inasistencia – Tweetalig Centro de Idiomas", textoDefecto: PLANTILLA_PERDIDA_DEFECTO }
   };
 
-  // ---------- Conexión con Gmail ----------
-  let gmail = { token: null, expira: 0 };
-  const gmailListo = () => !!gmail.token && Date.now() < gmail.expira;
-  function pintarEstadoGmail() {
-    const el = document.getElementById("estado-gmail");
-    el.textContent = gmailListo() ? "✔ Conectado (vale por cerca de 1 hora)" : "Sin conectar";
-    el.style.color = gmailListo() ? "#2E6E4E" : "var(--tinta-suave)";
+  // ---------- Envío por sede: cada sede usa un script instalado en SU cuenta de Google ----------
+  const configEnvio = new Map(); // ciudadId -> { url, secreto }
+  let sedesConfigurables = [];
+  async function cargarConfigEnvio() {
+    sedesConfigurables = esCoordinacion ? misSedesEd.slice() : [...mapaSedes.keys()];
+    await Promise.all(sedesConfigurables.map(async (id) => {
+      try {
+        const sn = await getDoc(doc(db, "configuracion_envio", id));
+        if (sn.exists() && sn.data().url && sn.data().secreto) configEnvio.set(id, { url: sn.data().url, secreto: sn.data().secreto });
+      } catch (e) { console.warn("No se pudo leer la configuración de envío de", id, e); }
+    }));
+    pintarConfigEnvio();
   }
-  // Se llama DIRECTO desde un clic (abre la ventana de permisos de Google).
-  async function asegurarGmail() {
-    if (gmailListo()) return true;
-    try {
-      gmail = await conectarGmail(auth, correoPropio, DOMINIO_PERMITIDO);
-      pintarEstadoGmail();
-      return true;
-    } catch (e) {
-      mostrarAviso("No se pudo conectar con Gmail: " + (e.code || e.message), "error");
-      return false;
-    }
+  function pintarConfigEnvio() {
+    const cont = document.getElementById("lista-config-envio");
+    cont.innerHTML = "";
+    if (sedesConfigurables.length === 0) { cont.innerHTML = '<p style="color:var(--error); font-size:13px;">Tu usuario no tiene sede asignada.</p>'; return; }
+    sedesConfigurables.forEach((id) => {
+      const nombre = mapaSedes.get(id) || id;
+      const listo = configEnvio.has(id);
+      const fila = document.createElement("div");
+      fila.style.cssText = "padding:8px 0; border-top:1px solid var(--linea);";
+      fila.innerHTML = `
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <b style="min-width:130px;">${esc(nombre)}</b>
+          <span style="font-size:13px; color:${listo ? "#2E6E4E" : "var(--error)"};">${listo ? "✔ Envío configurado" : "Falta configurar el envío"}</span>
+          <button type="button" class="boton-secundario b-config">${listo ? "Cambiar" : "Configurar"}</button>
+          ${listo ? '<button type="button" class="boton-secundario b-probar">Probar conexión</button>' : ""}
+        </div>
+        <div class="form-config" style="display:none; margin-top:8px;">
+          <div class="fila-editor"><label class="etiqueta-campo">Dirección del script (termina en /exec)</label><input type="text" class="in-url" placeholder="https://script.google.com/macros/s/.../exec"></div>
+          <div class="fila-editor"><label class="etiqueta-campo">Clave (la misma que pusiste en el script)</label><input type="password" class="in-clave" autocomplete="off"></div>
+          <button type="button" class="boton-primario b-guardar-config" style="max-width:200px; margin-top:6px;">Guardar</button>
+        </div>`;
+      const form = fila.querySelector(".form-config");
+      fila.querySelector(".b-config").addEventListener("click", () => { form.style.display = form.style.display === "none" ? "block" : "none"; });
+      fila.querySelector(".b-probar")?.addEventListener("click", async () => {
+        try {
+          const r = await probarScript(configEnvio.get(id));
+          mostrarAviso(`Conexión correcta. Los correos de ${nombre} saldrán desde ${r.cuenta} (envíos disponibles hoy: ${r.cuota}).`);
+        } catch (e) { mostrarAviso("No se pudo probar: " + e.message, "error"); }
+      });
+      fila.querySelector(".b-guardar-config").addEventListener("click", async () => {
+        const url = fila.querySelector(".in-url").value.trim();
+        const secreto = fila.querySelector(".in-clave").value.trim();
+        if (!urlScriptValida(url)) { mostrarAviso("La dirección no parece la de un script de Google (debe empezar con https://script.google.com y terminar en /exec).", "error"); return; }
+        if (secreto.length < 12) { mostrarAviso("La clave debe tener al menos 12 caracteres.", "error"); return; }
+        try {
+          await setDoc(doc(db, "configuracion_envio", id), { ciudadId: id, url, secreto, actualizadoPor: correoPropio, fecha: serverTimestamp() });
+          await registrarLog(usuario, rol, "Configuró el envío de correo de la sede", nombre);
+          configEnvio.set(id, { url, secreto });
+          mostrarAviso(`Envío de ${nombre} guardado. Pulsa «Probar conexión» para comprobarlo.`);
+          pintarConfigEnvio();
+        } catch (e) { mostrarAviso("No se pudo guardar (" + (e.code || e.message) + ").", "error"); }
+      });
+      cont.appendChild(fila);
+    });
   }
-  document.getElementById("correo-remitente").textContent = correoPropio;
-  document.getElementById("boton-conectar-gmail").addEventListener("click", asegurarGmail);
-  pintarEstadoGmail();
 
   // ---------- Mensajes (uno por sede, con respaldo al general y al estándar) ----------
   const cachePlantillas = new Map();
@@ -581,14 +613,14 @@ Tweetalig Centro de Idiomas`;
   }
 
   // ---------- Trazabilidad ----------
-  async function registrarEnvio({ tipo, c, m, para, resultado, error, esPrueba }) {
+  async function registrarEnvio({ tipo, c, m, para, resultado, error, esPrueba, cuentaRemitente }) {
     await addDoc(collection(db, "envios_correo"), {
       periodoId: idPeriodoActual, tipo: TIPOS[tipo].doc, esPrueba: !!esPrueba,
       cedula: c.cedula || "", nombreCompleto: `${c.apellido || ""} ${c.nombre || ""}`.trim(),
       correoDestino: para, asunto: m.asunto, mensaje: m.texto,
       horas: Number(c.horas) || 0, claseTexto: c.claseTexto || "", programaNombre: c.programaNombre || "",
       ciudadId: c.ciudadId || "", ciudadNombre: c.ciudadNombre || "",
-      enviadoPor: correoPropio, fecha: serverTimestamp(), resultado, error: error || ""
+      enviadoPor: correoPropio, cuentaRemitente: cuentaRemitente || "", fecha: serverTimestamp(), resultado, error: error || ""
     });
   }
 
@@ -630,34 +662,55 @@ Tweetalig Centro de Idiomas`;
     botonOk.disabled = false;
 
     botonOk.addEventListener("click", async () => {
-      if (!(await asegurarGmail())) return; // abre el permiso de Google directamente desde el clic
       const estado = fondo.querySelector("#modal-estado");
-      botonOk.disabled = true; fondo.querySelector("#modal-cancelar").disabled = true;
-      let ok = 0, fallos = 0, sinRegistro = 0;
-      for (let i = 0; i < sel.length; i++) {
-        const c = sel[i], m = mensajes[i];
-        estado.textContent = `Enviando ${i + 1} de ${sel.length}...`;
-        let resultado = "ok", errorTxt = "";
-        try { await enviarCorreo({ token: gmail.token, de: correoPropio, nombreDe: NOMBRE_REMITENTE, para: c.correo, asunto: m.asunto, texto: m.texto }); ok++; }
-        catch (e) { resultado = "error"; errorTxt = e.message || String(e); fallos++; }
-        try {
-          await registrarEnvio({ tipo, c, m, para: c.correo, resultado, error: errorTxt, esPrueba: false });
-          if (resultado === "ok") {
-            await setDoc(doc(db, t.coleccion, `${idPeriodoActual}_${c.cedula}`), {
-              periodoId: idPeriodoActual, cedula: c.cedula, nombreCompleto: `${c.apellido} ${c.nombre}`,
-              correo: c.correo, claseTexto: c.claseTexto, ciudadId: c.ciudadId || "",
-              horas: c.horas, horasEnviadas: c.horas, asunto: m.asunto, mensaje: m.texto,
-              registradoPor: correoPropio, fechaRegistro: serverTimestamp(), fechaEnvio: serverTimestamp(), enviadoRealmente: true
-            });
+      const cancelar = fondo.querySelector("#modal-cancelar");
+      const faltan = [...new Set(sel.filter((c) => !configEnvio.has(c.ciudadId)).map((c) => c.ciudadNombre || c.ciudadId || "sin sede"))];
+      if (faltan.length) {
+        estado.style.color = "var(--error)";
+        estado.textContent = "Falta configurar el envío de: " + faltan.join(", ") + ". No se envió nada.";
+        return;
+      }
+      botonOk.disabled = true; cancelar.disabled = true;
+      estado.style.color = "var(--tinta-suave)";
+      let ok = 0, fallos = 0, sinRegistro = 0, hechos = 0;
+      const porSede = new Map();
+      sel.forEach((c, i) => { if (!porSede.has(c.ciudadId)) porSede.set(c.ciudadId, []); porSede.get(c.ciudadId).push(i); });
+      for (const [sedeId, indices] of porSede) {
+        for (let j = 0; j < indices.length; j += 10) {
+          const lote = indices.slice(j, j + 10);
+          estado.textContent = `Enviando ${hechos + 1}–${hechos + lote.length} de ${sel.length}...`;
+          let respuesta = null, errorLote = "";
+          try {
+            respuesta = await enviarPorScript(configEnvio.get(sedeId),
+              lote.map((i) => ({ id: String(i), para: sel[i].correo, asunto: mensajes[i].asunto, texto: mensajes[i].texto })), NOMBRE_REMITENTE);
+          } catch (e) {
+            errorLote = (e.sinConfirmacion ? "Sin confirmación del script (revisa la carpeta Enviados de la sede antes de reenviar): " : "") + e.message;
           }
-        } catch (e) { sinRegistro++; console.error("No se pudo guardar el registro del envío:", e); }
-        await new Promise((r) => setTimeout(r, 250));
+          for (const i of lote) {
+            const c = sel[i], m = mensajes[i];
+            const r = respuesta?.resultados?.find((x) => x.id === String(i));
+            const exito = !!(r && r.ok);
+            const errorTxt = exito ? "" : (r?.error || errorLote || "El script no devolvió resultado para este correo.");
+            if (exito) ok++; else fallos++;
+            try {
+              await registrarEnvio({ tipo, c, m, para: c.correo, resultado: exito ? "ok" : "error", error: errorTxt, esPrueba: false, cuentaRemitente: respuesta?.cuenta });
+              if (exito) {
+                await setDoc(doc(db, t.coleccion, `${idPeriodoActual}_${c.cedula}`), {
+                  periodoId: idPeriodoActual, cedula: c.cedula, nombreCompleto: `${c.apellido} ${c.nombre}`,
+                  correo: c.correo, claseTexto: c.claseTexto, ciudadId: c.ciudadId || "",
+                  horas: c.horas, horasEnviadas: c.horas, asunto: m.asunto, mensaje: m.texto,
+                  registradoPor: correoPropio, fechaRegistro: serverTimestamp(), fechaEnvio: serverTimestamp(), enviadoRealmente: true
+                });
+              }
+            } catch (e) { sinRegistro++; console.error("No se pudo guardar el registro del envío:", e); }
+          }
+          hechos += lote.length;
+        }
       }
       try { await registrarLog(usuario, rol, `Envió correos de ${t.etiqueta.toLowerCase()} por inasistencia`, `${ok} enviados, ${fallos} con error — ${idPeriodoActual}`); } catch (e) { /* el detalle ya quedó en el historial */ }
       estado.style.color = fallos || sinRegistro ? "var(--error)" : "#2E6E4E";
       estado.textContent = `Listo: ${ok} enviado(s), ${fallos} con error.` + (sinRegistro ? ` ⚠ ${sinRegistro} se enviaron pero NO se pudo guardar su registro; avisa a Master.` : "") + " Los errores quedan en el historial.";
-      fondo.querySelector("#modal-cancelar").disabled = false;
-      fondo.querySelector("#modal-cancelar").textContent = "Cerrar";
+      cancelar.disabled = false; cancelar.textContent = "Cerrar";
       mostrarAviso(`${ok} correo(s) enviado(s)${fallos ? `, ${fallos} con error` : ""}.`, fallos ? "error" : "ok");
       await cargarAlertas();
     });
@@ -665,24 +718,29 @@ Tweetalig Centro de Idiomas`;
 
   // ---------- Correo de prueba (llega al correo de quien lo pide) ----------
   async function enviarPrueba(tipo, lista) {
-    if (!(await asegurarGmail())) return; // abre el permiso de Google directamente desde el clic
     const base = lista[0] || {
       nombre: "Nombre", apellido: "Ejemplo", cedula: "0", nivel: "A1", grupo: "1", programaNombre: "Programa de ejemplo",
-      horas: 7, limitePerdida: 10, horasCurso: 96, ciudadNombre: mapaSedes.get(misSedesEd[0]) || "Sede", ciudadId: misSedesEd[0] || "",
+      horas: 7, limitePerdida: 10, horasCurso: 96, ciudadNombre: mapaSedes.get(misSedesEd[0]) || "Sede", ciudadId: misSedesEd[0] || [...configEnvio.keys()][0] || "",
       docenteNombre: "Profesor Ejemplo", periodoTexto: idPeriodoActual, claseTexto: "A1 - 1", correo: ""
     };
     const ejemplo = { ...base, periodoTexto: base.periodoTexto || idPeriodoActual };
+    const cfg = configEnvio.get(ejemplo.ciudadId);
+    if (!cfg) { mostrarAviso(`Primero configura el envío de la sede ${ejemplo.ciudadNombre || ""} (arriba, en «Configurar»).`, "error"); return; }
     try {
       const m = await construirMensaje(tipo, ejemplo);
       const prueba = {
         asunto: "[PRUEBA] " + m.asunto,
         texto: `*** CORREO DE PRUEBA: así lo recibiría ${ejemplo.nombre} ${ejemplo.apellido} (${ejemplo.correo || "sin correo"}). No se envió a ningún estudiante. ***\n\n${m.texto}`
       };
-      let resultado = "ok", errorTxt = "";
-      try { await enviarCorreo({ token: gmail.token, de: correoPropio, nombreDe: NOMBRE_REMITENTE, para: correoPropio, asunto: prueba.asunto, texto: prueba.texto }); }
-      catch (e) { resultado = "error"; errorTxt = e.message || String(e); }
-      try { await registrarEnvio({ tipo, c: ejemplo, m: prueba, para: correoPropio, resultado, error: errorTxt, esPrueba: true }); } catch (e) { console.error(e); }
-      if (resultado === "ok") mostrarAviso(`Correo de prueba enviado a ${correoPropio}. Revisa tu bandeja.`);
+      let resultado = "ok", errorTxt = "", cuenta = "";
+      try {
+        const r = await enviarPorScript(cfg, [{ id: "prueba", para: correoPropio, asunto: prueba.asunto, texto: prueba.texto }], NOMBRE_REMITENTE);
+        cuenta = r.cuenta || "";
+        const x = r.resultados?.find((y) => y.id === "prueba");
+        if (!x?.ok) { resultado = "error"; errorTxt = x?.error || "El script no devolvió resultado."; }
+      } catch (e) { resultado = "error"; errorTxt = e.message || String(e); }
+      try { await registrarEnvio({ tipo, c: ejemplo, m: prueba, para: correoPropio, resultado, error: errorTxt, esPrueba: true, cuentaRemitente: cuenta }); } catch (e) { console.error(e); }
+      if (resultado === "ok") mostrarAviso(`Correo de prueba enviado a ${correoPropio} desde ${cuenta}. Revisa tu bandeja.`);
       else mostrarAviso("No se pudo enviar la prueba: " + errorTxt, "error");
       cargarHistorial();
     } catch (e) {
@@ -721,11 +779,11 @@ Tweetalig Centro de Idiomas`;
   }
   document.getElementById("boton-descargar-envios").addEventListener("click", async () => {
     if (enviosActuales.length === 0) { mostrarAviso("No hay envíos para descargar en este período.", "error"); return; }
-    const filas = [["Fecha", "Tipo", "Estudiante", "Cédula", "Correo destino", "Sede", "Programa", "Clase", "Horas de inasistencia", "Asunto", "Enviado por", "Resultado", "Detalle del error"]];
+    const filas = [["Fecha", "Tipo", "Estudiante", "Cédula", "Correo destino", "Sede", "Programa", "Clase", "Horas de inasistencia", "Asunto", "Enviado por (usuario del portal)", "Cuenta que envió el correo", "Resultado", "Detalle del error"]];
     enviosActuales.forEach((e) => filas.push([
       fmtFecha(e.fecha), e.esPrueba ? "Prueba" : (e.tipo === "perdida_inasistencia" ? "Pérdida" : "Alerta"),
       e.nombreCompleto, String(e.cedula || ""), e.correoDestino, e.ciudadNombre || "", e.programaNombre || "", e.claseTexto || "",
-      e.horas, e.asunto || "", e.enviadoPor, e.resultado === "ok" ? "Enviado" : "Error", e.error || ""
+      e.horas, e.asunto || "", e.enviadoPor, e.cuentaRemitente || "", e.resultado === "ok" ? "Enviado" : "Error", e.error || ""
     ]));
     try { await descargarTabla(filas, `envios-correo-${idPeriodoActual}`, document.getElementById("formato-envios").value, "Envíos"); }
     catch (e) { mostrarAviso("No se pudo generar el archivo: " + e.message, "error"); }
@@ -757,6 +815,7 @@ Tweetalig Centro de Idiomas`;
   await cargarSedesFiltro();
   await cargarMapaSedes();
   llenarSelectoresDeSede();
+  await cargarConfigEnvio();
   await cargarProgramasDelPeriodo();
   await cargarAlertas();
 </script>

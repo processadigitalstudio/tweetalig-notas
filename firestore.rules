@@ -313,6 +313,12 @@ service cloud.firestore {
       allow delete: if esAdminOMaster();
     }
 
+    // Datos del script de envío de cada sede (dirección y clave). Solo los ve y edita
+    // Master/Admin o la coordinación/secretaría de ESA sede (el id del documento es la sede).
+    match /configuracion_envio/{ciudadId} {
+      allow read, write: if esGestor() && (esAdminOMaster() || ciudadId in misSedes());
+    }
+
     // Registro de cada correo enviado (también pruebas y errores). Solo se puede
     // CREAR (no editar ni borrar) para que la trazabilidad no se pueda alterar.
     // Coordinación/secretaría solo crea y lee los de sus sedes.

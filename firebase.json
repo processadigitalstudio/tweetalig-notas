@@ -12,6 +12,7 @@
       ".firebase/**",
       "**/node_modules/**",
       "firestore.rules",
+      "apps-script/**",
       "README.md",
       "SETUP.md"
     ],
