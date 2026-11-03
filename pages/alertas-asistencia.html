@@ -84,8 +84,16 @@
           <button type="button" class="boton-marcador" data-campo="alerta" data-insertar="{nombre}">{nombre}</button>
           <button type="button" class="boton-marcador" data-campo="alerta" data-insertar="{nivel}">{nivel}</button>
           <button type="button" class="boton-marcador" data-campo="alerta" data-insertar="{grupo}">{grupo}</button>
+          <button type="button" class="boton-marcador" data-campo="alerta" data-insertar="{curso}">{curso}</button>
+          <button type="button" class="boton-marcador" data-campo="alerta" data-insertar="{horas}">{horas}</button>
+          <button type="button" class="boton-marcador" data-campo="alerta" data-insertar="{limite}">{limite}</button>
+          <button type="button" class="boton-marcador" data-campo="alerta" data-insertar="{sede}">{sede}</button>
+          <button type="button" class="boton-marcador" data-campo="alerta" data-insertar="{profesor}">{profesor}</button>
+          <button type="button" class="boton-marcador" data-campo="alerta" data-insertar="{periodo}">{periodo}</button>
         </div>
         <textarea id="texto-plantilla-alerta"></textarea>
+        <p class="ayuda-marcadores" style="font-size:12.5px; color:var(--tinta-suave); margin:6px 0;">Se reemplazan por los datos de cada estudiante: {horas} = horas de inasistencia, {limite} = límite de pérdida, {curso} = programa, nivel y grupo.</p>
+        <button type="button" class="boton-secundario boton-mensaje-estandar" data-campo="alerta" style="margin-right:8px;">Usar mensaje estándar nuevo</button>
         <button type="button" class="boton-primario" id="boton-guardar-plantilla-alerta" style="max-width:220px;">Guardar mensaje</button>
       </div>
 
@@ -103,8 +111,16 @@
           <button type="button" class="boton-marcador" data-campo="perdida" data-insertar="{nombre}">{nombre}</button>
           <button type="button" class="boton-marcador" data-campo="perdida" data-insertar="{nivel}">{nivel}</button>
           <button type="button" class="boton-marcador" data-campo="perdida" data-insertar="{grupo}">{grupo}</button>
+          <button type="button" class="boton-marcador" data-campo="perdida" data-insertar="{curso}">{curso}</button>
+          <button type="button" class="boton-marcador" data-campo="perdida" data-insertar="{horas}">{horas}</button>
+          <button type="button" class="boton-marcador" data-campo="perdida" data-insertar="{limite}">{limite}</button>
+          <button type="button" class="boton-marcador" data-campo="perdida" data-insertar="{sede}">{sede}</button>
+          <button type="button" class="boton-marcador" data-campo="perdida" data-insertar="{profesor}">{profesor}</button>
+          <button type="button" class="boton-marcador" data-campo="perdida" data-insertar="{periodo}">{periodo}</button>
         </div>
         <textarea id="texto-plantilla-perdida"></textarea>
+        <p class="ayuda-marcadores" style="font-size:12.5px; color:var(--tinta-suave); margin:6px 0;">Se reemplazan por los datos de cada estudiante: {horas} = horas de inasistencia, {limite} = límite de pérdida, {curso} = programa, nivel y grupo.</p>
+        <button type="button" class="boton-secundario boton-mensaje-estandar" data-campo="perdida" style="margin-right:8px;">Usar mensaje estándar nuevo</button>
         <button type="button" class="boton-primario" id="boton-guardar-plantilla-perdida" style="max-width:220px;">Guardar mensaje</button>
       </div>
 
@@ -126,7 +142,7 @@
 
   const PLANTILLA_ALERTA_DEFECTO = `Estimado/a {nombre},
 
-Te informamos que en el nivel {nivel}, grupo {grupo}, has acumulado inasistencias que requieren tu atención.
+Te informamos que en el curso {curso} ({sede}, período {periodo}) llevas {horas} hora(s) de inasistencia. El límite antes de perder el curso por inasistencia es de {limite} hora(s).
 
 Por favor comunícate con la oficina de coordinación académica para conocer los detalles.
 
@@ -134,7 +150,7 @@ Tweetalig Centro de Idiomas`;
 
   const PLANTILLA_PERDIDA_DEFECTO = `Estimado/a {nombre},
 
-Te informamos que en el nivel {nivel}, grupo {grupo}, tus horas de inasistencia superaron el límite permitido, lo cual implica pérdida de la asignatura por inasistencia.
+Te informamos que en el curso {curso} ({sede}, período {periodo}) acumulas {horas} hora(s) de inasistencia, con lo cual superaste el límite permitido de {limite} hora(s). Esto implica la pérdida del curso por inasistencia.
 
 Por favor comunícate con la oficina de coordinación académica para conocer las opciones disponibles.
 
@@ -299,6 +315,8 @@ Tweetalig Centro de Idiomas`;
             cedula: est.cedula, nombre: est.nombre, apellido: est.apellido, correo: est.correo || "",
             nivel: grupo[0].nivel, grupo: grupo[0].grupo,
             claseTexto: `${grupo[0].nivel} - ${grupo[0].grupo}`,
+            programaNombre: grupo[0].programaNombre || "",
+            periodoTexto: idPeriodoActual,
             ciudadNombre: est.ciudadNombre || grupo[0].ciudadNombre,
             docenteNombre: grupo[0].docenteNombre,
             horas, estado, horasCurso: umbPrograma?.horasCurso || null,
@@ -371,10 +389,18 @@ Tweetalig Centro de Idiomas`;
   }
 
   function resolverPlantilla(plantilla, c) {
+    const curso = `${c.programaNombre ? c.programaNombre + " - " : ""}${c.nivel || ""} - ${c.grupo || ""}`;
+    const limite = c.limitePerdida != null ? Math.ceil(c.limitePerdida) : "";
     return plantilla
       .replaceAll("{nombre}", `${c.nombre} ${c.apellido}`)
       .replaceAll("{nivel}", c.nivel || "")
-      .replaceAll("{grupo}", c.grupo || "");
+      .replaceAll("{grupo}", c.grupo || "")
+      .replaceAll("{curso}", curso)
+      .replaceAll("{horas}", String(c.horas ?? ""))
+      .replaceAll("{limite}", String(limite))
+      .replaceAll("{sede}", c.ciudadNombre || "")
+      .replaceAll("{profesor}", c.docenteNombre || "")
+      .replaceAll("{periodo}", c.periodoTexto || "");
   }
 
   async function registrarAlertasNormales() {
@@ -439,6 +465,13 @@ Tweetalig Centro de Idiomas`;
       const fin = textarea.selectionEnd;
       textarea.value = textarea.value.slice(0, inicio) + btn.dataset.insertar + textarea.value.slice(fin);
       textarea.focus();
+    });
+  });
+
+  document.querySelectorAll(".boton-mensaje-estandar").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const esAlerta = btn.dataset.campo === "alerta";
+      document.getElementById(esAlerta ? "texto-plantilla-alerta" : "texto-plantilla-perdida").value = esAlerta ? PLANTILLA_ALERTA_DEFECTO : PLANTILLA_PERDIDA_DEFECTO;
     });
   });
 
