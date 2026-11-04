@@ -169,20 +169,28 @@
 
   const { usuario, rol, perfil } = await requireAuth(["coordinador", "secretaria", "admin", "master"]);
 
-  const PLANTILLA_ALERTA_DEFECTO = `Estimado/a {nombre},
+  const PLANTILLA_ALERTA_DEFECTO = `Estimado {nombre}
+Cordial saludo
 
-Te informamos que en el curso {curso} ({sede}, período {periodo}) llevas {horas} hora(s) de inasistencia. El límite antes de perder el curso por inasistencia es de {limite} hora(s).
+Después de un largo seguimiento por parte del docente a cargo de su curso, {nivel} {grupo}, se ha evidenciado su inasistencia a clase. Por consiguiente, usted tiene una cantidad considerable de faltas a clase: {horas} hora(s), y de acuerdo con nuestro reglamento estudiantil SE LE DA PREAVISO DE UNA POSIBLE PÉRDIDA DE NIVEL POR INASISTENCIA. El límite permitido es de {limite} hora(s).
 
-Por favor comunícate con la oficina de coordinación académica para conocer los detalles.
+Artículo 26. ASISTENCIA A CLASES: La asistencia a clases en TWEETALIG, es obligatoria y se verifica a través del control de asistencia que lleva a cabo el docente respectivo curso/nivel. PARÁGRAFO 1: Por cada clase que el estudiante no asiste, se le descontará un 2% de su nota final del nivel. PARÁGRAFO 2: Todo curso/nivel, se entenderá por reprobado con una ausencia justificada no superior al diez por ciento (10%) de las clases programadas y se calificará con nota de cero puntos cero (0.0), el docente se abstendrá de practicar exámenes y reportará las ausencias a la Coordinación Académica del programa. Artículo 27. JUSTIFICACIÓN DE AUSENCIAS A CLASES: La ausencia a clases se entenderá justificada solo en los casos de enfermedad comprobada con la respectiva incapacidad de empresa prestadora de servicios de salud.
 
+Sin más que agregar, quedamos atentos a sus comentarios, por favor confirmar haber recibido la notificación por parte de la Institución. Le agradecemos que si tiene alguna excusa que justifique su inasistencia la haga llegar por este medio.
+
+Coordinación Académica
 Tweetalig Centro de Idiomas`;
 
-  const PLANTILLA_PERDIDA_DEFECTO = `Estimado/a {nombre},
+  const PLANTILLA_PERDIDA_DEFECTO = `Estimado {nombre}
+Cordial saludo
 
-Te informamos que en el curso {curso} ({sede}, período {periodo}) acumulas {horas} hora(s) de inasistencia, con lo cual superaste el límite permitido de {limite} hora(s). Esto implica la pérdida del curso por inasistencia.
+Después de un largo seguimiento por parte del docente a cargo de su curso, {nivel} {grupo}, se ha evidenciado su inasistencia a clase. Por consiguiente, usted acumula {horas} hora(s) de inasistencia, superando el límite permitido de {limite} hora(s), y de acuerdo con nuestro reglamento estudiantil SE LE INFORMA LA PÉRDIDA DEL NIVEL POR INASISTENCIA.
 
-Por favor comunícate con la oficina de coordinación académica para conocer las opciones disponibles.
+Artículo 26. ASISTENCIA A CLASES: La asistencia a clases en TWEETALIG, es obligatoria y se verifica a través del control de asistencia que lleva a cabo el docente respectivo curso/nivel. PARÁGRAFO 1: Por cada clase que el estudiante no asiste, se le descontará un 2% de su nota final del nivel. PARÁGRAFO 2: Todo curso/nivel, se entenderá por reprobado con una ausencia justificada no superior al diez por ciento (10%) de las clases programadas y se calificará con nota de cero puntos cero (0.0), el docente se abstendrá de practicar exámenes y reportará las ausencias a la Coordinación Académica del programa. Artículo 27. JUSTIFICACIÓN DE AUSENCIAS A CLASES: La ausencia a clases se entenderá justificada solo en los casos de enfermedad comprobada con la respectiva incapacidad de empresa prestadora de servicios de salud.
 
+Sin más que agregar, quedamos atentos a sus comentarios, por favor confirmar haber recibido la notificación por parte de la Institución. Le agradecemos que si tiene alguna excusa que justifique su inasistencia la haga llegar por este medio.
+
+Coordinación Académica
 Tweetalig Centro de Idiomas`;
 
   function cargarSelectoresPeriodo() {
