@@ -32,10 +32,12 @@ function doPost(e) {
           const para = String(c.para || "").trim();
           if (!/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(para)) return { id: id, ok: false, error: "Correo de destino no válido." };
           if (MailApp.getRemainingDailyQuota() < 1) return { id: id, ok: false, error: "Se agotó el cupo diario de envíos de esta cuenta." };
+          const texto = String(c.texto || "");
           MailApp.sendEmail({
             to: para,
             subject: String(c.asunto || "").replace(/[\r\n]+/g, " ").slice(0, 200),
-            body: String(c.texto || ""),
+            body: texto,                     // versión en texto, por si el programa de correo no muestra HTML
+            htmlBody: textoAHtml(texto),     // versión que se ve: las líneas ocupan todo el ancho, sin cortes a la mitad
             name: nombre
           });
           return { id: id, ok: true };
@@ -50,6 +52,16 @@ function doPost(e) {
   } catch (err) {
     return responder({ ok: false, error: String(err).slice(0, 200) });
   }
+}
+
+// Convierte el texto del mensaje en HTML: cada párrafo (separado por una línea en blanco) fluye
+// completo, y los saltos de línea sueltos se conservan.
+function textoAHtml(texto) {
+  const esc = function (t) { return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); };
+  const parrafos = String(texto).replace(/\r\n/g, "\n").split(/\n{2,}/).map(function (p) {
+    return '<p style="margin:0 0 14px 0;">' + esc(p).replace(/\n/g, "<br>") + "</p>";
+  }).join("");
+  return '<div style="font-family:Arial,Helvetica,sans-serif; font-size:14px; line-height:1.5; color:#222; max-width:720px;">' + parrafos + "</div>";
 }
 
 function responder(obj) {
