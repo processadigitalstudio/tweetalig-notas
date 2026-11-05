@@ -164,7 +164,7 @@
   import { cargarEstudiantesDeClases } from "../js/matricula.js?v=1";
   import { leerClases } from "../js/clases-lectura.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
-  import { probarScript, enviarPorScript, urlScriptValida } from "../js/correo-script.js?v=1";
+  import { probarScript, enviarPorScript, urlScriptValida, correoValido } from "../js/correo-script.js?v=1";
   import { descargarTabla } from "../js/exportar.js?v=1";
   import { mostrarAviso } from "../js/aviso.js?v=1";
   import { collection, getDocs, getDoc, doc, setDoc, addDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
@@ -552,6 +552,7 @@ Tweetalig Centro de Idiomas`;
   // ---------- Tabla con selección ----------
   function estadoAviso(c) {
     if (!c.correo) return ["Sin correo", "estado-pendiente"];
+    if (!correoValido(c.correo)) return ["Correo no válido (corrígelo en Estudiantes)", "estado-pendiente"];
     if (c.notificado) return [`Enviado (con ${c.aviso.horasEnviadas} h)`, "estado-enviado"];
     if (c.aviso?.enviadoRealmente === true) return [`Cambió: se envió con ${c.aviso.horasEnviadas} h, ahora ${c.horas} h`, "estado-pendiente"];
     return ["Pendiente", "estado-pendiente"];
@@ -574,7 +575,7 @@ Tweetalig Centro de Idiomas`;
     `;
     const tbody = tabla.querySelector("tbody");
     lista.forEach((c, idx) => {
-      const enviable = !!c.correo && !c.notificado;
+      const enviable = correoValido(c.correo) && !c.notificado;
       const [textoEstado, claseEstado] = estadoAviso(c);
       const fila = document.createElement("tr");
       fila.innerHTML = `
@@ -594,21 +595,30 @@ Tweetalig Centro de Idiomas`;
     });
     contenedor.appendChild(tabla);
 
-    const barra = document.createElement("div");
-    barra.className = "barra-envio";
-    const botonRevisar = document.createElement("button");
-    botonRevisar.className = "boton-primario";
-    const botonPrueba = document.createElement("button");
-    botonPrueba.className = "boton-secundario";
-    botonPrueba.textContent = "Enviar correo de prueba a mi correo";
-    barra.appendChild(botonRevisar); barra.appendChild(botonPrueba);
-    contenedor.appendChild(barra);
+    // Los mismos botones arriba y abajo de la tabla, para no tener que bajar.
+    const juegos = [];
+    const crearBarra = () => {
+      const barra = document.createElement("div");
+      barra.className = "barra-envio";
+      const revisar = document.createElement("button");
+      revisar.className = "boton-primario";
+      const prueba = document.createElement("button");
+      prueba.className = "boton-secundario";
+      prueba.textContent = "Enviar correo de prueba a mi correo";
+      barra.appendChild(revisar); barra.appendChild(prueba);
+      juegos.push({ revisar, prueba });
+      return barra;
+    };
+    contenedor.insertBefore(crearBarra(), tabla);
+    contenedor.appendChild(crearBarra());
 
     const seleccionados = () => [...tabla.querySelectorAll(".chk-envio:checked")].map((k) => lista[Number(k.dataset.idx)]);
     const refrescar = () => {
       const n = seleccionados().length;
-      botonRevisar.textContent = n > 0 ? `Revisar y enviar (${n})` : "No hay correos pendientes por enviar";
-      botonRevisar.disabled = n === 0;
+      juegos.forEach(({ revisar }) => {
+        revisar.textContent = n > 0 ? `Revisar y enviar (${n})` : "No hay correos pendientes por enviar";
+        revisar.disabled = n === 0;
+      });
     };
     tabla.querySelector(".chk-todos").addEventListener("change", (e) => {
       tabla.querySelectorAll(".chk-envio:not(:disabled)").forEach((k) => { k.checked = e.target.checked; });
@@ -617,8 +627,10 @@ Tweetalig Centro de Idiomas`;
     tabla.querySelectorAll(".chk-envio").forEach((k) => k.addEventListener("change", refrescar));
     refrescar();
 
-    botonRevisar.addEventListener("click", () => abrirRevision(tipo, seleccionados()));
-    botonPrueba.addEventListener("click", () => enviarPrueba(tipo, lista));
+    juegos.forEach(({ revisar, prueba }) => {
+      revisar.addEventListener("click", () => abrirRevision(tipo, seleccionados()));
+      prueba.addEventListener("click", () => enviarPrueba(tipo, lista));
+    });
   }
 
   function resolverPlantilla(plantilla, c) {
@@ -685,9 +697,22 @@ Tweetalig Centro de Idiomas`;
     const botonOk = fondo.querySelector("#modal-confirmar");
     botonOk.disabled = false;
 
+    let confirmado = false;
     botonOk.addEventListener("click", async () => {
       const estado = fondo.querySelector("#modal-estado");
       const cancelar = fondo.querySelector("#modal-cancelar");
+      // Primer clic: aviso con la cantidad. Segundo clic: envía.
+      if (!confirmado) {
+        const sedesTxt = [...new Set(sel.map((c) => c.ciudadNombre || c.ciudadId))].join(", ");
+        confirmado = true;
+        estado.style.color = "#8A5A12";
+        estado.style.fontWeight = "600";
+        estado.innerHTML = `⚠ Vas a enviar <b>${sel.length}</b> correo(s) de ${esc(t.etiqueta.toUpperCase())} (${esc(sedesTxt)}). Una vez enviados no se pueden retirar. Pulsa de nuevo para enviar.`;
+        botonOk.textContent = `Sí, enviar ${sel.length} correo(s) ahora`;
+        cancelar.textContent = "Volver";
+        return;
+      }
+      estado.style.fontWeight = "400";
       const faltan = [...new Set(sel.filter((c) => !configEnvio.has(c.ciudadId)).map((c) => c.ciudadNombre || c.ciudadId || "sin sede"))];
       if (faltan.length) {
         estado.style.color = "var(--error)";
