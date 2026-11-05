@@ -32,6 +32,29 @@
     <span class="etiqueta-rol">Estudiantes</span>
     <h2>Estudiantes matriculados</h2>
 
+    <div style="margin-bottom:14px;">
+      <button type="button" id="boton-nuevo" style="background:var(--verde-marca); color:#fff; border:none; border-radius:7px; padding:9px 14px; font-size:13.5px; cursor:pointer;">+ Nuevo estudiante</button>
+    </div>
+    <div id="panel-nuevo" style="display:none; background:var(--superficie); border:1px solid var(--linea); border-radius:10px; padding:16px; margin-bottom:20px; max-width:900px;">
+      <h3 style="margin:0 0 4px; font-size:16px;">Matricular un estudiante</h3>
+      <p style="font-size:12.5px; color:var(--tinta-suave); margin:0 0 12px;">Si la cédula ya está matriculada en otra clase del mismo año, período y ciclo, se mueve a la clase elegida (no se duplica).</p>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px;">
+        <input type="text" id="nu-cedula" placeholder="Cédula *" inputmode="numeric">
+        <input type="text" id="nu-nombre" placeholder="Nombres *">
+        <input type="text" id="nu-apellido" placeholder="Apellidos *">
+        <input type="email" id="nu-correo" placeholder="Correo">
+        <input type="text" id="nu-telefono" placeholder="Teléfono">
+      </div>
+      <div style="margin-top:10px;">
+        <select id="nu-clase" style="width:100%; max-width:700px;"><option value="">Selecciona la clase...</option></select>
+      </div>
+      <div style="margin-top:12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <button type="button" id="nu-guardar" style="background:var(--verde-marca); color:#fff; border:none; border-radius:7px; padding:8px 14px; cursor:pointer;">Matricular</button>
+        <button type="button" id="nu-cancelar">Cancelar</button>
+        <span id="nu-aviso" style="font-size:13px;"></span>
+      </div>
+    </div>
+
     <div class="filtros">
       <input type="text" id="filtro-texto" placeholder="Buscar por nombre o cédula...">
       <select id="filtro-sede"><option value="">Todas las sedes</option></select>
@@ -64,14 +87,114 @@
 
 <script type="module">
   import { requireAuth, registrarLog } from "../js/auth.js?v=3";
+  import { hacerBuscable } from "../js/buscable.js?v=3";
   import { leerClases } from "../js/clases-lectura.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
-  import { collection, getDocs, doc, deleteDoc, setDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { collection, getDocs, getDoc, doc, deleteDoc, setDoc, updateDoc, deleteField, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
   import { cargarDestinos, etiquetaDestino, moverEstudiante, datosDirectorio, normalizar } from "../js/matricula.js?v=1";
 
   const { usuario, rol, perfil } = await requireAuth(["master", "admin", "coordinador", "secretaria"]);
 
   let todos = [];
+  let clasesNuevo = [];
+
+  // ───── Nuevo estudiante (uno solo) ─────
+  const $nu = (id) => document.getElementById(id);
+  function avisoNuevo(txt, error = false) { $nu("nu-aviso").style.color = error ? "var(--error)" : "var(--verde-marca)"; $nu("nu-aviso").textContent = txt; }
+
+  async function abrirNuevo() {
+    $nu("panel-nuevo").style.display = "block";
+    if (clasesNuevo.length) return;
+    const snap = await leerClases(db, rol, perfil);
+    const sedes = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
+    clasesNuevo = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      .filter((c) => !(rol === "coordinador" || rol === "secretaria") || sedes.includes(c.ciudadId))
+      .sort((a, b) => (b.anio - a.anio) || (b.periodo - a.periodo) ||
+        (a.ciudadNombre || "").localeCompare(b.ciudadNombre || "") ||
+        (a.nivel || "").localeCompare(b.nivel || "", "es", { numeric: true }) ||
+        (a.grupo || "").localeCompare(b.grupo || ""));
+    const sel = $nu("nu-clase");
+    sel.innerHTML = '<option value="">Selecciona la clase...</option>' +
+      clasesNuevo.map((c, i) => `<option value="${i}">${c.anio}-${c.periodo} · ${etiquetaDestino(c)}</option>`).join("");
+    hacerBuscable(sel, "Escribe para buscar la clase...");
+  }
+
+  // Si la cédula ya existe en el directorio, se rellenan nombres/apellidos.
+  async function autocompletarCedula() {
+    const ced = $nu("nu-cedula").value.trim();
+    if (!ced || ($nu("nu-nombre").value && $nu("nu-apellido").value)) return;
+    try {
+      const sn = await getDoc(doc(db, "directorio_estudiantes", ced));
+      if (sn.exists()) {
+        const d = sn.data();
+        if (!$nu("nu-nombre").value) $nu("nu-nombre").value = d.nombre || "";
+        if (!$nu("nu-apellido").value) $nu("nu-apellido").value = d.apellido || "";
+        avisoNuevo("Esta cédula ya existe en el sistema; se completó el nombre.");
+      }
+    } catch (e) { /* sin permiso o sin red: se escribe a mano */ }
+  }
+
+  async function guardarNuevo() {
+    const cedula = $nu("nu-cedula").value.trim().replace(/\s+/g, "");
+    const nombre = $nu("nu-nombre").value.trim();
+    const apellido = $nu("nu-apellido").value.trim();
+    const correo = $nu("nu-correo").value.trim().toLowerCase();
+    const telefono = $nu("nu-telefono").value.trim();
+    const idx = $nu("nu-clase").value;
+    if (!cedula || !nombre || !apellido) return avisoNuevo("Faltan cédula, nombres o apellidos.", true);
+    if (!/^[0-9A-Za-z.-]{4,20}$/.test(cedula)) return avisoNuevo("La cédula no parece válida.", true);
+    if (correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) return avisoNuevo("El correo no es válido.", true);
+    if (idx === "") return avisoNuevo("Selecciona la clase donde matricularlo.", true);
+    const clase = clasesNuevo[Number(idx)];
+    const docId = `${clase.id}_${cedula}`;
+    $nu("nu-guardar").disabled = true;
+    avisoNuevo("Guardando...");
+    try {
+      const ya = await getDoc(doc(db, "estudiantes", docId));
+      if (ya.exists() && ya.data().estado !== "movido") {
+        avisoNuevo("Ese estudiante ya está matriculado en esa clase.", true);
+        return;
+      }
+      // Si ya está en otra clase del mismo año/período/ciclo y sede, se mueve (no se duplica).
+      let movidoDe = null;
+      const prev = await getDocs(query(collection(db, "estudiantes"),
+        where("cedula", "==", cedula), where("ciudadId", "==", clase.ciudadId)));
+      const previos = prev.docs.map((d) => ({ id: d.id, ...d.data() })).filter((e) =>
+        e.estado !== "movido" && e.claseId !== clase.id &&
+        e.anio === clase.anio && e.periodo === clase.periodo && e.ciclo === clase.ciclo);
+      if (previos.length) {
+        if (!confirm(`${apellido} ${nombre} ya está en ${previos[0].claseTexto || previos[0].claseId}. ¿Moverlo a la clase elegida?`)) { avisoNuevo("Cancelado."); return; }
+        await moverEstudiante({ est: previos[0], destino: clase, usuario, rol });
+        movidoDe = previos[0].claseTexto || previos[0].claseId;
+      }
+      const datos = {
+        nombre, apellido, cedula, correo,
+        claseId: clase.id,
+        claseTexto: `${clase.nivel} - ${clase.grupo} (${clase.anio}-${clase.periodo}, ciclo ${clase.ciclo})`,
+        anio: clase.anio, periodo: clase.periodo, ciclo: clase.ciclo,
+        ciudadId: clase.ciudadId, ciudadNombre: clase.ciudadNombre
+      };
+      if (telefono) datos.telefono = telefono;
+      await setDoc(doc(db, "estudiantes", docId), datos, { merge: true });
+      try {
+        await setDoc(doc(db, "directorio_estudiantes", cedula),
+          { ...datosDirectorio({ nombre, apellido, cedula, ciudadId: clase.ciudadId, ciudadNombre: clase.ciudadNombre }, clase, docId), correo: deleteField() },
+          { merge: true });
+      } catch (e) { console.warn("No se pudo actualizar el directorio:", e); }
+      await registrarLog(usuario, rol, "Creó estudiante individual", `${apellido} ${nombre} (${cedula}) → ${datos.claseTexto} · ${clase.ciudadNombre || ""}${movidoDe ? ` (movido de ${movidoDe})` : ""}`);
+      avisoNuevo(movidoDe ? `Listo: ${apellido} ${nombre} fue movido/a a esa clase.` : `Listo: ${apellido} ${nombre} quedó matriculado/a.`);
+      ["nu-cedula", "nu-nombre", "nu-apellido", "nu-correo", "nu-telefono"].forEach((i) => { $nu(i).value = ""; });
+      await cargarEstudiantes();
+    } catch (error) {
+      avisoNuevo(error.code === "permission-denied" ? "No tienes permiso o el período está cerrado." : `No se pudo guardar (${error.code || error.message}).`, true);
+    } finally {
+      $nu("nu-guardar").disabled = false;
+    }
+  }
+  $nu("boton-nuevo").addEventListener("click", abrirNuevo);
+  $nu("nu-cancelar").addEventListener("click", () => { $nu("panel-nuevo").style.display = "none"; avisoNuevo(""); });
+  $nu("nu-guardar").addEventListener("click", guardarNuevo);
+  $nu("nu-cedula").addEventListener("blur", autocompletarCedula);
 
   async function cargarFiltros() {
     const snapSedes = await getDocs(collection(db, "ciudades"));
