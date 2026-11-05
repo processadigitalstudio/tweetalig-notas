@@ -239,7 +239,7 @@
   }
 
   document.getElementById("boton-guardar").addEventListener("click", async () => {
-    const nombre = document.getElementById("nombre").value.trim();
+    const nombre = document.getElementById("nombre").value.trim().toUpperCase();
     const correo = document.getElementById("correo").value.trim().toLowerCase();
     const rolNuevo = selectRol.value;
     const aviso = document.getElementById("aviso");

@@ -136,8 +136,8 @@
 
   async function guardarNuevo() {
     const cedula = $nu("nu-cedula").value.trim().replace(/\s+/g, "");
-    const nombre = $nu("nu-nombre").value.trim();
-    const apellido = $nu("nu-apellido").value.trim();
+    const nombre = $nu("nu-nombre").value.trim().toUpperCase();
+    const apellido = $nu("nu-apellido").value.trim().toUpperCase();
     const correo = $nu("nu-correo").value.trim().toLowerCase();
     const telefono = $nu("nu-telefono").value.trim();
     const idx = $nu("nu-clase").value;
@@ -322,8 +322,8 @@
     filaActual.after(fila);
     fila.querySelector(".corr-cancelar").addEventListener("click", () => fila.remove());
     fila.querySelector(".corr-guardar").addEventListener("click", async () => {
-      const nombre = fila.querySelector(".corr-nombre").value.trim();
-      const apellido = fila.querySelector(".corr-apellido").value.trim();
+      const nombre = fila.querySelector(".corr-nombre").value.trim().toUpperCase();
+      const apellido = fila.querySelector(".corr-apellido").value.trim().toUpperCase();
       const aviso = fila.querySelector(".corr-aviso");
       if (!nombre || !apellido) { aviso.style.color = "var(--error)"; aviso.textContent = "Escribe nombre y apellido."; return; }
       if (/\uFFFD/.test(nombre + apellido)) { aviso.style.color = "var(--error)"; aviso.textContent = "Todavía tiene el rombo (�)."; return; }
