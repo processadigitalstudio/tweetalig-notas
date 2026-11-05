@@ -736,9 +736,11 @@ Tweetalig Centro de Idiomas`;
     if (!cfg) { mostrarAviso(`Primero configura el envío de la sede ${ejemplo.ciudadNombre || ""} (arriba, en «Configurar»).`, "error"); return; }
     try {
       const m = await construirMensaje(tipo, ejemplo);
+      const pl = await obtenerPlantilla(tipo, ejemplo.ciudadId);
+      const origenTxt = pl.origen === "propio" ? `propio de la sede ${ejemplo.ciudadNombre || ejemplo.ciudadId}` : pl.origen;
       const prueba = {
         asunto: "[PRUEBA] " + m.asunto,
-        texto: `*** CORREO DE PRUEBA: así lo recibiría ${ejemplo.nombre} ${ejemplo.apellido} (${ejemplo.correo || "sin correo"}). No se envió a ningún estudiante. ***\n\n${m.texto}`
+        texto: `*** CORREO DE PRUEBA (${TIPOS[tipo].etiqueta}): así lo recibiría ${ejemplo.nombre} ${ejemplo.apellido} (${ejemplo.correo || "sin correo"}), de la sede ${ejemplo.ciudadNombre || "—"}. Mensaje usado: ${origenTxt}. No se envió a ningún estudiante. ***\n\n${m.texto}`
       };
       let resultado = "ok", errorTxt = "", cuenta = "";
       try {
