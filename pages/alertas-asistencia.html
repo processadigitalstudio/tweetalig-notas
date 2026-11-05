@@ -104,6 +104,7 @@
           <button type="button" class="boton-marcador" data-campo="alerta" data-insertar="{periodo}">{periodo}</button>
         </div>
         <textarea id="texto-plantilla-alerta"></textarea>
+        <label id="caja-todas-alerta" style="display:none; font-size:13px; margin:6px 0;"><input type="checkbox" id="todas-sedes-alerta"> Guardar este mismo mensaje en <b>todas mis sedes</b> (reemplaza el que tengan)</label>
         <p class="ayuda-marcadores" style="font-size:12.5px; color:var(--tinta-suave); margin:6px 0;">Se reemplazan por los datos de cada estudiante: {horas} = horas de inasistencia, {limite} = límite de pérdida, {curso} = programa, nivel y grupo.</p>
         <button type="button" class="boton-secundario boton-mensaje-estandar" data-campo="alerta" style="margin-right:8px;">Usar mensaje estándar nuevo</button>
         <button type="button" class="boton-primario" id="boton-guardar-plantilla-alerta" style="max-width:220px;">Guardar mensaje</button>
@@ -134,6 +135,7 @@
           <button type="button" class="boton-marcador" data-campo="perdida" data-insertar="{periodo}">{periodo}</button>
         </div>
         <textarea id="texto-plantilla-perdida"></textarea>
+        <label id="caja-todas-perdida" style="display:none; font-size:13px; margin:6px 0;"><input type="checkbox" id="todas-sedes-perdida"> Guardar este mismo mensaje en <b>todas mis sedes</b> (reemplaza el que tengan)</label>
         <p class="ayuda-marcadores" style="font-size:12.5px; color:var(--tinta-suave); margin:6px 0;">Se reemplazan por los datos de cada estudiante: {horas} = horas de inasistencia, {limite} = límite de pérdida, {curso} = programa, nivel y grupo.</p>
         <button type="button" class="boton-secundario boton-mensaje-estandar" data-campo="perdida" style="margin-right:8px;">Usar mensaje estándar nuevo</button>
         <button type="button" class="boton-primario" id="boton-guardar-plantilla-perdida" style="max-width:220px;">Guardar mensaje</button>
@@ -489,6 +491,8 @@ Tweetalig Centro de Idiomas`;
         const o = document.createElement("option"); o.value = id; o.textContent = mapaSedes.get(id) || id; sel.appendChild(o);
       });
       if (esCoordinacion && sel.options.length) sel.selectedIndex = 0;
+      const nSedes = [...sel.options].filter((o) => o.value !== "").length;
+      document.getElementById("caja-todas-" + tipo).style.display = nSedes > 1 ? "block" : "none";
       sel.addEventListener("change", () => cargarEditor(tipo));
     });
   }
@@ -506,21 +510,33 @@ Tweetalig Centro de Idiomas`;
     const t = TIPOS[tipo];
     const sedeId = document.getElementById("sede-plantilla-" + tipo).value;
     if (esCoordinacion && !sedeId) { mostrarAviso("Tu usuario no tiene sede asignada.", "error"); return; }
-    const datos = {
+    const aTodas = document.getElementById("todas-sedes-" + tipo).checked;
+    const destinos = aTodas
+      ? [...document.getElementById("sede-plantilla-" + tipo).options].map((o) => o.value).filter((v) => v !== "")
+      : [sedeId];
+    const base = {
       tipo: t.doc,
       texto: document.getElementById("texto-plantilla-" + tipo).value,
       asunto: document.getElementById("asunto-plantilla-" + tipo).value.trim() || t.asuntoDefecto,
-      actualizadoPor: correoPropio, fecha: serverTimestamp()
+      actualizadoPor: correoPropio
     };
-    if (sedeId) datos.ciudadId = sedeId;
-    try {
-      await setDoc(doc(db, "plantillas_correo", sedeId ? `${t.doc}__${sedeId}` : t.doc), datos);
-      await registrarLog(usuario, rol, "Actualizó plantilla de correo", `${t.doc}${sedeId ? " — " + (mapaSedes.get(sedeId) || sedeId) : " — general"}`);
-      mostrarAviso(`Mensaje guardado para ${sedeId ? (mapaSedes.get(sedeId) || sedeId) : "las sedes sin mensaje propio"}.`);
-      await cargarEditor(tipo);
-    } catch (e) {
-      mostrarAviso("No se pudo guardar el mensaje (" + (e.code || e.message) + ").", "error");
+    const guardadas = [], falladas = [];
+    for (const id of destinos) {
+      const datos = { ...base, fecha: serverTimestamp() };
+      if (id) datos.ciudadId = id;
+      try {
+        await setDoc(doc(db, "plantillas_correo", id ? `${t.doc}__${id}` : t.doc), datos);
+        guardadas.push(id ? (mapaSedes.get(id) || id) : "general");
+      } catch (e) { falladas.push(`${id ? (mapaSedes.get(id) || id) : "general"} (${e.code || e.message})`); }
     }
+    cachePlantillas.clear();
+    if (guardadas.length) {
+      try { await registrarLog(usuario, rol, "Actualizó plantilla de correo", `${t.doc} — ${guardadas.join(", ")}`); } catch (e) { /* el mensaje ya quedó guardado */ }
+    }
+    if (falladas.length) mostrarAviso(`NO se pudo guardar en: ${falladas.join("; ")}.` + (guardadas.length ? ` Sí se guardó en: ${guardadas.join(", ")}.` : ""), "error");
+    else mostrarAviso(`Mensaje guardado para: ${guardadas.join(", ")}.`);
+    document.getElementById("todas-sedes-" + tipo).checked = false;
+    await cargarEditor(tipo);
   }
   [["alerta", "boton-editar-plantilla-alerta", "editor-alerta", "boton-guardar-plantilla-alerta"],
    ["perdida", "boton-editar-plantilla-perdida", "editor-perdida", "boton-guardar-plantilla-perdida"]].forEach(([tipo, idEditar, idEditor, idGuardar]) => {
