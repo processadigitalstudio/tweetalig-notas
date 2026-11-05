@@ -150,16 +150,16 @@
     $nu("nu-guardar").disabled = true;
     avisoNuevo("Guardando...");
     try {
-      const ya = await getDoc(doc(db, "estudiantes", docId));
-      if (ya.exists() && ya.data().estado !== "movido") {
-        avisoNuevo("Ese estudiante ya está matriculado en esa clase.", true);
-        return;
-      }
       // Si ya está en otra clase del mismo año/período/ciclo y sede, se mueve (no se duplica).
       let movidoDe = null;
       const prev = await getDocs(query(collection(db, "estudiantes"),
         where("cedula", "==", cedula), where("ciudadId", "==", clase.ciudadId)));
-      const previos = prev.docs.map((d) => ({ id: d.id, ...d.data() })).filter((e) =>
+      const matriculas = prev.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (matriculas.some((e) => e.id === docId && e.estado !== "movido")) {
+        avisoNuevo("Ese estudiante ya está matriculado en esa clase.", true);
+        return;
+      }
+      const previos = matriculas.filter((e) =>
         e.estado !== "movido" && e.claseId !== clase.id &&
         e.anio === clase.anio && e.periodo === clase.periodo && e.ciclo === clase.ciclo);
       if (previos.length) {
