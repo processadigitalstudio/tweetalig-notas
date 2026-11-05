@@ -93,6 +93,7 @@
         <p id="origen-plantilla-alerta" style="font-size:12.5px; color:var(--tinta-suave); margin:0 0 6px;"></p>
         <div class="fila-editor"><label class="etiqueta-campo" for="asunto-plantilla-alerta">Asunto del correo</label><input type="text" id="asunto-plantilla-alerta" maxlength="150"></div>
         <div class="botones-marcador">
+          <button type="button" class="boton-marcador boton-negrita" data-campo="alerta" title="Selecciona un texto y pulsa para ponerlo en negrita" style="font-weight:700;">B negrita</button>
           <button type="button" class="boton-marcador" data-campo="alerta" data-insertar="{nombre}">{nombre}</button>
           <button type="button" class="boton-marcador" data-campo="alerta" data-insertar="{nivel}">{nivel}</button>
           <button type="button" class="boton-marcador" data-campo="alerta" data-insertar="{grupo}">{grupo}</button>
@@ -124,6 +125,7 @@
         <p id="origen-plantilla-perdida" style="font-size:12.5px; color:var(--tinta-suave); margin:0 0 6px;"></p>
         <div class="fila-editor"><label class="etiqueta-campo" for="asunto-plantilla-perdida">Asunto del correo</label><input type="text" id="asunto-plantilla-perdida" maxlength="150"></div>
         <div class="botones-marcador">
+          <button type="button" class="boton-marcador boton-negrita" data-campo="perdida" title="Selecciona un texto y pulsa para ponerlo en negrita" style="font-weight:700;">B negrita</button>
           <button type="button" class="boton-marcador" data-campo="perdida" data-insertar="{nombre}">{nombre}</button>
           <button type="button" class="boton-marcador" data-campo="perdida" data-insertar="{nivel}">{nivel}</button>
           <button type="button" class="boton-marcador" data-campo="perdida" data-insertar="{grupo}">{grupo}</button>
@@ -840,7 +842,16 @@ Tweetalig Centro de Idiomas`;
     catch (e) { mostrarAviso("No se pudo generar el archivo: " + e.message, "error"); }
   });
 
-  document.querySelectorAll(".boton-marcador").forEach((btn) => {
+  document.querySelectorAll(".boton-negrita").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const ta = document.getElementById(btn.dataset.campo === "alerta" ? "texto-plantilla-alerta" : "texto-plantilla-perdida");
+      const ini = ta.selectionStart, fin = ta.selectionEnd;
+      if (ini === fin) { mostrarAviso("Primero selecciona con el mouse el texto que quieres en negrita.", "error"); return; }
+      ta.value = ta.value.slice(0, ini) + "**" + ta.value.slice(ini, fin) + "**" + ta.value.slice(fin);
+      ta.focus(); ta.setSelectionRange(ini, fin + 4);
+    });
+  });
+  document.querySelectorAll(".boton-marcador:not(.boton-negrita)").forEach((btn) => {
     btn.addEventListener("click", () => {
       const textarea = document.getElementById(btn.dataset.campo === "alerta" ? "texto-plantilla-alerta" : "texto-plantilla-perdida");
       const inicio = textarea.selectionStart, fin = textarea.selectionEnd;

@@ -36,7 +36,7 @@ function doPost(e) {
           MailApp.sendEmail({
             to: para,
             subject: String(c.asunto || "").replace(/[\r\n]+/g, " ").slice(0, 200),
-            body: texto,                     // versión en texto, por si el programa de correo no muestra HTML
+            body: texto.replace(/\*\*([^*\n]+?)\*\*/g, "$1"),   // versión en texto, por si el programa de correo no muestra HTML
             htmlBody: textoAHtml(texto),     // versión que se ve: las líneas ocupan todo el ancho, sin cortes a la mitad
             name: nombre
           });
@@ -55,13 +55,15 @@ function doPost(e) {
 }
 
 // Convierte el texto del mensaje en HTML: cada párrafo (separado por una línea en blanco) fluye
-// completo, y los saltos de línea sueltos se conservan.
+// completo, sin límite de ancho, y los saltos de línea sueltos se conservan.
+// Negrita: lo que se escriba entre dos asteriscos dobles, **así**, sale en negrita.
 function textoAHtml(texto) {
   const esc = function (t) { return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); };
+  const negrita = function (t) { return t.replace(/\*\*([^*\n]+?)\*\*/g, "<b>$1</b>"); };
   const parrafos = String(texto).replace(/\r\n/g, "\n").split(/\n{2,}/).map(function (p) {
-    return '<p style="margin:0 0 14px 0;">' + esc(p).replace(/\n/g, "<br>") + "</p>";
+    return '<p style="margin:0 0 14px 0;">' + negrita(esc(p)).replace(/\n/g, "<br>") + "</p>";
   }).join("");
-  return '<div style="font-family:Arial,Helvetica,sans-serif; font-size:14px; line-height:1.5; color:#222; max-width:720px;">' + parrafos + "</div>";
+  return '<div style="font-family:Arial,Helvetica,sans-serif; font-size:14px; line-height:1.5; color:#222;">' + parrafos + "</div>";
 }
 
 function responder(obj) {
