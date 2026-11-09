@@ -75,6 +75,7 @@
   import { mostrarAviso } from "../js/aviso.js?v=1";
   import { montarSelectorProfesor } from "../js/selector-profesor.js?v=1";
   import { leerClases } from "../js/clases-lectura.js?v=1";
+  import { descargarTabla } from "../js/exportar.js";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, getDoc, doc, setDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
   import { badgeReporte, separarMovidos, montarPanelProfesor, cargarEstudiantesDeClases } from "../js/matricula.js?v=1";
@@ -201,11 +202,13 @@
   let estudiantesActuales = [];
   let estudiantesMovidos = [];
   let programaActual = null;
+  let grupoActual = null;
   let notasGuardadas = {};
 
   async function cargarPlanilla(claveGrupo) {
     const grupo = gruposClase.find((g) => g.key === claveGrupo);
     if (!grupo) return;
+    grupoActual = grupo;
 
     const contenedor = document.getElementById("contenido-notas");
     contenedor.innerHTML = "<p style='color:var(--tinta-suave);'>Cargando...</p>";
@@ -272,6 +275,15 @@
     contador.style.cssText = "font-size:13px; color:var(--tinta-suave); margin: 0 0 14px;";
     contador.textContent = `${estudiantesActuales.length} estudiante(s) matriculado(s) en esta clase.`;
     contenedor.appendChild(contador);
+
+    const descargas = document.createElement("div");
+    descargas.style.cssText = "display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:0 0 14px;";
+    descargas.innerHTML = `<button type="button" class="boton-secundario" id="btn-pdf-notas">Descargar planilla (PDF)</button>
+      <button type="button" class="boton-secundario" id="btn-xlsx-notas">Descargar planilla (Excel)</button>
+      <span id="aviso-descarga" style="font-size:12.5px; color:var(--tinta-suave);"></span>`;
+    contenedor.appendChild(descargas);
+    descargas.querySelector("#btn-pdf-notas").addEventListener("click", () => descargarPlanilla("pdf"));
+    descargas.querySelector("#btn-xlsx-notas").addEventListener("click", () => descargarPlanilla("xlsx"));
 
     const pestanas = document.createElement("div");
     pestanas.className = "pestanas";
@@ -517,6 +529,130 @@
           .join("\n\n");
         alert(`Historial de cambios:\n\n${entradas}`);
       }));
+    }
+  }
+
+
+  // ───── Descargar la planilla completa (todos los cortes) en PDF o Excel ─────
+  function cargarScript(src, probar) {
+    if (probar()) return Promise.resolve();
+    return new Promise((ok, mal) => {
+      const sc = document.createElement("script");
+      sc.src = src; sc.onload = ok; sc.onerror = () => mal(new Error("No se pudo cargar el generador de PDF."));
+      document.head.appendChild(sc);
+    });
+  }
+
+  async function logoComoDataUrl() {
+    try {
+      const r = await fetch("../assets/logo-tweetalig.png");
+      const b = await r.blob();
+      return await new Promise((ok) => { const f = new FileReader(); f.onload = () => ok(f.result); f.readAsDataURL(b); });
+    } catch (e) { return null; }
+  }
+
+  function datosPlanilla() {
+    const cab1 = ["No.", "ID", "ESTUDIANTE"];
+    const cab2 = ["", "", ""];
+    const spans = [];
+    programaActual.cortes.forEach((c, ci) => {
+      c.notas.forEach((n) => { cab2.push(`${n.nombre} (${n.porcentaje}%)`); });
+      cab2.push("Promedio");
+      spans.push({ texto: `${c.nombre} (${c.peso}%)`, cols: c.notas.length + 1 });
+    });
+    cab2.push("NOTA FINAL");
+    const filas = estudiantesActuales.map((est, idx) => {
+      const f = [idx + 1, String(est.cedula), `${est.apellido || ""} ${est.nombre || ""}`.trim()];
+      const v = notasGuardadas[est.cedula] || {};
+      programaActual.cortes.forEach((c, ci) => {
+        c.notas.forEach((n, ni) => {
+          const x = v[`c${ci}n${ni}`];
+          f.push(x === undefined || x === null ? "" : Number(x).toFixed(1));
+        });
+        const p = calcularPromedioCorte(est.cedula, ci);
+        f.push(p === null ? "" : p.toFixed(2));
+      });
+      const nf = calcularNotaFinal(est.cedula);
+      f.push(nf === null ? "" : nf.toFixed(2));
+      return f;
+    });
+    return { cab1, cab2, spans, filas };
+  }
+
+  function descripcionClase() {
+    const c = grupoActual.clases[0];
+    return {
+      titulo: `${c.nivel || ""} - ${c.grupo || ""}`,
+      lineas: [
+        `Programa: ${c.programaNombre || programaActual.nombre || "—"}`,
+        `Sede: ${[...new Set(grupoActual.clases.map((x) => x.ciudadNombre).filter(Boolean))].join(" / ") || "—"}`,
+        `Período: ${c.anio}-${c.periodo} · Ciclo ${c.ciclo}`,
+        `Profesor(a): ${c.docenteNombre || "—"}`
+      ],
+      archivo: `Planilla_notas_${c.nivel || ""}_${c.grupo || ""}_${c.anio}-${c.periodo}_ciclo${c.ciclo}`.replace(/[^\w.-]+/g, "_")
+    };
+  }
+
+  async function descargarPlanilla(formato) {
+    const aviso = document.getElementById("aviso-descarga");
+    if (!grupoActual || !programaActual || !estudiantesActuales.length) return;
+    aviso.style.color = ""; aviso.textContent = "Generando...";
+    try {
+      const d = datosPlanilla();
+      const info = descripcionClase();
+      if (formato === "xlsx") {
+        const fila1 = [...d.cab1];
+        d.spans.forEach((sp) => { fila1.push(sp.texto); for (let i = 1; i < sp.cols; i++) fila1.push(""); });
+        fila1.push("");
+        const filas = [[`TWEETALIG — Planilla de notas ${info.titulo}`], ...info.lineas.map((l) => [l]), [], fila1, d.cab2, ...d.filas];
+        await descargarTabla(filas, info.archivo, "xlsx", "Planilla");
+      } else {
+        await cargarScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js", () => window.jspdf);
+        await cargarScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js", () => window.jspdf?.jsPDF?.API?.autoTable);
+        const { jsPDF } = window.jspdf;
+        const nCols = d.cab2.length;
+        const pdf = new jsPDF({ orientation: nCols > 8 ? "landscape" : "portrait", unit: "pt", format: "a4" });
+        const ancho = pdf.internal.pageSize.getWidth();
+        const logo = await logoComoDataUrl();
+        if (logo) { try { pdf.addImage(logo, "PNG", 36, 24, 90, 34); } catch (e) { /* sin logo */ } }
+        pdf.setFont("helvetica", "bold"); pdf.setFontSize(14);
+        pdf.text(`Planilla de notas — ${info.titulo}`, logo ? 140 : 36, 38);
+        pdf.setFont("helvetica", "normal"); pdf.setFontSize(9);
+        pdf.text(info.lineas.slice(0, 2).join("   ·   "), logo ? 140 : 36, 52);
+        pdf.text(info.lineas.slice(2).join("   ·   "), logo ? 140 : 36, 64);
+        const cabeza = [
+          [{ content: "No.", rowSpan: 2 }, { content: "ID", rowSpan: 2 }, { content: "ESTUDIANTE", rowSpan: 2 },
+            ...d.spans.map((sp) => ({ content: sp.texto, colSpan: sp.cols, styles: { halign: "center" } })),
+            { content: "NOTA FINAL", rowSpan: 2, styles: { halign: "center" } }],
+          d.cab2.slice(3, -1)
+        ];
+        const tam = nCols > 16 ? 6 : nCols > 11 ? 7 : 8.5;
+        pdf.autoTable({
+          head: cabeza, body: d.filas, startY: 76,
+          theme: "grid",
+          styles: { fontSize: tam, cellPadding: 3, lineColor: [200, 206, 212], lineWidth: 0.4, valign: "middle" },
+          headStyles: { fillColor: [44, 61, 77], textColor: 255, halign: "center" },
+          columnStyles: { 0: { cellWidth: 22, halign: "center" }, 1: { cellWidth: 52 }, 2: { cellWidth: nCols > 11 ? 120 : 150, halign: "left" } },
+          didParseCell: (h) => {
+            if (h.section === "body" && h.column.index > 2) h.cell.styles.halign = "center";
+            if (h.section === "body" && h.column.index === nCols - 1) h.cell.styles.fontStyle = "bold";
+          },
+          margin: { left: 30, right: 30, bottom: 36 },
+          didDrawPage: () => {
+            const alto = pdf.internal.pageSize.getHeight();
+            pdf.setFontSize(7.5); pdf.setTextColor(110);
+            pdf.text(`Generado el ${new Date().toLocaleString("es-CO")} · Tweetalig Centro de Idiomas`, 30, alto - 18);
+            pdf.text(`Página ${pdf.internal.getNumberOfPages()}`, ancho - 30, alto - 18, { align: "right" });
+            pdf.setTextColor(0);
+          }
+        });
+        pdf.save(`${info.archivo}.pdf`);
+      }
+      aviso.style.color = "var(--verde-marca)"; aviso.textContent = "Listo.";
+      try { await registrarLog(usuario, rol, "Descargó planilla de notas", `${info.titulo} (${info.archivo}) — ${formato.toUpperCase()}`); } catch (e) { /* no bloquea */ }
+    } catch (e) {
+      console.error(e);
+      aviso.style.color = "var(--error)"; aviso.textContent = `No se pudo generar (${e.message}).`;
     }
   }
 
