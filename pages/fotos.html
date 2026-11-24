@@ -294,12 +294,19 @@
     cuerpo.querySelectorAll(".btn-estado").forEach((b) => b.addEventListener("click", () => cambiarEstado(b.dataset.id, b.dataset.activo === "1")));
   }
 
+  function linkCurso(token) {
+    return `${config.url.trim().replace(/\/a\/macros\/[^/]+\/s\//, "/macros/s/").replace(/\/a\/[^/]+\/macros\/s\//, "/macros/s/")}?c=${token}`;
+  }
+
   async function refrescarEstado() {
     if (!config) { pintar(); return; }
     try {
       const r = await llamar({ accion: "estado" });
       estadoScript = {};
-      r.cursos.forEach((c) => { estadoScript[c.claseId] = c; });
+      // El link se arma con la URL guardada en el portal (la pública), no con la que devuelve
+      // el script: en cuentas de Workspace Google devuelve la versión con /a/<dominio>/, que
+      // solo abre quien tenga sesión en ese dominio ("No se puede abrir el archivo").
+      r.cursos.forEach((c) => { estadoScript[c.claseId] = { ...c, url: linkCurso(c.token) }; });
       decir("aviso", "");
     } catch (e) { decir("aviso", e.message, true); }
     pintar();
