@@ -330,6 +330,12 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Dirección y clave del script de fotos de estudiantes (vive en examenes.cartagena).
+    // Solo Master: ni los profesores ni coordinación pueden ver la clave.
+    match /configuracion_fotos/{id} {
+      allow read, write: if esMaster();
+    }
+
     // Colección "configuracion": legado, ya no se usa activamente.
     match /configuracion/{id} {
       allow read: if estaLogueado();
