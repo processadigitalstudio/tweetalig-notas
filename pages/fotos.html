@@ -12,7 +12,7 @@
   .form-tarjeta { background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio); padding: 20px 24px; max-width: 640px; margin-bottom: 22px; }
   .form-tarjeta label { display: block; font-size: 13px; font-weight: 500; color: var(--tinta-suave); margin-top: 10px; margin-bottom: 4px; }
   .form-tarjeta input, .filtros select, .filtros input { width: 100%; font-family: var(--fuente-cuerpo); font-size: 14px; padding: 8px 10px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
-  .filtros { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 10px; max-width: 1100px; margin-bottom: 12px; }
+  .filtros { display: grid; grid-template-columns: 1fr 1fr 1fr 1.4fr; gap: 10px; max-width: 1100px; margin-bottom: 12px; }
   .barra { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
   .barra .boton-primario { margin-top: 0; padding: 10px 16px; font-size: 14px; }
   .aviso { font-size: 13px; min-height: 18px; margin: 8px 0; }
@@ -57,6 +57,7 @@
     <div class="filtros">
       <select id="f-periodo"></select>
       <select id="f-sede"><option value="">Todas las sedes</option></select>
+      <select id="f-programa"><option value="">Todos los programas</option></select>
       <input type="text" id="f-texto" placeholder="Buscar curso o profesor...">
     </div>
 
@@ -68,8 +69,8 @@
     <p class="aviso" id="aviso"></p>
 
     <table class="tabla-simple">
-      <thead><tr><th>Curso</th><th>Profesor</th><th>Sede</th><th>Estado</th><th>Fotos</th><th>Acciones</th></tr></thead>
-      <tbody id="lista"><tr><td colspan="6">Cargando...</td></tr></tbody>
+      <thead><tr><th>Curso</th><th>Programa</th><th>Profesor</th><th>Sede</th><th>Estado</th><th>Fotos</th><th>Acciones</th></tr></thead>
+      <tbody id="lista"><tr><td colspan="7">Cargando...</td></tr></tbody>
     </table>
   </main>
 </div>
@@ -163,12 +164,15 @@
 
     const sedes = [...new Map(clases.map((c) => [c.ciudadId, c.ciudadNombre || c.ciudadId])).entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1])));
     $("f-sede").innerHTML = `<option value="">Todas las sedes</option>` + sedes.map(([id, n]) => `<option value="${esc(id)}">${esc(n)}</option>`).join("");
+
+    const programas = [...new Set(clases.map((c) => c.programaNombre).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    $("f-programa").innerHTML = `<option value="">Todos los programas</option>` + programas.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
   }
 
   function filtradas() {
-    const per = $("f-periodo").value, sede = $("f-sede").value, txt = $("f-texto").value.trim().toLowerCase();
+    const per = $("f-periodo").value, sede = $("f-sede").value, prog = $("f-programa").value, txt = $("f-texto").value.trim().toLowerCase();
     return clases
-      .filter((c) => (!per || clavePeriodo(c) === per) && (!sede || c.ciudadId === sede))
+      .filter((c) => (!per || clavePeriodo(c) === per) && (!sede || c.ciudadId === sede) && (!prog || c.programaNombre === prog))
       .filter((c) => !txt || textoCurso(c).toLowerCase().includes(txt) || (c.docenteNombre || "").toLowerCase().includes(txt))
       .sort((a, b) => (a.docenteNombre || "").localeCompare(b.docenteNombre || "") || textoCurso(a).localeCompare(textoCurso(b)));
   }
@@ -176,7 +180,7 @@
   function pintar() {
     const lista = filtradas();
     const cuerpo = $("lista");
-    if (!lista.length) { cuerpo.innerHTML = `<tr><td colspan="6">No hay cursos con ese filtro.</td></tr>`; return; }
+    if (!lista.length) { cuerpo.innerHTML = `<tr><td colspan="7">No hay cursos con ese filtro.</td></tr>`; return; }
     cuerpo.innerHTML = lista.map((c) => {
       const e = estadoScript[c.id];
       const estado = !e ? `<span class="estado sin">Sin link</span>` : e.activo ? `<span class="estado activo">Abierto</span>` : `<span class="estado cerrado">Cerrado</span>`;
@@ -188,6 +192,7 @@
            <button class="boton-secundario btn-estado" data-id="${c.id}" data-activo="${e.activo ? "0" : "1"}">${e.activo ? "Cerrar" : "Reabrir"}</button>`;
       return `<tr>
         <td>${esc(`${c.nivel || ""} - ${c.grupo || ""}`)}<br><span style="color:var(--tinta-suave); font-size:12px;">${esc(`${c.anio}-${c.periodo}, ciclo ${c.ciclo}`)}</span></td>
+        <td>${esc(c.programaNombre || "—")}</td>
         <td>${esc(c.docenteNombre || "SIN PROFESOR")}</td>
         <td>${esc(c.ciudadNombre || "")}</td>
         <td>${estado}</td>
@@ -282,7 +287,7 @@
 
   $("btn-activar-filtrados").addEventListener("click", () => activar(filtradas().map((c) => c.id)));
   $("btn-refrescar").addEventListener("click", refrescarEstado);
-  ["f-periodo", "f-sede"].forEach((id) => $(id).addEventListener("change", pintar));
+  ["f-periodo", "f-sede", "f-programa"].forEach((id) => $(id).addEventListener("change", pintar));
   $("f-texto").addEventListener("input", pintar);
 
   await cargarConfig();
