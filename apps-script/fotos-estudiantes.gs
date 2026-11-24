@@ -26,24 +26,33 @@ const COLS_SUBIDAS = ["FECHA", "TOKEN", "CURSO", "PROFESOR", "CEDULA", "ESTUDIAN
 // ───────────────────────── Página pública (estudiantes) ─────────────────────────
 
 function doGet(e) {
-  const token = String((e && e.parameter && e.parameter.c) || "").trim();
-  const curso = token ? buscarCursoPorToken(token) : null;
-  const t = HtmlService.createTemplateFromFile("subir-foto");
-  let datos;
-  if (!curso) datos = { estado: "no_existe" };
-  else if (!curso.activo) datos = { estado: "cerrado", curso: curso.curso, profesor: curso.profesor };
-  else {
-    const subidos = cedulasConFoto(token);
-    datos = {
-      estado: "activo", token: token, curso: curso.curso, profesor: curso.profesor, sede: curso.sede,
-      // Al navegador NO se le mandan las cédulas: solo una llave por estudiante.
-      estudiantes: curso.estudiantes.map(function (s) { return { k: s.k, nombre: s.nombre, subio: subidos[s.cedula] === true }; })
-    };
+  try {
+    const token = String((e && e.parameter && e.parameter.c) || "").trim();
+    const curso = token ? buscarCursoPorToken(token) : null;
+    const t = HtmlService.createTemplateFromFile("subir-foto");
+    let datos;
+    if (!curso) datos = { estado: "no_existe" };
+    else if (!curso.activo) datos = { estado: "cerrado", curso: curso.curso, profesor: curso.profesor };
+    else {
+      const subidos = cedulasConFoto(token);
+      datos = {
+        estado: "activo", token: token, curso: curso.curso, profesor: curso.profesor, sede: curso.sede,
+        // Al navegador NO se le mandan las cédulas: solo una llave por estudiante.
+        estudiantes: curso.estudiantes.map(function (s) { return { k: s.k, nombre: s.nombre, subio: subidos[s.cedula] === true }; })
+      };
+    }
+    t.datos = JSON.stringify(datos).replace(/</g, "\\u003c");
+    return t.evaluate()
+      .setTitle("Tweetalig — Subir foto")
+      .addMetaTag("viewport", "width=device-width, initial-scale=1");
+  } catch (err) {
+    // Si algo falla, la página muestra el error real (en vez del mensaje genérico de Google).
+    return HtmlService.createHtmlOutput(
+      '<div style="font-family:Arial;padding:24px;max-width:480px;margin:auto;">' +
+      '<h3>No se pudo abrir la página</h3><p style="color:#B5573D;">' +
+      String(err).replace(/</g, "&lt;") + '</p></div>'
+    ).setTitle("Tweetalig — Subir foto");
   }
-  t.datos = JSON.stringify(datos).replace(/</g, "\\u003c");
-  return t.evaluate()
-    .setTitle("Tweetalig — Subir foto")
-    .addMetaTag("viewport", "width=device-width, initial-scale=1");
 }
 
 // La llama la página con google.script.run. base64 = foto JPEG ya reducida en el celular.
