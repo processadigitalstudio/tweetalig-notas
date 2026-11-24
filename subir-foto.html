@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<base target="_top">
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Tweetalig — Subir foto</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
   :root { --verde: #5DB69C; --verde-hover: #4A9A83; --verde-suave: #E7F5F0; --azul: #2C3D4D; --suave: #5C6B78; --linea: #DDE3E1; --fondo: #F6F5F1; --error: #B5573D; --error-fondo: #FBEDE8; }
@@ -30,15 +32,42 @@
 </head>
 <body>
 <div class="caja">
-  <img class="logo" src="https://tweetalig-notas.web.app/assets/logo-tweetalig.png" alt="Tweetalig">
-  <div class="tarjeta" id="contenido"></div>
+  <img class="logo" src="assets/logo-tweetalig.png" alt="Tweetalig">
+  <div class="tarjeta" id="contenido"><p class="sub">Cargando...</p></div>
 </div>
 
-<script>
-  const DATOS = <?!= datos ?>;
+<script type="module">
+  // Formulario PÚBLICO (sin login) para que el estudiante suba su foto.
+  // Habla con el script de Drive de examenes.cartagena solo con el token del curso;
+  // la clave del script nunca está en esta página.
+  import { URL_SCRIPT_FOTOS } from "./js/fotos-publico.js?v=1";
+
   const $ = (id) => document.getElementById(id);
   const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const token = new URLSearchParams(location.search).get("c") || "";
   let fotoBase64 = null;
+  let DATOS = null;
+
+  async function llamar(cuerpo) {
+    const r = await fetch(URL_SCRIPT_FOTOS, {
+      method: "POST", redirect: "follow",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },   // evita la consulta CORS que Apps Script no responde
+      body: JSON.stringify(cuerpo)
+    });
+    return r.json();
+  }
+
+  async function iniciar() {
+    try {
+      const r = await llamar({ accion: "cursoPublico", token });
+      if (!r.ok) throw new Error(r.error || "Error");
+      DATOS = r.datos;
+    } catch (e) {
+      $("contenido").innerHTML = `<h1>No se pudo cargar</h1><p class="sub">Revisa tu conexión a internet y vuelve a abrir el link.</p>`;
+      return;
+    }
+    pintar();
+  }
 
   function pintar() {
     const c = $("contenido");
@@ -118,30 +147,28 @@
     img.src = url;
   }
 
-  function enviar() {
+  async function enviar() {
     const k = $("estudiante").value;
     if (!k || !fotoBase64) return;
     $("enviar").disabled = true;
     decir("Enviando... no cierres esta página.");
-    google.script.run
-      .withSuccessHandler((r) => {
-        decir(`¡Listo! Tu foto quedó guardada, ${r.nombre}.`, "ok");
-        const opt = $("estudiante").querySelector(`option[value="${k}"]`);
-        if (opt && !opt.textContent.includes("✓")) opt.textContent += "  ✓ ya subió";
-        fotoBase64 = null;
-        $("archivo").value = "";
-        $("vista").style.display = "none";
-        $("texto-boton-foto").textContent = "📷 Tomar o elegir foto";
-        revisar();
-      })
-      .withFailureHandler((err) => {
-        decir((err && err.message ? err.message : String(err)).replace(/^Error:\s*/, "") || "No se pudo enviar. Intenta de nuevo.", "error");
-        revisar();
-      })
-      .subirFoto(DATOS.token, k, fotoBase64);
+    try {
+      const r = await llamar({ accion: "subirFoto", token, k, foto: fotoBase64 });
+      if (!r.ok) throw new Error(r.error || "No se pudo enviar.");
+      decir(`¡Listo! Tu foto quedó guardada, ${r.nombre}.`, "ok");
+      const opt = $("estudiante").querySelector(`option[value="${k}"]`);
+      if (opt && !opt.textContent.includes("✓")) opt.textContent += "  ✓ ya subió";
+      fotoBase64 = null;
+      $("archivo").value = "";
+      $("vista").style.display = "none";
+      $("texto-boton-foto").textContent = "📷 Tomar o elegir foto";
+    } catch (e) {
+      decir(String(e.message || e).replace(/^Error:\s*/, "") || "No se pudo enviar. Intenta de nuevo.", "error");
+    }
+    revisar();
   }
 
-  pintar();
+  iniciar();
 </script>
 </body>
 </html>

@@ -1,5 +1,6 @@
 // FOTOS DE ESTUDIANTES — se instala UNA vez en la cuenta examenes.cartagena (la que guarda las fotos).
-// Archivos del proyecto: este (Código.gs) y uno HTML llamado exactamente "subir-foto".
+// El formulario de los estudiantes vive en el portal (tweetalig-notas.web.app/subir-foto.html?c=...)
+// y le habla a este script por POST. (El archivo HTML "subir-foto" ya no es necesario; puede quedarse o borrarse.)
 //
 // 1) Cambia CLAVE por una clave larga inventada por ti (mínimo 12 caracteres). La misma se escribe en el portal.
 // 2) Ejecuta la función "autorizar" una vez y acepta los permisos (Drive y Hojas de cálculo).
@@ -25,37 +26,23 @@ const COLS_SUBIDAS = ["FECHA", "TOKEN", "CURSO", "PROFESOR", "CEDULA", "ESTUDIAN
 
 // ───────────────────────── Página pública (estudiantes) ─────────────────────────
 
-function doGet(e) {
-  try {
-    const token = String((e && e.parameter && e.parameter.c) || "").trim();
-    const curso = token ? buscarCursoPorToken(token) : null;
-    const t = HtmlService.createTemplateFromFile("subir-foto");
-    let datos;
-    if (!curso) datos = { estado: "no_existe" };
-    else if (!curso.activo) datos = { estado: "cerrado", curso: curso.curso, profesor: curso.profesor };
-    else {
-      const subidos = cedulasConFoto(token);
-      datos = {
-        estado: "activo", token: token, curso: curso.curso, profesor: curso.profesor, sede: curso.sede,
-        // Al navegador NO se le mandan las cédulas: solo una llave por estudiante.
-        estudiantes: curso.estudiantes.map(function (s) { return { k: s.k, nombre: s.nombre, subio: subidos[s.cedula] === true }; })
-      };
-    }
-    t.datos = JSON.stringify(datos).replace(/</g, "\\u003c");
-    return t.evaluate()
-      .setTitle("Tweetalig — Subir foto")
-      .addMetaTag("viewport", "width=device-width, initial-scale=1");
-  } catch (err) {
-    // Si algo falla, la página muestra el error real (en vez del mensaje genérico de Google).
-    return HtmlService.createHtmlOutput(
-      '<div style="font-family:Arial;padding:24px;max-width:480px;margin:auto;">' +
-      '<h3>No se pudo abrir la página</h3><p style="color:#B5573D;">' +
-      String(err).replace(/</g, "&lt;") + '</p></div>'
-    ).setTitle("Tweetalig — Subir foto");
-  }
+// Lo que necesita el formulario del estudiante. Al navegador NO se le mandan las cédulas: solo una llave por estudiante.
+function datosPublicos(token) {
+  const curso = token ? buscarCursoPorToken(token) : null;
+  if (!curso) return { estado: "no_existe" };
+  if (!curso.activo) return { estado: "cerrado", curso: curso.curso, profesor: curso.profesor };
+  const subidos = cedulasConFoto(token);
+  return {
+    estado: "activo", curso: curso.curso, profesor: curso.profesor, sede: curso.sede,
+    estudiantes: curso.estudiantes.map(function (s) { return { k: s.k, nombre: s.nombre, subio: subidos[s.cedula] === true }; })
+  };
 }
 
-// La llama la página con google.script.run. base64 = foto JPEG ya reducida en el celular.
+function doGet() {
+  return ContentService.createTextOutput("Script de fotos de Tweetalig activo. El formulario está en el portal.");
+}
+
+// La llama el formulario del portal (acción "subirFoto"). base64 = foto JPEG ya reducida en el celular.
 function subirFoto(token, k, base64) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -97,6 +84,21 @@ function subirFoto(token, k, base64) {
 function doPost(e) {
   try {
     const datos = JSON.parse(e.postData.contents);
+
+    // ── Acciones públicas del formulario del estudiante: solo necesitan el token del curso ──
+    if (datos.accion === "cursoPublico") {
+      return responder({ ok: true, datos: datosPublicos(String(datos.token || "").trim()) });
+    }
+    if (datos.accion === "subirFoto") {
+      try {
+        const r = subirFoto(String(datos.token || "").trim(), String(datos.k || ""), String(datos.foto || ""));
+        return responder({ ok: true, nombre: r.nombre });
+      } catch (err) {
+        return responder({ ok: false, error: String(err && err.message ? err.message : err).slice(0, 200) });
+      }
+    }
+
+    // ── Acciones del portal (master): necesitan la clave ──
     if (CLAVE.length < 12 || CLAVE.indexOf("CAMBIA_ESTA") === 0) return responder({ ok: false, error: "El script todavía tiene la clave de ejemplo." });
     if (datos.secreto !== CLAVE) return responder({ ok: false, error: "Clave incorrecta." });
 
