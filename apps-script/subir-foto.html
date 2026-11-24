@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<base target="_top">
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+  :root { --verde: #5DB69C; --verde-hover: #4A9A83; --verde-suave: #E7F5F0; --azul: #2C3D4D; --suave: #5C6B78; --linea: #DDE3E1; --fondo: #F6F5F1; --error: #B5573D; --error-fondo: #FBEDE8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Montserrat', Arial, sans-serif; background: var(--fondo); color: var(--azul); }
+  .caja { max-width: 460px; margin: 0 auto; padding: 24px 18px 40px; }
+  .logo { display: block; height: 46px; margin: 0 auto 18px; }
+  .tarjeta { background: #fff; border: 1px solid var(--linea); border-radius: 12px; padding: 22px 20px; }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  .sub { color: var(--suave); font-size: 13px; margin: 0 0 18px; line-height: 1.45; }
+  label { display: block; font-size: 13px; font-weight: 600; margin: 16px 0 6px; }
+  select { width: 100%; font: inherit; font-size: 15px; padding: 11px; border: 1px solid var(--linea); border-radius: 8px; background: var(--fondo); color: var(--azul); }
+  .boton-foto { display: block; width: 100%; text-align: center; font-weight: 600; font-size: 15px; color: var(--azul); border: 1.5px dashed var(--azul); border-radius: 10px; padding: 16px; cursor: pointer; background: #fff; }
+  input[type=file] { display: none; }
+  .vista { display: none; margin-top: 12px; text-align: center; }
+  .vista img { max-width: 100%; max-height: 320px; border-radius: 10px; border: 1px solid var(--linea); }
+  .boton { margin-top: 20px; width: 100%; font: inherit; font-size: 16px; font-weight: 600; color: #fff; background: var(--verde); border: none; border-radius: 9px; padding: 14px; cursor: pointer; }
+  .boton:hover { background: var(--verde-hover); }
+  .boton:disabled { opacity: .55; cursor: default; }
+  .aviso { margin-top: 14px; font-size: 14px; line-height: 1.45; min-height: 20px; }
+  .aviso.ok { background: var(--verde-suave); color: #2d6a58; padding: 12px; border-radius: 8px; }
+  .aviso.error { background: var(--error-fondo); color: var(--error); padding: 12px; border-radius: 8px; }
+  .nota { font-size: 12px; color: var(--suave); margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="caja">
+  <img class="logo" src="https://tweetalig-notas.web.app/assets/logo-tweetalig.png" alt="Tweetalig">
+  <div class="tarjeta" id="contenido"></div>
+</div>
+
+<script>
+  const DATOS = <?!= datos ?>;
+  const $ = (id) => document.getElementById(id);
+  const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  let fotoBase64 = null;
+
+  function pintar() {
+    const c = $("contenido");
+    if (DATOS.estado === "no_existe") {
+      c.innerHTML = `<h1>Link no válido</h1><p class="sub">Revisa que hayas copiado el link completo, o pídeselo de nuevo a tu profesor.</p>`;
+      return;
+    }
+    if (DATOS.estado === "cerrado") {
+      c.innerHTML = `<h1>${esc(DATOS.curso)}</h1><p class="sub">La recepción de fotos para este curso ya está cerrada.</p>`;
+      return;
+    }
+    const opciones = DATOS.estudiantes.map((s) =>
+      `<option value="${esc(s.k)}">${esc(s.nombre)}${s.subio ? "  ✓ ya subió" : ""}</option>`).join("");
+    c.innerHTML = `
+      <h1>${esc(DATOS.curso)}</h1>
+      <p class="sub">Profesor(a): ${esc(DATOS.profesor)}${DATOS.sede ? " · " + esc(DATOS.sede) : ""}</p>
+
+      <label for="estudiante">1. Busca tu nombre</label>
+      <select id="estudiante"><option value="">Selecciona tu nombre...</option>${opciones}</select>
+      <p class="nota">¿No apareces? Avísale a tu profesor.</p>
+
+      <label>2. Toma o elige tu foto</label>
+      <label class="boton-foto" for="archivo" id="texto-boton-foto">📷 Tomar o elegir foto</label>
+      <input type="file" id="archivo" accept="image/*">
+      <div class="vista" id="vista"><img id="img-vista" alt="Vista previa"></div>
+
+      <button class="boton" id="enviar" disabled>Enviar foto</button>
+      <p class="nota">Si ya habías enviado una, la nueva reemplaza a la anterior.</p>
+      <div class="aviso" id="aviso"></div>`;
+
+    $("estudiante").addEventListener("change", revisar);
+    $("archivo").addEventListener("change", leerFoto);
+    $("enviar").addEventListener("click", enviar);
+  }
+
+  function decir(texto, tipo) {
+    const a = $("aviso");
+    a.className = "aviso" + (tipo ? " " + tipo : "");
+    a.textContent = texto;
+  }
+
+  function revisar() {
+    $("enviar").disabled = !($("estudiante").value && fotoBase64);
+  }
+
+  // Reduce la foto en el celular (máx. 1280 px de lado, JPEG) para que suba rápido y no llene el Drive.
+  function leerFoto(ev) {
+    const archivo = ev.target.files && ev.target.files[0];
+    fotoBase64 = null; revisar();
+    if (!archivo) return;
+    decir("Preparando la foto...");
+    const url = URL.createObjectURL(archivo);
+    const img = new Image();
+    img.onload = () => {
+      const max = 1280;
+      const escala = Math.min(1, max / Math.max(img.width, img.height));
+      const lienzo = document.createElement("canvas");
+      lienzo.width = Math.round(img.width * escala);
+      lienzo.height = Math.round(img.height * escala);
+      const ctx = lienzo.getContext("2d");
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, lienzo.width, lienzo.height);
+      ctx.drawImage(img, 0, 0, lienzo.width, lienzo.height);
+      const dataUrl = lienzo.toDataURL("image/jpeg", 0.85);
+      URL.revokeObjectURL(url);
+      fotoBase64 = dataUrl.split(",")[1];
+      $("img-vista").src = dataUrl;
+      $("vista").style.display = "block";
+      $("texto-boton-foto").textContent = "📷 Cambiar foto";
+      decir("");
+      revisar();
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      decir("No se pudo leer esa foto. Intenta tomarla de nuevo o elegir otra (formato JPG o PNG).", "error");
+    };
+    img.src = url;
+  }
+
+  function enviar() {
+    const k = $("estudiante").value;
+    if (!k || !fotoBase64) return;
+    $("enviar").disabled = true;
+    decir("Enviando... no cierres esta página.");
+    google.script.run
+      .withSuccessHandler((r) => {
+        decir(`¡Listo! Tu foto quedó guardada, ${r.nombre}.`, "ok");
+        const opt = $("estudiante").querySelector(`option[value="${k}"]`);
+        if (opt && !opt.textContent.includes("✓")) opt.textContent += "  ✓ ya subió";
+        fotoBase64 = null;
+        $("archivo").value = "";
+        $("vista").style.display = "none";
+        $("texto-boton-foto").textContent = "📷 Tomar o elegir foto";
+        revisar();
+      })
+      .withFailureHandler((err) => {
+        decir((err && err.message ? err.message : String(err)).replace(/^Error:\s*/, "") || "No se pudo enviar. Intenta de nuevo.", "error");
+        revisar();
+      })
+      .subirFoto(DATOS.token, k, fotoBase64);
+  }
+
+  pintar();
+</script>
+</body>
+</html>

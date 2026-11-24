@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tweetalig — Fotos de estudiantes</title>
+<link rel="stylesheet" href="../css/styles.css?v=2">
+<style>
+  .tabla-simple { width: 100%; border-collapse: collapse; max-width: 1100px; }
+  .tabla-simple th, .tabla-simple td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--linea); font-size: 13px; vertical-align: middle; }
+  .tabla-simple th { color: var(--tinta-suave); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .form-tarjeta { background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio); padding: 20px 24px; max-width: 640px; margin-bottom: 22px; }
+  .form-tarjeta label { display: block; font-size: 13px; font-weight: 500; color: var(--tinta-suave); margin-top: 10px; margin-bottom: 4px; }
+  .form-tarjeta input, .filtros select, .filtros input { width: 100%; font-family: var(--fuente-cuerpo); font-size: 14px; padding: 8px 10px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
+  .filtros { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 10px; max-width: 1100px; margin-bottom: 12px; }
+  .barra { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .barra .boton-primario { margin-top: 0; padding: 10px 16px; font-size: 14px; }
+  .aviso { font-size: 13px; min-height: 18px; margin: 8px 0; }
+  .estado { font-size: 11.5px; padding: 2px 8px; border-radius: 10px; white-space: nowrap; border: 1px solid; }
+  .estado.activo { background: #e3f4ee; color: #2d6a58; border-color: #5db69c; }
+  .estado.cerrado { background: #f1f1f1; color: #666; border-color: #ccc; }
+  .estado.sin { background: #fbf0c9; color: #7a5d00; border-color: #e6c14f; }
+  .acciones button { margin: 2px 4px 2px 0; }
+  .avance { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  @media (max-width: 820px) { .filtros { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <nav class="app-nav">
+    <div class="logo-nav-wrap"><img src="../assets/logo-tweetalig.png" alt="Tweetalig"></div>
+    <h1>Portal de notas</h1>
+    <div id="menu-rol"></div>
+    <a href="#" id="link-salir">Cerrar sesión</a>
+  </nav>
+  <main class="app-contenido">
+    <span class="etiqueta-rol">Fotos de estudiantes</span>
+    <h2>Recolección de fotos por curso</h2>
+    <p style="color: var(--tinta-suave); max-width: 640px; margin-top: -8px;">
+      Cada curso tiene su propio link. El estudiante lo abre, elige su nombre y sube su foto; llega sola a Drive en
+      <b>FOTOS ESTUDIANTES / PROFESOR / CURSO</b>, con el nombre y la cédula del estudiante. Una foto por estudiante (la nueva reemplaza a la anterior).
+    </p>
+
+    <details class="form-tarjeta" id="tarjeta-config">
+      <summary style="cursor:pointer; font-weight:600; color: var(--azul-profundo);">Conexión con el script de Drive</summary>
+      <label for="url-script">URL del script (Apps Script, termina en /exec)</label>
+      <input type="url" id="url-script" placeholder="https://script.google.com/a/macros/tweetalig.edu.co/s/.../exec">
+      <label for="clave-script">Clave del script</label>
+      <input type="password" id="clave-script" placeholder="La misma CLAVE que pusiste en el script">
+      <div class="barra" style="margin-top:14px;">
+        <button class="boton-primario" id="btn-guardar-config">Guardar</button>
+        <button class="boton-secundario" id="btn-probar">Probar conexión</button>
+      </div>
+      <p class="aviso" id="aviso-config"></p>
+    </details>
+
+    <div class="filtros">
+      <select id="f-periodo"></select>
+      <select id="f-sede"><option value="">Todas las sedes</option></select>
+      <input type="text" id="f-texto" placeholder="Buscar curso o profesor...">
+    </div>
+
+    <div class="barra">
+      <button class="boton-primario" id="btn-activar-filtrados">Crear / actualizar links de los cursos filtrados</button>
+      <button class="boton-secundario" id="btn-copiar-todos">Copiar todos los links (para WhatsApp)</button>
+      <button class="boton-secundario" id="btn-refrescar">Actualizar avance</button>
+    </div>
+    <p class="aviso" id="aviso"></p>
+
+    <table class="tabla-simple">
+      <thead><tr><th>Curso</th><th>Profesor</th><th>Sede</th><th>Estado</th><th>Fotos</th><th>Acciones</th></tr></thead>
+      <tbody id="lista"><tr><td colspan="6">Cargando...</td></tr></tbody>
+    </table>
+  </main>
+</div>
+
+<script type="module">
+  import { requireAuth, registrarLog } from "../js/auth.js?v=3";
+  import { db } from "../js/firebase-config.js?v=3";
+  import { leerClases } from "../js/clases-lectura.js?v=1";
+  import { separarMovidos } from "../js/matricula.js?v=1";
+  import { urlScriptValida } from "../js/correo-script.js?v=1";
+  import { collection, doc, getDoc, getDocs, setDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+  const { usuario, rol, perfil } = await requireAuth(["master"]);
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const refConfig = doc(db, "configuracion_fotos", "script");
+
+  let config = null;            // { url, secreto }
+  let clases = [];              // clases del portal
+  let estadoScript = {};        // claseId -> { token, url, activo, total, subidas }
+
+  function decir(id, texto, error = false) {
+    const el = $(id);
+    el.style.color = error ? "var(--error)" : "#2E6E4E";
+    el.textContent = texto;
+  }
+
+  // ───────── Conexión con el script ─────────
+  async function llamar(cuerpo) {
+    if (!config?.url || !config?.secreto) throw new Error("Primero guarda la URL y la clave del script.");
+    let r;
+    try {
+      r = await fetch(config.url, {
+        method: "POST", redirect: "follow",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },   // evita la consulta CORS que Apps Script no responde
+        body: JSON.stringify({ ...cuerpo, secreto: config.secreto })
+      });
+    } catch (e) {
+      throw new Error("No se pudo contactar el script. Revisa la URL y que la implementación permita acceso a «Cualquier persona».");
+    }
+    let datos;
+    try { datos = await r.json(); } catch (e) { throw new Error("El script respondió algo inesperado. Revisa que la URL sea la de la implementación web (/exec)."); }
+    if (!datos.ok) throw new Error(datos.error || "El script rechazó la solicitud.");
+    return datos;
+  }
+
+  async function cargarConfig() {
+    const sn = await getDoc(refConfig);
+    config = sn.exists() ? sn.data() : null;
+    $("url-script").value = config?.url || "";
+    $("clave-script").value = config?.secreto || "";
+    if (!config) $("tarjeta-config").open = true;
+  }
+
+  $("btn-guardar-config").addEventListener("click", async () => {
+    const url = $("url-script").value.trim();
+    const secreto = $("clave-script").value.trim();
+    if (!urlScriptValida(url)) return decir("aviso-config", "La URL no parece de una implementación web de Apps Script (debe terminar en /exec).", true);
+    if (secreto.length < 12) return decir("aviso-config", "La clave debe tener mínimo 12 caracteres.", true);
+    await setDoc(refConfig, { url, secreto, actualizadoPor: usuario.email.toLowerCase(), fecha: serverTimestamp() });
+    config = { url, secreto };
+    await registrarLog(usuario, rol, "Configuró script de fotos", url);
+    decir("aviso-config", "Guardado.");
+    refrescarEstado();
+  });
+
+  $("btn-probar").addEventListener("click", async () => {
+    decir("aviso-config", "Probando...");
+    try {
+      const r = await llamar({ accion: "ping" });
+      $("aviso-config").innerHTML = `<span style="color:#2E6E4E;">Conectado con <b>${esc(r.cuenta)}</b>. <a href="${esc(r.carpeta)}" target="_blank" rel="noopener">Abrir carpeta en Drive</a></span>`;
+    } catch (e) { decir("aviso-config", e.message, true); }
+  });
+
+  // ───────── Clases ─────────
+  const textoCurso = (c) => `${c.nivel || ""} - ${c.grupo || ""} - ${c.ciudadNombre || ""} (${c.anio}-${c.periodo}-${c.ciclo})`;
+  const clavePeriodo = (c) => `${c.anio}-${c.periodo}-${c.ciclo}`;
+
+  async function cargarClases() {
+    const res = await leerClases(db, rol, perfil);
+    clases = res.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    const periodos = [...new Set(clases.map(clavePeriodo))].sort((a, b) => {
+      const pa = a.split("-").map(Number), pb = b.split("-").map(Number);
+      return pb[0] - pa[0] || pb[1] - pa[1] || pb[2] - pa[2];
+    });
+    $("f-periodo").innerHTML = `<option value="">Todos los períodos</option>` +
+      periodos.map((p) => { const [a, pe, ci] = p.split("-"); return `<option value="${p}">${a}-${pe}, ciclo ${ci}</option>`; }).join("");
+    if (periodos.length) $("f-periodo").value = periodos[0];
+
+    const sedes = [...new Map(clases.map((c) => [c.ciudadId, c.ciudadNombre || c.ciudadId])).entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1])));
+    $("f-sede").innerHTML = `<option value="">Todas las sedes</option>` + sedes.map(([id, n]) => `<option value="${esc(id)}">${esc(n)}</option>`).join("");
+  }
+
+  function filtradas() {
+    const per = $("f-periodo").value, sede = $("f-sede").value, txt = $("f-texto").value.trim().toLowerCase();
+    return clases
+      .filter((c) => (!per || clavePeriodo(c) === per) && (!sede || c.ciudadId === sede))
+      .filter((c) => !txt || textoCurso(c).toLowerCase().includes(txt) || (c.docenteNombre || "").toLowerCase().includes(txt))
+      .sort((a, b) => (a.docenteNombre || "").localeCompare(b.docenteNombre || "") || textoCurso(a).localeCompare(textoCurso(b)));
+  }
+
+  function pintar() {
+    const lista = filtradas();
+    const cuerpo = $("lista");
+    if (!lista.length) { cuerpo.innerHTML = `<tr><td colspan="6">No hay cursos con ese filtro.</td></tr>`; return; }
+    cuerpo.innerHTML = lista.map((c) => {
+      const e = estadoScript[c.id];
+      const estado = !e ? `<span class="estado sin">Sin link</span>` : e.activo ? `<span class="estado activo">Abierto</span>` : `<span class="estado cerrado">Cerrado</span>`;
+      const avance = e ? `${e.subidas} / ${e.total}` : "—";
+      const acciones = !e
+        ? `<button class="boton-secundario btn-activar" data-id="${c.id}">Crear link</button>`
+        : `<button class="boton-secundario btn-copiar" data-id="${c.id}">Copiar link</button>
+           <button class="boton-secundario btn-activar" data-id="${c.id}" title="Vuelve a enviar la lista de estudiantes y el profesor actual. El link no cambia.">Actualizar lista</button>
+           <button class="boton-secundario btn-estado" data-id="${c.id}" data-activo="${e.activo ? "0" : "1"}">${e.activo ? "Cerrar" : "Reabrir"}</button>`;
+      return `<tr>
+        <td>${esc(`${c.nivel || ""} - ${c.grupo || ""}`)}<br><span style="color:var(--tinta-suave); font-size:12px;">${esc(`${c.anio}-${c.periodo}, ciclo ${c.ciclo}`)}</span></td>
+        <td>${esc(c.docenteNombre || "SIN PROFESOR")}</td>
+        <td>${esc(c.ciudadNombre || "")}</td>
+        <td>${estado}</td>
+        <td class="avance">${avance}</td>
+        <td class="acciones">${acciones}</td>
+      </tr>`;
+    }).join("");
+
+    cuerpo.querySelectorAll(".btn-activar").forEach((b) => b.addEventListener("click", () => activar([b.dataset.id])));
+    cuerpo.querySelectorAll(".btn-copiar").forEach((b) => b.addEventListener("click", () => copiar(b.dataset.id, b)));
+    cuerpo.querySelectorAll(".btn-estado").forEach((b) => b.addEventListener("click", () => cambiarEstado(b.dataset.id, b.dataset.activo === "1")));
+  }
+
+  async function refrescarEstado() {
+    if (!config) { pintar(); return; }
+    try {
+      const r = await llamar({ accion: "estado" });
+      estadoScript = {};
+      r.cursos.forEach((c) => { estadoScript[c.claseId] = c; });
+      decir("aviso", "");
+    } catch (e) { decir("aviso", e.message, true); }
+    pintar();
+  }
+
+  // Lee de Firestore los estudiantes activos (no movidos) de la clase y arma lo que necesita el script.
+  async function datosCurso(c) {
+    const sn = await getDocs(query(collection(db, "estudiantes"), where("claseId", "==", c.id)));
+    const { activos } = separarMovidos(sn.docs.map((d) => d.data()));
+    const vistos = new Set();
+    const estudiantes = [];
+    activos.forEach((e) => {
+      const cedula = String(e.cedula || "").trim();
+      if (!cedula || vistos.has(cedula)) return;
+      vistos.add(cedula);
+      estudiantes.push({ cedula, nombre: `${e.apellido || ""} ${e.nombre || ""}`.trim().toUpperCase() });
+    });
+    return {
+      claseId: c.id,
+      profesor: c.docenteNombre || "SIN PROFESOR",
+      correoProfesor: c.docenteCorreo || "",
+      curso: textoCurso(c),
+      sede: c.ciudadNombre || "",
+      estudiantes
+    };
+  }
+
+  async function activar(ids) {
+    const seleccion = ids.map((id) => clases.find((c) => c.id === id)).filter(Boolean);
+    if (!seleccion.length) return;
+    if (seleccion.length > 1 && !confirm(`¿Crear o actualizar el link de ${seleccion.length} curso(s)?`)) return;
+    let listos = 0, errores = [];
+    try {
+      for (let i = 0; i < seleccion.length; i += 20) {
+        const lote = seleccion.slice(i, i + 20);
+        decir("aviso", `Preparando cursos ${i + 1}–${i + lote.length} de ${seleccion.length}...`);
+        const cursos = await Promise.all(lote.map(datosCurso));
+        const r = await llamar({ accion: "activar", cursos });
+        r.cursos.forEach((x) => { if (x.ok) listos++; else errores.push(`${x.claseId}: ${x.error}`); });
+      }
+      await registrarLog(usuario, rol, "Creó/actualizó links de fotos", `${listos} curso(s)`);
+      decir("aviso", `Listo: ${listos} curso(s) con link.${errores.length ? " Errores: " + errores.join("; ") : ""}`, errores.length > 0);
+    } catch (e) { decir("aviso", e.message, true); }
+    await refrescarEstado();
+  }
+
+  async function cambiarEstado(id, activo) {
+    try {
+      await llamar({ accion: "cambiarEstado", claseId: id, activo });
+      const c = clases.find((x) => x.id === id);
+      await registrarLog(usuario, rol, activo ? "Reabrió link de fotos" : "Cerró link de fotos", c ? textoCurso(c) : id);
+    } catch (e) { decir("aviso", e.message, true); }
+    await refrescarEstado();
+  }
+
+  async function copiarTexto(texto) {
+    try { await navigator.clipboard.writeText(texto); return true; }
+    catch (e) { prompt("Copia el texto:", texto); return false; }
+  }
+
+  async function copiar(id, boton) {
+    const e = estadoScript[id];
+    if (!e) return;
+    if (await copiarTexto(e.url)) { const t = boton.textContent; boton.textContent = "¡Copiado!"; setTimeout(() => { boton.textContent = t; }, 1500); }
+  }
+
+  $("btn-copiar-todos").addEventListener("click", async () => {
+    const lineas = filtradas().filter((c) => estadoScript[c.id]?.activo)
+      .map((c) => `*${c.nivel} - ${c.grupo}* (${c.docenteNombre || "SIN PROFESOR"}, ${c.ciudadNombre || ""})\n${estadoScript[c.id].url}`);
+    if (!lineas.length) return decir("aviso", "No hay cursos abiertos con link en este filtro.", true);
+    if (await copiarTexto(lineas.join("\n\n"))) decir("aviso", `Copiados ${lineas.length} link(s).`);
+  });
+
+  $("btn-activar-filtrados").addEventListener("click", () => activar(filtradas().map((c) => c.id)));
+  $("btn-refrescar").addEventListener("click", refrescarEstado);
+  ["f-periodo", "f-sede"].forEach((id) => $(id).addEventListener("change", pintar));
+  $("f-texto").addEventListener("input", pintar);
+
+  await cargarConfig();
+  await cargarClases();
+  await refrescarEstado();
+</script>
+</body>
+</html>

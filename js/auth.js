@@ -64,6 +64,7 @@ const MENU_POR_ROL = {
     ["Habilitación", "habilitacion.html"],
     ["Alertas de inasistencia", "alertas-asistencia.html"],
     ["Control de horas docentes", "horas-docentes.html"],
+    ["Fotos de estudiantes", "fotos.html"],
     ["Accesos y usuarios", "usuarios.html"],
     ["Log de cambios", "logs.html"]
   ],
