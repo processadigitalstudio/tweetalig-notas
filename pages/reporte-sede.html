@@ -70,15 +70,15 @@
       </div>
       <div class="campo-filtro" id="caja-sede">
         <label for="f-sede">Sede</label>
-        <select id="f-sede"><option value="">Todas</option></select>
+        <select id="f-sede" data-multiple><option value="">Todas</option></select>
       </div>
       <div class="campo-filtro">
         <label for="f-programa">Programa</label>
-        <select id="f-programa"><option value="">Todos</option></select>
+        <select id="f-programa" data-multiple><option value="">Todos</option></select>
       </div>
       <div class="campo-filtro">
         <label for="f-clase">Clase</label>
-        <select id="f-clase"><option value="">Todas</option></select>
+        <select id="f-clase" data-multiple><option value="">Todas</option></select>
       </div>
       <div class="campo-filtro">
         <label for="f-texto">Buscar</label>
@@ -189,7 +189,6 @@
       opt.value = n; opt.textContent = n;
       selPrograma.appendChild(opt);
     });
-    if ([...selPrograma.options].some((o) => o.value === previoP)) selPrograma.value = previoP;
 
     const selClase = document.getElementById("f-clase");
     const previoC = selClase.value;
@@ -202,7 +201,6 @@
         opt.textContent = `${c.nivel} - ${c.grupo} (${c.ciudadNombre || "—"})`;
         selClase.appendChild(opt);
       });
-    if ([...selClase.options].some((o) => o.value === previoC)) selClase.value = previoC;
   }
 
   // ───────── Carga de datos del período ─────────
@@ -331,17 +329,17 @@
   }
 
   function filasFiltradas() {
-    const sede = document.getElementById("f-sede").value;
-    const programa = document.getElementById("f-programa").value;
-    const claseId = document.getElementById("f-clase").value;
+    const sedesSel = document.getElementById("f-sede").valores;
+    const programasSel = document.getElementById("f-programa").valores;
+    const clasesSel = document.getElementById("f-clase").valores;
     const texto = normalizar(document.getElementById("f-texto").value);
     const uAlerta = Number(document.getElementById("u-alerta").value) || 2;
     const uPerdida = Number(document.getElementById("u-perdida").value) || 6;
 
     return filas.filter((f) => {
-      if (sede && f.ciudadId !== sede) return false;
-      if (programa && f.programa !== programa) return false;
-      if (claseId && f.claseId !== claseId) return false;
+      if (sedesSel.length && !sedesSel.includes(f.ciudadId)) return false;
+      if (programasSel.length && !programasSel.includes(f.programa)) return false;
+      if (clasesSel.length && !clasesSel.includes(f.claseId)) return false;
       if (texto && !(normalizar(`${f.apellido} ${f.nombre}`).includes(texto) || normalizar(`${f.nombre} ${f.apellido}`).includes(texto) || String(f.cedula).includes(texto))) return false;
       if (pestana === "asistencia") {
         if (chipActivo === "alerta" && !["alerta1", "alerta2"].includes(estadoDe(f))) return false;

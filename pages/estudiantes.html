@@ -57,9 +57,9 @@
 
     <div class="filtros">
       <input type="text" id="filtro-texto" placeholder="Buscar por nombre o cédula...">
-      <select id="filtro-sede"><option value="">Todas las sedes</option></select>
-      <select id="filtro-clase"><option value="">Todas las clases</option></select>
-      <select id="filtro-periodo"><option value="">Todos los períodos</option></select>
+      <select id="filtro-sede" data-multiple><option value="">Todas las sedes</option></select>
+      <select id="filtro-clase" data-multiple><option value="">Todas las clases</option></select>
+      <select id="filtro-periodo" data-multiple><option value="">Todos los períodos</option></select>
     </div>
 
     <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-bottom:14px;">
@@ -243,9 +243,9 @@
 
   function pintarLista() {
     const texto = document.getElementById("filtro-texto").value.trim().toLowerCase();
-    const sede = document.getElementById("filtro-sede").value;
-    const claseId = document.getElementById("filtro-clase").value;
-    const periodo = document.getElementById("filtro-periodo").value;
+    const sedesSel = document.getElementById("filtro-sede").valores;
+    const clasesSel = document.getElementById("filtro-clase").valores;
+    const periodosSel = document.getElementById("filtro-periodo").valores;
 
     const verMovidos = document.getElementById("chk-movidos").checked;
 
@@ -256,9 +256,9 @@
         (e.nombre || "").toLowerCase().includes(texto) ||
         (e.apellido || "").toLowerCase().includes(texto) ||
         (e.cedula || "").includes(texto);
-      const coincideSede = !sede || e.ciudadNombre === sede;
-      const coincideClase = !claseId || e.claseId === claseId;
-      const coincidePeriodo = !periodo || `${e.anio}-${e.periodo}-${e.ciclo}` === periodo;
+      const coincideSede = !sedesSel.length || sedesSel.includes(e.ciudadNombre);
+      const coincideClase = !clasesSel.length || clasesSel.includes(e.claseId);
+      const coincidePeriodo = !periodosSel.length || periodosSel.includes(`${e.anio}-${e.periodo}-${e.ciclo}`);
       return coincideTexto && coincideSede && coincideClase && coincidePeriodo;
     });
 

@@ -56,8 +56,8 @@
       <div><label class="etiqueta-campo">Año</label><select id="anio"></select></div>
       <div><label class="etiqueta-campo">Periodo</label><select id="periodo"><option value="1">1</option><option value="2">2</option></select></div>
       <div><label class="etiqueta-campo">Ciclo</label><select id="ciclo"></select></div>
-      <div><label class="etiqueta-campo">Sede</label><select id="sede"><option value="">Todas las sedes</option></select></div>
-      <div><label class="etiqueta-campo">Programa</label><select id="programa"><option value="">Todos los programas</option></select></div>
+      <div><label class="etiqueta-campo">Sede</label><select id="sede" data-multiple><option value="">Todas las sedes</option></select></div>
+      <div><label class="etiqueta-campo">Programa</label><select id="programa" data-multiple><option value="">Todos los programas</option></select></div>
     </div>
 
     <div class="nota-script">
@@ -200,7 +200,6 @@ Tweetalig Centro de Idiomas`;
       opt.textContent = d.data().nombre;
       selectPrograma.appendChild(opt);
     });
-    if ([...selectPrograma.options].some((o) => o.value === valorPrevio)) selectPrograma.value = valorPrevio;
   }
 
   function calcularPromedioCorte(programa, valores, corteIndex) {
@@ -233,8 +232,8 @@ Tweetalig Centro de Idiomas`;
     const anio = Number(document.getElementById("anio").value);
     const periodo = Number(document.getElementById("periodo").value);
     const ciclo = Number(document.getElementById("ciclo").value);
-    const programaFiltro = document.getElementById("programa").value;
-    const sedeFiltro = document.getElementById("sede").value;
+    const programaFiltro = document.getElementById("programa").valores;
+    const sedeFiltro = document.getElementById("sede").valores;
     idPeriodoActual = `${anio}-${periodo}-${ciclo}`;
 
     document.getElementById("contenido-habilitacion").innerHTML = "<p style='color:var(--tinta-suave);'>Buscando...</p>";
@@ -247,8 +246,8 @@ Tweetalig Centro de Idiomas`;
       const misSedesH = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
       const restringidoPorSede = (rol === "coordinador" || rol === "secretaria") && misSedesH.length > 0;
       if (restringidoPorSede) clases = clases.filter((c) => misSedesH.includes(c.ciudadId));
-      else if (sedeFiltro) clases = clases.filter((c) => c.ciudadId === sedeFiltro);
-      if (programaFiltro) clases = clases.filter((c) => c.programaId === programaFiltro);
+      else if (sedeFiltro.length) clases = clases.filter((c) => sedeFiltro.includes(c.ciudadId));
+      if (programaFiltro.length) clases = clases.filter((c) => programaFiltro.includes(c.programaId));
 
       const cachePrograma = {};
       const [snapAvisosHab, snapAvisosPerd] = await Promise.all([

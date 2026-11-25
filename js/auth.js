@@ -12,6 +12,8 @@
 import { auth, db } from "./firebase-config.js?v=3";
 import { buscablesAutomaticos } from "./buscable.js?v=3";
 buscablesAutomaticos(); // todos los desplegables permiten escribir para buscar
+import { multiplesAutomaticos } from "./multiple.js?v=1";
+multiplesAutomaticos(); // los <select data-multiple> pasan a ser filtros de selección múltiple
 import { activarMayusculas } from "./mayusculas.js?v=1";
 activarMayusculas(); // todo lo que se escribe queda en MAYÚSCULAS (correos no)
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";

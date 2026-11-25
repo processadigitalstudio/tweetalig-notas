@@ -69,8 +69,8 @@
       <div><label class="etiqueta-campo">Año</label><select id="anio"></select></div>
       <div><label class="etiqueta-campo">Periodo</label><select id="periodo"><option value="1">1</option><option value="2">2</option></select></div>
       <div><label class="etiqueta-campo">Ciclo</label><select id="ciclo"></select></div>
-      <div><label class="etiqueta-campo">Sede</label><select id="sede"><option value="">Todas las sedes</option></select></div>
-      <div><label class="etiqueta-campo">Programa</label><select id="programa"><option value="">Todos los programas</option></select></div>
+      <div><label class="etiqueta-campo">Sede</label><select id="sede" data-multiple><option value="">Todas las sedes</option></select></div>
+      <div><label class="etiqueta-campo">Programa</label><select id="programa" data-multiple><option value="">Todos los programas</option></select></div>
     </div>
 
     <div id="aviso-sin-horas"></div>
@@ -265,7 +265,6 @@ Tweetalig Centro de Idiomas`;
       opt.textContent = d.data().nombre;
       selectPrograma.appendChild(opt);
     });
-    if ([...selectPrograma.options].some((o) => o.value === valorPrevio)) selectPrograma.value = valorPrevio;
   }
 
   let alertaActuales = [];
@@ -276,8 +275,8 @@ Tweetalig Centro de Idiomas`;
     const anio = Number(document.getElementById("anio").value);
     const periodo = Number(document.getElementById("periodo").value);
     const ciclo = Number(document.getElementById("ciclo").value);
-    const sedeFiltro = document.getElementById("sede").value;
-    const programaFiltro = document.getElementById("programa").value;
+    const sedeFiltro = document.getElementById("sede").valores;
+    const programaFiltro = document.getElementById("programa").valores;
     const sinConfigurar = new Set(); // programa — nivel sin horas definidas en Programas
     idPeriodoActual = `${anio}-${periodo}-${ciclo}`;
 
@@ -293,8 +292,8 @@ Tweetalig Centro de Idiomas`;
       const restringidoPorSede = (rol === "coordinador" || rol === "secretaria") && misSedesAl.length > 0;
       if (restringidoPorSede) { clasesOtrasSedes = clases.filter((c) => !misSedesAl.includes(c.ciudadId)); clases = clases.filter((c) => misSedesAl.includes(c.ciudadId)); }
       else if ((rol === "coordinador" || rol === "secretaria")) { clasesOtrasSedes = clases; clases = []; }
-      else if (sedeFiltro) clases = clases.filter((c) => c.ciudadId === sedeFiltro);
-      if (programaFiltro) clases = clases.filter((c) => c.programaId === programaFiltro);
+      else if (sedeFiltro.length) clases = clases.filter((c) => sedeFiltro.includes(c.ciudadId));
+      if (programaFiltro.length) clases = clases.filter((c) => programaFiltro.includes(c.programaId));
 
       const porGrupo = {};
       clases.forEach((c) => {

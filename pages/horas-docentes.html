@@ -45,7 +45,7 @@
     </p>
 
     <div class="barra-filtros">
-      <div class="campo-filtro" id="caja-profesor"><label for="f-profesor">Profesor</label><select id="f-profesor"></select></div>
+      <div class="campo-filtro" id="caja-profesor"><label for="f-profesor">Profesor</label><select id="f-profesor" data-multiple></select></div>
       <div class="campo-filtro"><label for="f-desde">Desde</label><input type="date" id="f-desde"></div>
       <div class="campo-filtro"><label for="f-hasta">Hasta</label><input type="date" id="f-hasta"></div>
       <button type="button" class="boton-verde" id="boton-consultar">Consultar</button>
@@ -115,7 +115,6 @@
       const o = document.createElement("option"); o.value = correo; o.textContent = nombre === correo ? nombre : `${nombre} — ${correo}`; sel.appendChild(o);
     });
     if (esProfesor) document.getElementById("caja-profesor").style.display = "none";
-    else hacerBuscable(sel, "Buscar profesor por nombre o correo...");
   }
 
   function fechaLocal(d) { return d.toISOString().slice(0, 10); }
@@ -134,11 +133,11 @@
     const mensaje = document.getElementById("mensaje");
     const desde = document.getElementById("f-desde").value;
     const hasta = document.getElementById("f-hasta").value;
-    const correoFiltro = document.getElementById("f-profesor").value;
+    const correosFiltro = document.getElementById("f-profesor").valores;
     if (!desde || !hasta || desde > hasta) { mensaje.textContent = "Elige un rango de fechas válido."; return; }
     mensaje.textContent = "Cargando...";
 
-    const delProfesor = clases.filter((c) => !correoFiltro || c.docenteCorreo.toLowerCase() === correoFiltro);
+    const delProfesor = clases.filter((c) => !correosFiltro.length || correosFiltro.includes(c.docenteCorreo.toLowerCase()));
     const grupos = {};
     delProfesor.forEach((c) => { (grupos[claveGrupo(c)] = grupos[claveGrupo(c)] || []).push(c); });
 

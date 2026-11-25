@@ -123,7 +123,7 @@ export function buscablesAutomaticos() {
   const aplicar = (raiz) => {
     const lista = raiz.matches?.("select") ? [raiz] : [...(raiz.querySelectorAll?.("select") || [])];
     lista.forEach((sel) => {
-      if (sel.multiple || sel.size > 1 || sel.dataset.sinBuscador !== undefined || sel.dataset.buscable) return;
+      if (sel.multiple || sel.size > 1 || sel.dataset.multiple !== undefined || sel.dataset.sinBuscador !== undefined || sel.dataset.buscable) return;
       hacerBuscable(sel, "Escribe para buscar...");
     });
   };

@@ -92,15 +92,15 @@
       </div>
       <div class="campo-filtro">
         <label for="filtro-sede-clases-select">Sede</label>
-        <select id="filtro-sede-clases-select"><option value="">Todas</option></select>
+        <select id="filtro-sede-clases-select" data-multiple><option value="">Todas</option></select>
       </div>
       <div class="campo-filtro">
         <label for="filtro-programa-clases-select">Programa</label>
-        <select id="filtro-programa-clases-select"><option value="">Todos</option></select>
+        <select id="filtro-programa-clases-select" data-multiple><option value="">Todos</option></select>
       </div>
       <div class="campo-filtro">
         <label for="filtro-periodo-clases-select">Período</label>
-        <select id="filtro-periodo-clases-select"><option value="">Todos</option></select>
+        <select id="filtro-periodo-clases-select" data-multiple><option value="">Todos</option></select>
       </div>
       <div class="campo-filtro">
         <label for="filtro-sin-profesor">Revisión</label>
@@ -201,7 +201,7 @@
 
   let listaProfesores = [];
   let clasesCache = {};
-  let filtroSedeClases = "";
+  let filtroSedeClases = [];
 
   function agregarFilaHorarioEditor(contenedor, datos) {
     const fila = document.createElement("div");
@@ -401,8 +401,8 @@
   }
 
   let filtrosClasesTexto = "";
-  let filtrosClasesPrograma = "";
-  let filtrosClasesPeriodo = "";
+  let filtrosClasesPrograma = [];
+  let filtrosClasesPeriodo = [];
   let filtroSoloSinProfesor = false;
 
   async function cargarClases() {
@@ -451,7 +451,6 @@
       opt.value = id; opt.textContent = nombre;
       selectSede.appendChild(opt);
     });
-    if ([...selectSede.options].some((o) => o.value === valorSedePrevio)) selectSede.value = valorSedePrevio;
 
     selectPrograma.innerHTML = '<option value="">Todos</option>';
     [...programas].sort().forEach((nombre) => {
@@ -459,7 +458,6 @@
       opt.value = nombre; opt.textContent = nombre;
       selectPrograma.appendChild(opt);
     });
-    if ([...selectPrograma.options].some((o) => o.value === valorProgramaPrevio)) selectPrograma.value = valorProgramaPrevio;
 
     selectPeriodo.innerHTML = '<option value="">Todos</option>';
     [...periodos].sort().reverse().forEach((p) => {
@@ -468,7 +466,6 @@
       opt.value = p; opt.textContent = `${anio}-${periodo} / Ciclo ${ciclo}`;
       selectPeriodo.appendChild(opt);
     });
-    if ([...selectPeriodo.options].some((o) => o.value === valorPeriodoPrevio)) selectPeriodo.value = valorPeriodoPrevio;
   }
 
   function pintarTablaClases() {
@@ -479,9 +476,9 @@
     let total = 0;
 
     Object.entries(clasesCache).forEach(([id, c]) => {
-      if (filtroSedeClases && c.ciudadId !== filtroSedeClases) return;
-      if (filtrosClasesPrograma && c.programaNombre !== filtrosClasesPrograma) return;
-      if (filtrosClasesPeriodo && `${c.anio}-${c.periodo}-${c.ciclo}` !== filtrosClasesPeriodo) return;
+      if (filtroSedeClases.length && !filtroSedeClases.includes(c.ciudadId)) return;
+      if (filtrosClasesPrograma.length && !filtrosClasesPrograma.includes(c.programaNombre)) return;
+      if (filtrosClasesPeriodo.length && !filtrosClasesPeriodo.includes(`${c.anio}-${c.periodo}-${c.ciclo}`)) return;
       const sinProfesor = !listaProfesores.some((p) => p.correo === c.docenteCorreo);
       if (filtroSoloSinProfesor && !sinProfesor) return;
       if (texto) {
@@ -868,15 +865,15 @@
     pintarTablaClases();
   });
   document.getElementById("filtro-sede-clases-select").addEventListener("change", (e) => {
-    filtroSedeClases = e.target.value;
+    filtroSedeClases = e.target.valores;
     pintarTablaClases();
   });
   document.getElementById("filtro-programa-clases-select").addEventListener("change", (e) => {
-    filtrosClasesPrograma = e.target.value;
+    filtrosClasesPrograma = e.target.valores;
     pintarTablaClases();
   });
   document.getElementById("filtro-periodo-clases-select").addEventListener("change", (e) => {
-    filtrosClasesPeriodo = e.target.value;
+    filtrosClasesPeriodo = e.target.valores;
     pintarTablaClases();
   });
   document.getElementById("filtro-sin-profesor").addEventListener("change", (e) => {
@@ -884,7 +881,7 @@
     pintarTablaClases();
   });
   document.getElementById("boton-limpiar-filtros-clases").addEventListener("click", () => {
-    filtrosClasesTexto = ""; filtroSedeClases = ""; filtrosClasesPrograma = ""; filtrosClasesPeriodo = "";
+    filtrosClasesTexto = ""; filtroSedeClases = []; filtrosClasesPrograma = []; filtrosClasesPeriodo = [];
     filtroSoloSinProfesor = false;
     document.getElementById("filtro-sin-profesor").checked = false;
     document.getElementById("filtro-texto-clases").value = "";

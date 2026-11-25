@@ -12,7 +12,7 @@ export function esCampoExcluido(el) {
   if (el.hasAttribute("data-no-mayus")) return true;
   const modo = el.getAttribute("inputmode");
   if (modo === "numeric" || modo === "decimal" || modo === "tel") return true;
-  if (el.closest(".combo-buscable, .filtros")) return true;
+  if (el.closest(".combo-buscable, .filtros, .mult")) return true;
   const id = (el.id || "").toLowerCase();
   const cls = (el.className || "").toString().toLowerCase();
   const nombre = (el.name || "").toLowerCase();
