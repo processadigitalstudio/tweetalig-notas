@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tweetalig — Exámenes</title>
+<link rel="stylesheet" href="../css/styles.css?v=2">
+<style>
+  .tabla-simple { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+  .tabla-simple th, .tabla-simple td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--linea); font-size: 13.5px; vertical-align: top; }
+  .tabla-simple th { color: var(--tinta-suave); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .tabla-simple button.link { background: none; border: none; font-size: 13px; cursor: pointer; text-decoration: underline; padding: 0; margin-right: 8px; color: var(--azul-profundo); }
+  .tabla-simple button.link.peligro { color: var(--error); }
+  .form-tarjeta { background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio); padding: 22px 26px; max-width: 980px; margin-bottom: 26px; }
+  .form-tarjeta h3 { font-family: var(--fuente-display); color: var(--azul-profundo); margin: 0 0 4px; }
+  .form-tarjeta h4 { font-family: var(--fuente-display); color: var(--azul-profundo); font-size: 14px; margin: 22px 0 4px; padding-top: 14px; border-top: 1px solid var(--linea); }
+  .form-tarjeta label { display: block; font-size: 13px; font-weight: 500; color: var(--tinta-suave); margin-top: 10px; margin-bottom: 4px; }
+  .form-tarjeta input, .form-tarjeta select, .form-tarjeta textarea { width: 100%; font-family: var(--fuente-cuerpo); font-size: 14px; padding: 8px 10px; border: 1px solid var(--linea); border-radius: 7px; background: var(--fondo); color: var(--tinta); }
+  .form-tarjeta textarea { min-height: 70px; resize: vertical; }
+  .rejilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0 14px; }
+  .opciones-radio { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+  .opciones-radio label { display: flex; align-items: center; gap: 8px; margin: 0; padding: 8px 14px; border: 1px solid var(--linea); border-radius: 8px; cursor: pointer; font-weight: 500; color: var(--tinta); background: var(--fondo); }
+  .opciones-radio label:has(input:checked) { border-color: var(--verde-marca); background: var(--verde-marca-suave); }
+  .opciones-radio input { width: auto; }
+  .ayuda { font-size: 12px; color: var(--tinta-suave); margin: 4px 0 0; }
+  .aviso { font-size: 13px; margin-top: 10px; min-height: 18px; }
+  .lista-clases { max-height: 340px; overflow: auto; border: 1px solid var(--linea); border-radius: 8px; margin-top: 8px; background: var(--fondo); }
+  .fila-clase { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--linea); font-size: 13.5px; }
+  .fila-clase:last-child { border-bottom: none; }
+  .fila-clase input { width: auto; }
+  .fila-clase .meta { color: var(--tinta-suave); font-size: 12px; }
+  .fila-clase .derecha { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .estudiantes-de-clase { padding: 6px 12px 10px 38px; background: var(--superficie); border-bottom: 1px solid var(--linea); }
+  .estudiantes-de-clase label { display: flex; align-items: center; gap: 8px; font-weight: 400; color: var(--tinta); margin: 4px 0; font-size: 13px; }
+  .estudiantes-de-clase input { width: auto; }
+  .chip { display: inline-block; font-size: 11px; font-weight: 600; text-transform: uppercase; padding: 2px 8px; border-radius: 10px; }
+  .chip-simulacro { background: var(--oro-suave); color: #8A5A12; }
+  .chip-final { background: #E3E8F0; color: var(--azul-profundo); }
+  .chip-presencial { background: var(--verde-marca-suave); color: #1E7A5F; }
+  .chip-virtual { background: #EEE7F7; color: #5B3E8A; }
+  .chip-cancelado { background: var(--error-fondo); color: #9A4A33; }
+  .chip-realizado { background: #EAEAEA; color: #555; }
+  .resumen-seleccion { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-top: 12px; font-size: 14px; }
+  .resumen-seleccion strong { font-size: 18px; color: var(--azul-profundo); }
+  .alerta { padding: 10px 14px; border-radius: 8px; background: #fbf0c9; border: 1px solid #e6c14f; color: #5c4700; font-size: 13px; margin-top: 10px; }
+  .filtros-lista { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; margin-bottom: 12px; }
+  .filtros-lista label { font-size: 12px; color: var(--tinta-suave); display: block; margin-bottom: 3px; }
+  .filtros-lista select, .filtros-lista input { font-family: var(--fuente-cuerpo); font-size: 13px; padding: 6px 8px; border: 1px solid var(--linea); border-radius: 6px; background: var(--superficie); }
+  .botones { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+  .botones .boton-primario, .botones .boton-secundario { max-width: 260px; margin-top: 0; }
+  details.seleccionados summary { cursor: pointer; font-size: 13px; color: var(--azul-profundo); margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <nav class="app-nav">
+    <div class="logo-nav-wrap"><img src="../assets/logo-tweetalig.png" alt="Tweetalig"></div>
+    <h1>Portal de notas</h1>
+    <div id="menu-rol"></div>
+    <a href="#" id="link-salir">Cerrar sesión</a>
+  </nav>
+  <main class="app-contenido">
+    <span class="etiqueta-rol">Exámenes</span>
+    <h2>Simulacros y exámenes finales</h2>
+    <p style="color: var(--tinta-suave); max-width: 680px; margin-top: -8px;">
+      Monta simulacros y programa exámenes finales, presenciales o virtuales. Puedes citar
+      clases completas (por grupo) o escoger estudiantes uno a uno (individual).
+    </p>
+
+    <!-- ===================== LISTA ===================== -->
+    <div class="filtros-lista filtros">
+      <div><label>Tipo</label>
+        <select id="filtro-tipo"><option value="">Todos</option><option value="simulacro">Simulacros</option><option value="final">Finales</option></select></div>
+      <div><label>Modalidad</label>
+        <select id="filtro-modalidad"><option value="">Todas</option><option value="presencial">Presencial</option><option value="virtual">Virtual</option></select></div>
+      <div><label>Estado</label>
+        <select id="filtro-estado"><option value="activos">Programados</option><option value="">Todos</option><option value="realizado">Realizados</option><option value="cancelado">Cancelados</option></select></div>
+      <div><label>Desde</label><input type="date" id="filtro-desde"></div>
+      <div><button id="boton-nuevo" class="boton-primario" style="margin:0; max-width:200px;">+ Nuevo examen</button></div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="tabla-simple">
+        <thead><tr><th>Fecha y hora</th><th>Examen</th><th>Modalidad</th><th>Lugar / enlace</th><th>Citados</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="lista-examenes"><tr><td colspan="7">Cargando...</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- ===================== FORMULARIO ===================== -->
+    <div class="form-tarjeta" id="tarjeta-form" style="display:none;">
+      <h3 id="titulo-form">Nuevo examen</h3>
+
+      <h4>1. Tipo de examen</h4>
+      <div class="opciones-radio">
+        <label><input type="radio" name="tipo" value="simulacro" checked> Simulacro</label>
+        <label><input type="radio" name="tipo" value="final"> Examen final</label>
+      </div>
+
+      <div class="rejilla">
+        <div><label for="titulo">Nombre del examen</label>
+          <input type="text" id="titulo" placeholder="SIMULACRO B1 — CICLO 3"></div>
+        <div><label for="nivel-examen">Nivel evaluado (opcional)</label>
+          <input type="text" id="nivel-examen" placeholder="B1"></div>
+        <div><label for="periodo-examen">Período académico</label>
+          <select id="periodo-examen"></select></div>
+      </div>
+      <div class="rejilla">
+        <div><label for="fecha">Fecha</label><input type="date" id="fecha"></div>
+        <div><label for="hora-inicio">Hora de inicio</label><input type="time" id="hora-inicio"></div>
+        <div><label for="hora-fin">Hora de fin</label><input type="time" id="hora-fin"></div>
+      </div>
+
+      <h4>2. Modalidad</h4>
+      <div class="opciones-radio">
+        <label><input type="radio" name="modalidad" value="presencial" checked> Presencial</label>
+        <label><input type="radio" name="modalidad" value="virtual"> Virtual</label>
+      </div>
+
+      <div id="campos-presencial" class="rejilla">
+        <div><label for="sede-lugar">Sede donde se presenta</label><select id="sede-lugar"></select></div>
+        <div><label for="salon">Salón / aula</label><input type="text" id="salon" placeholder="SALÓN 204"></div>
+        <div><label for="capacidad">Cupo del salón</label><input type="number" id="capacidad" min="1" inputmode="numeric" placeholder="30"></div>
+      </div>
+      <div id="campos-virtual" style="display:none;">
+        <div class="rejilla">
+          <div><label for="plataforma">Plataforma</label>
+            <select id="plataforma">
+              <option>Moodle</option><option>Google Meet</option><option>Zoom</option><option>Microsoft Teams</option><option>Otra</option>
+            </select></div>
+          <div style="grid-column: span 2;"><label for="url-virtual">Enlace del examen</label>
+            <input type="text" id="url-virtual" placeholder="https://..."></div>
+        </div>
+        <label for="instrucciones-virtual">Instrucciones para el estudiante (opcional)</label>
+        <textarea id="instrucciones-virtual" data-no-mayus placeholder="Ej.: Ingresa 10 minutos antes con cámara y micrófono encendidos."></textarea>
+      </div>
+
+      <h4>3. Estudiantes citados</h4>
+      <div class="opciones-radio">
+        <label><input type="radio" name="forma" value="grupo" checked> Por grupo (clases completas)</label>
+        <label><input type="radio" name="forma" value="individual"> Individual (escoger estudiantes)</label>
+      </div>
+      <p class="ayuda" id="ayuda-forma">Marca las clases: se citan todos sus estudiantes activos.</p>
+
+      <div class="filtros-lista filtros" style="margin-top:12px;">
+        <div><label>Sede</label><select id="filtro-sede-clases"></select></div>
+        <div style="flex:1; min-width:200px;"><label>Buscar clase (nivel, grupo, profesor)</label>
+          <input type="text" id="buscar-clase" style="width:100%;" placeholder="Escribe para filtrar..."></div>
+      </div>
+      <div class="lista-clases" id="lista-clases"><div class="fila-clase">Elige un período para ver sus clases.</div></div>
+
+      <div id="bloque-cedula" style="display:none; margin-top:12px;">
+        <label for="buscar-cedula">Añadir estudiante por cédula</label>
+        <div style="display:flex; gap:8px; max-width:420px;">
+          <input type="text" id="buscar-cedula" inputmode="numeric" placeholder="1047...">
+          <button id="boton-cedula" class="boton-secundario" style="margin:0; max-width:120px;">Añadir</button>
+        </div>
+      </div>
+
+      <div class="resumen-seleccion">
+        <span><strong id="total-seleccionados">0</strong> estudiante(s) citados</span>
+        <span id="resumen-clases" class="ayuda" style="margin:0;"></span>
+        <button id="boton-limpiar" class="boton-secundario" style="margin:0; max-width:160px; padding:6px 10px;">Quitar todos</button>
+      </div>
+      <div id="alerta-cupo"></div>
+      <details class="seleccionados">
+        <summary>Ver la lista de citados</summary>
+        <table class="tabla-simple" style="margin-top:8px;">
+          <thead><tr><th>Cédula</th><th>Estudiante</th><th>Clase</th><th>Sede</th><th></th></tr></thead>
+          <tbody id="tabla-seleccionados"></tbody>
+        </table>
+      </details>
+
+      <h4>4. Observaciones (opcional)</h4>
+      <textarea id="observaciones" placeholder="NOTAS INTERNAS PARA COORDINACIÓN"></textarea>
+
+      <div class="botones">
+        <button id="boton-guardar" class="boton-primario">Programar examen</button>
+        <button id="boton-cancelar-form" class="boton-secundario">Cerrar sin guardar</button>
+      </div>
+      <p class="aviso" id="aviso"></p>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+  import { requireAuth, registrarLog } from "../js/auth.js?v=3";
+  import { db } from "../js/firebase-config.js?v=3";
+  import { leerClases, sedesDe } from "../js/clases-lectura.js?v=2";
+  import { descargarTabla } from "../js/exportar.js?v=1";
+  import { may, minus } from "../js/mayusculas.js?v=1";
+  import {
+    collection, doc, addDoc, updateDoc, deleteDoc, getDocs, query, where, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+  const { usuario, rol, perfil } = await requireAuth(["master", "admin", "coordinador_examenes"]);
+  const esGlobal = rol === "master" || rol === "admin";
+  const misSedes = sedesDe(perfil);
+  const miCorreo = usuario.email.toLowerCase();
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const valorRadio = (nombre) => document.querySelector(`input[name="${nombre}"]:checked`)?.value;
+  const ponerRadio = (nombre, v) => { const r = document.querySelector(`input[name="${nombre}"][value="${v}"]`); if (r) r.checked = true; };
+  const hoyISO = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+  const mensaje = (texto, ok = false) => { $("aviso").style.color = ok ? "#2E6E4E" : "var(--error)"; $("aviso").textContent = texto; };
+
+  if (!esGlobal && misSedes.length === 0) {
+    document.querySelector(".app-contenido").innerHTML += "<p style='color:var(--error);'>Tu cuenta no tiene sede asignada. Pide a Master/Admin que te asigne una sede en Accesos y usuarios.</p>";
+    throw new Error("Sin sede");
+  }
+
+  // ---------- Datos base: sedes y períodos ----------
+  const sedes = {};
+  (await getDocs(collection(db, "ciudades"))).forEach((d) => {
+    if (esGlobal || misSedes.includes(d.id)) sedes[d.id] = d.data().nombre || d.id;
+  });
+  const idsSedes = Object.keys(sedes).sort((a, b) => sedes[a].localeCompare(sedes[b], "es"));
+  const opcionesSedes = (todas) => (todas ? `<option value="">Todas mis sedes</option>` : "") +
+    idsSedes.map((id) => `<option value="${id}">${esc(sedes[id])}</option>`).join("");
+  $("sede-lugar").innerHTML = opcionesSedes(false);
+  $("filtro-sede-clases").innerHTML = opcionesSedes(true);
+
+  const periodos = (await getDocs(collection(db, "periodos"))).docs.map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.anio - a.anio) || (b.periodo - a.periodo) || (b.ciclo - a.ciclo));
+  $("periodo-examen").innerHTML = periodos.length
+    ? periodos.map((p) => `<option value="${p.id}">${p.anio}-${p.periodo} / Ciclo ${p.ciclo}${p.activo ? " (activo)" : ""}</option>`).join("")
+    : `<option value="">No hay períodos creados</option>`;
+  const activo = periodos.find((p) => p.activo);
+  if (activo) $("periodo-examen").value = activo.id;
+
+  // ---------- Estado del formulario ----------
+  let editandoId = null;
+  let editandoCreadoPor = null;
+  let clasesDelPeriodo = [];             // [{id, ...clase}]
+  const cacheEstudiantes = new Map();    // claseId -> [estudiante]
+  const seleccionados = new Map();       // cedula -> {cedula, nombre, apellido, correo, claseId, claseTexto, ciudadId, ciudadNombre}
+  const abiertas = new Set();            // clases desplegadas en modo individual
+  let examenes = [];                     // lista cargada
+
+  const textoClase = (c) => `${c.nivel || ""} ${c.grupo || ""}`.trim();
+
+  async function cargarClasesDelPeriodo() {
+    const per = periodos.find((p) => p.id === $("periodo-examen").value);
+    clasesDelPeriodo = [];
+    if (per) {
+      const snap = await leerClases(db, rol, perfil, [
+        where("anio", "==", per.anio), where("periodo", "==", per.periodo), where("ciclo", "==", per.ciclo)
+      ]);
+      snap.forEach((d) => clasesDelPeriodo.push({ id: d.id, ...d.data() }));
+      clasesDelPeriodo.sort((a, b) => (a.nivel || "").localeCompare(b.nivel || "", "es", { numeric: true }) || (a.grupo || "").localeCompare(b.grupo || ""));
+    }
+    pintarClases();
+  }
+
+  async function estudiantesDeClase(clase) {
+    if (cacheEstudiantes.has(clase.id)) return cacheEstudiantes.get(clase.id);
+    // Las reglas exigen que la consulta de coordinación filtre también por su sede.
+    const filtros = [where("claseId", "==", clase.id)];
+    if (!esGlobal) filtros.push(where("ciudadId", "==", clase.ciudadId));
+    const snap = await getDocs(query(collection(db, "estudiantes"), ...filtros));
+    const lista = snap.docs.map((d) => d.data()).filter((e) => e.estado !== "movido")
+      .sort((a, b) => (a.apellido || "").localeCompare(b.apellido || "", "es"));
+    cacheEstudiantes.set(clase.id, lista);
+    return lista;
+  }
+
+  function aCitado(e, clase) {
+    return {
+      cedula: String(e.cedula), nombre: may(e.nombre), apellido: may(e.apellido), correo: minus(e.correo),
+      claseId: clase?.id || e.claseId || "", claseTexto: clase ? textoClase(clase) : (e.claseTexto || ""),
+      ciudadId: e.ciudadId || clase?.ciudadId || "", ciudadNombre: sedes[e.ciudadId] || e.ciudadNombre || clase?.ciudadNombre || ""
+    };
+  }
+
+  // Cuántos estudiantes de una clase están citados (para marcar la casilla de la clase).
+  function citadosDeClase(claseId) {
+    let n = 0;
+    seleccionados.forEach((s) => { if (s.claseId === claseId) n++; });
+    return n;
+  }
+
+  function pintarClases() {
+    const cont = $("lista-clases");
+    const forma = valorRadio("forma");
+    const sedeFiltro = $("filtro-sede-clases").value;
+    const texto = $("buscar-clase").value.trim().toLowerCase();
+    const visibles = clasesDelPeriodo.filter((c) =>
+      (!sedeFiltro || c.ciudadId === sedeFiltro) &&
+      (!texto || `${textoClase(c)} ${c.docenteNombre || ""} ${c.programaNombre || ""}`.toLowerCase().includes(texto)));
+    if (!visibles.length) {
+      cont.innerHTML = `<div class="fila-clase">No hay clases para este período${sedeFiltro || texto ? " con ese filtro" : ""}.</div>`;
+      return;
+    }
+    cont.innerHTML = "";
+    visibles.forEach((c) => {
+      const lista = cacheEstudiantes.get(c.id);
+      const n = citadosDeClase(c.id);
+      const completa = lista && lista.length > 0 && n === lista.length;
+      const fila = document.createElement("div");
+      fila.className = "fila-clase";
+      fila.innerHTML = `
+        <input type="checkbox" ${completa ? "checked" : ""} title="Citar toda la clase">
+        <div><strong>${esc(textoClase(c))}</strong> <span class="meta">· ${esc(c.docenteNombre || "sin profesor")} · ${esc(c.ciudadNombre || sedes[c.ciudadId] || "")} · ${esc(c.programaNombre || "")}</span></div>
+        <div class="derecha">
+          <span class="meta">${n ? `${n}${lista ? "/" + lista.length : ""} citado(s)` : (lista ? `${lista.length} est.` : "")}</span>
+          ${forma === "individual" ? `<button class="boton-secundario" style="margin:0; padding:4px 10px; font-size:12px;">${abiertas.has(c.id) ? "Ocultar" : "Escoger estudiantes"}</button>` : ""}
+        </div>`;
+      const casilla = fila.querySelector("input");
+      const indet = lista && n > 0 && n < lista.length;
+      casilla.indeterminate = !!indet;
+      casilla.addEventListener("change", async () => {
+        casilla.disabled = true;
+        const est = await estudiantesDeClase(c);
+        if (casilla.checked) est.forEach((e) => seleccionados.set(String(e.cedula), aCitado(e, c)));
+        else [...seleccionados.values()].filter((s) => s.claseId === c.id).forEach((s) => seleccionados.delete(s.cedula));
+        actualizarTodo();
+      });
+      fila.querySelector("button")?.addEventListener("click", async () => {
+        if (abiertas.has(c.id)) abiertas.delete(c.id); else { await estudiantesDeClase(c); abiertas.add(c.id); }
+        pintarClases();
+      });
+      cont.appendChild(fila);
+
+      if (forma === "individual" && abiertas.has(c.id) && lista) {
+        const caja = document.createElement("div");
+        caja.className = "estudiantes-de-clase";
+        caja.innerHTML = lista.length ? lista.map((e) => `
+          <label><input type="checkbox" data-cedula="${esc(e.cedula)}" ${seleccionados.has(String(e.cedula)) ? "checked" : ""}>
+            ${esc(may(e.apellido))} ${esc(may(e.nombre))} <span class="meta" style="color:var(--tinta-suave);">· ${esc(e.cedula)}</span></label>`).join("")
+          : `<span class="meta">Esta clase no tiene estudiantes activos.</span>`;
+        caja.querySelectorAll("input[data-cedula]").forEach((inp) => inp.addEventListener("change", () => {
+          const e = lista.find((x) => String(x.cedula) === inp.dataset.cedula);
+          if (inp.checked) seleccionados.set(String(e.cedula), aCitado(e, c)); else seleccionados.delete(String(e.cedula));
+          actualizarTodo();
+        }));
+        cont.appendChild(caja);
+      }
+    });
+  }
+
+  function pintarSeleccionados() {
+    $("total-seleccionados").textContent = seleccionados.size;
+    const clases = new Set([...seleccionados.values()].map((s) => s.claseTexto || s.claseId));
+    $("resumen-clases").textContent = seleccionados.size ? `de ${clases.size} clase(s)` : "";
+    const filas = [...seleccionados.values()].sort((a, b) => a.apellido.localeCompare(b.apellido, "es"));
+    $("tabla-seleccionados").innerHTML = filas.length ? filas.map((s) => `
+      <tr><td>${esc(s.cedula)}</td><td>${esc(s.apellido)} ${esc(s.nombre)}</td><td>${esc(s.claseTexto)}</td><td>${esc(s.ciudadNombre)}</td>
+      <td><button class="link peligro" data-quitar="${esc(s.cedula)}" style="background:none;border:none;cursor:pointer;color:var(--error);text-decoration:underline;">Quitar</button></td></tr>`).join("")
+      : `<tr><td colspan="5">Todavía no hay estudiantes citados.</td></tr>`;
+    $("tabla-seleccionados").querySelectorAll("[data-quitar]").forEach((b) => b.addEventListener("click", () => {
+      seleccionados.delete(b.dataset.quitar); actualizarTodo();
+    }));
+    const cupo = Number($("capacidad").value);
+    $("alerta-cupo").innerHTML = (valorRadio("modalidad") === "presencial" && cupo && seleccionados.size > cupo)
+      ? `<div class="alerta">⚠ Hay ${seleccionados.size} citados y el salón tiene cupo para ${cupo}. Considera dividir en dos sesiones o cambiar de salón.</div>` : "";
+  }
+
+  function actualizarTodo() { pintarSeleccionados(); pintarClases(); }
+
+  function actualizarModalidad() {
+    const presencial = valorRadio("modalidad") === "presencial";
+    $("campos-presencial").style.display = presencial ? "grid" : "none";
+    $("campos-virtual").style.display = presencial ? "none" : "block";
+    pintarSeleccionados();
+  }
+  function actualizarForma() {
+    const individual = valorRadio("forma") === "individual";
+    $("ayuda-forma").textContent = individual
+      ? "Abre una clase con “Escoger estudiantes” y marca a quiénes citar, o añádelos por cédula."
+      : "Marca las clases: se citan todos sus estudiantes activos.";
+    $("bloque-cedula").style.display = individual ? "block" : "none";
+    pintarClases();
+  }
+  document.querySelectorAll('input[name="modalidad"]').forEach((r) => r.addEventListener("change", actualizarModalidad));
+  document.querySelectorAll('input[name="forma"]').forEach((r) => r.addEventListener("change", actualizarForma));
+  $("periodo-examen").addEventListener("change", cargarClasesDelPeriodo);
+  $("filtro-sede-clases").addEventListener("change", pintarClases);
+  $("buscar-clase").addEventListener("input", pintarClases);
+  $("capacidad").addEventListener("input", pintarSeleccionados);
+  $("boton-limpiar").addEventListener("click", () => { seleccionados.clear(); actualizarTodo(); });
+
+  // Añadir por cédula (busca su matrícula activa en mis sedes).
+  $("boton-cedula").addEventListener("click", async () => {
+    const cedula = $("buscar-cedula").value.trim();
+    if (!cedula) return;
+    const filtros = [where("cedula", "==", cedula)];
+    if (!esGlobal) filtros.push(where("ciudadId", "in", misSedes.slice(0, 10)));
+    let docs = (await getDocs(query(collection(db, "estudiantes"), ...filtros))).docs.map((d) => d.data());
+    if (!docs.length && /^\d+$/.test(cedula)) { // por si la cédula quedó guardada como número
+      const f2 = [where("cedula", "==", Number(cedula))];
+      if (!esGlobal) f2.push(where("ciudadId", "in", misSedes.slice(0, 10)));
+      docs = (await getDocs(query(collection(db, "estudiantes"), ...f2))).docs.map((d) => d.data());
+    }
+    const activos = docs.filter((e) => e.estado !== "movido");
+    const e = activos.find((x) => clasesDelPeriodo.some((c) => c.id === x.claseId)) || activos[0];
+    if (!e) { mensaje(`No encontré un estudiante activo con cédula ${cedula} en tus sedes.`); return; }
+    const clase = clasesDelPeriodo.find((c) => c.id === e.claseId);
+    seleccionados.set(String(e.cedula), aCitado(e, clase));
+    $("buscar-cedula").value = "";
+    mensaje(`${may(e.apellido)} ${may(e.nombre)} añadido.`, true);
+    actualizarTodo();
+  });
+
+  // ---------- Abrir / cerrar formulario ----------
+  function limpiarFormulario() {
+    editandoId = null; editandoCreadoPor = null;
+    ponerRadio("tipo", "simulacro"); ponerRadio("modalidad", "presencial"); ponerRadio("forma", "grupo");
+    ["titulo", "nivel-examen", "fecha", "hora-inicio", "hora-fin", "salon", "capacidad", "url-virtual", "instrucciones-virtual", "observaciones", "buscar-cedula", "buscar-clase"]
+      .forEach((id) => ($(id).value = ""));
+    if (activo) $("periodo-examen").value = activo.id;
+    seleccionados.clear(); abiertas.clear();
+    $("aviso").textContent = "";
+    $("titulo-form").textContent = "Nuevo examen";
+    $("boton-guardar").textContent = "Programar examen";
+  }
+
+  async function abrirFormulario(examen = null) {
+    limpiarFormulario();
+    if (examen) {
+      editandoId = examen.id; editandoCreadoPor = examen.creadoPor;
+      ponerRadio("tipo", examen.tipo); ponerRadio("modalidad", examen.modalidad); ponerRadio("forma", examen.forma || "grupo");
+      $("titulo").value = examen.titulo || "";
+      $("nivel-examen").value = examen.nivel || "";
+      if (examen.periodoId) $("periodo-examen").value = examen.periodoId;
+      $("fecha").value = examen.fecha || ""; $("hora-inicio").value = examen.horaInicio || ""; $("hora-fin").value = examen.horaFin || "";
+      if (examen.sedeLugarId) $("sede-lugar").value = examen.sedeLugarId;
+      $("salon").value = examen.salon || ""; $("capacidad").value = examen.capacidad || "";
+      if (examen.plataforma) $("plataforma").value = examen.plataforma;
+      $("url-virtual").value = examen.urlVirtual || ""; $("instrucciones-virtual").value = examen.instrucciones || "";
+      $("observaciones").value = examen.observaciones || "";
+      (examen.estudiantes || []).forEach((s) => seleccionados.set(String(s.cedula), s));
+      $("titulo-form").textContent = "Editar examen";
+      $("boton-guardar").textContent = "Guardar cambios";
+    }
+    $("tarjeta-form").style.display = "block";
+    actualizarModalidad(); actualizarForma();
+    await cargarClasesDelPeriodo();
+    pintarSeleccionados();
+    $("tarjeta-form").scrollIntoView({ behavior: "smooth" });
+  }
+  $("boton-nuevo").addEventListener("click", () => abrirFormulario());
+  $("boton-cancelar-form").addEventListener("click", () => { limpiarFormulario(); $("tarjeta-form").style.display = "none"; });
+
+  // ---------- Guardar ----------
+  const seCruzan = (a, b) => a.fecha === b.fecha && a.horaInicio < b.horaFin && b.horaInicio < a.horaFin;
+
+  $("boton-guardar").addEventListener("click", async () => {
+    const tipo = valorRadio("tipo");
+    const modalidad = valorRadio("modalidad");
+    const forma = valorRadio("forma");
+    const titulo = may($("titulo").value);
+    const fecha = $("fecha").value, horaInicio = $("hora-inicio").value, horaFin = $("hora-fin").value;
+
+    if (!titulo) return mensaje("Escribe el nombre del examen.");
+    if (!fecha || !horaInicio || !horaFin) return mensaje("Completa la fecha, la hora de inicio y la hora de fin.");
+    if (horaFin <= horaInicio) return mensaje("La hora de fin debe ser después de la hora de inicio.");
+    if (!seleccionados.size) return mensaje("Cita al menos un estudiante.");
+    if (modalidad === "presencial" && !$("sede-lugar").value) return mensaje("Elige la sede donde se presenta.");
+    if (modalidad === "presencial" && !may($("salon").value)) return mensaje("Escribe el salón o aula.");
+    const url = $("url-virtual").value.trim();
+    if (modalidad === "virtual" && !/^https?:\/\//i.test(url)) return mensaje("Pega el enlace del examen virtual (debe empezar por https://).");
+
+    const estudiantes = [...seleccionados.values()];
+    const ciudadIds = [...new Set(estudiantes.map((s) => s.ciudadId).concat(modalidad === "presencial" ? [$("sede-lugar").value] : []).filter(Boolean))];
+    if (!esGlobal && ciudadIds.some((id) => !misSedes.includes(id))) return mensaje("Hay estudiantes de una sede que no es tuya. Quítalos para poder guardar.");
+
+    // Choques: estudiantes citados a otro examen que se cruza en fecha y hora.
+    const nuevo = { fecha, horaInicio, horaFin };
+    const cedulas = new Set(estudiantes.map((s) => s.cedula));
+    const choques = [];
+    examenes.filter((x) => x.id !== editandoId && x.estado !== "cancelado" && seCruzan(nuevo, x)).forEach((x) => {
+      const n = (x.cedulas || []).filter((c) => cedulas.has(String(c))).length;
+      if (n) choques.push(`• ${x.titulo} (${x.horaInicio}-${x.horaFin}): ${n} estudiante(s)`);
+    });
+    if (choques.length && !confirm(`Algunos estudiantes ya están citados a otro examen a esa hora:\n\n${choques.join("\n")}\n\n¿Guardar de todos modos?`)) return;
+    const cupo = Number($("capacidad").value) || null;
+    if (modalidad === "presencial" && cupo && estudiantes.length > cupo &&
+        !confirm(`Hay ${estudiantes.length} citados y el cupo del salón es ${cupo}. ¿Guardar de todos modos?`)) return;
+
+    const per = periodos.find((p) => p.id === $("periodo-examen").value);
+    const datos = {
+      tipo, modalidad, forma, titulo,
+      nivel: may($("nivel-examen").value),
+      periodoId: per?.id || "", anio: per?.anio ?? null, periodo: per?.periodo ?? null, ciclo: per?.ciclo ?? null,
+      fecha, horaInicio, horaFin,
+      sedeLugarId: modalidad === "presencial" ? $("sede-lugar").value : "",
+      sedeLugarNombre: modalidad === "presencial" ? sedes[$("sede-lugar").value] : "",
+      salon: modalidad === "presencial" ? may($("salon").value) : "",
+      capacidad: modalidad === "presencial" ? cupo : null,
+      plataforma: modalidad === "virtual" ? $("plataforma").value : "",
+      urlVirtual: modalidad === "virtual" ? url : "",
+      instrucciones: modalidad === "virtual" ? $("instrucciones-virtual").value.trim() : "",
+      observaciones: may($("observaciones").value),
+      estudiantes,
+      cedulas: estudiantes.map((s) => s.cedula),
+      claseIds: [...new Set(estudiantes.map((s) => s.claseId).filter(Boolean))],
+      totalCitados: estudiantes.length,
+      ciudadIds,
+      ciudadNombres: ciudadIds.map((id) => sedes[id] || id),
+      actualizadoPor: miCorreo,
+      actualizadoEn: serverTimestamp()
+    };
+
+    $("boton-guardar").disabled = true;
+    try {
+      if (editandoId) {
+        await updateDoc(doc(db, "examenes", editandoId), { ...datos, creadoPor: editandoCreadoPor });
+        await registrarLog(usuario, rol, "Editó examen", `${titulo} — ${fecha} ${horaInicio}`);
+        mensaje("Cambios guardados.", true);
+      } else {
+        await addDoc(collection(db, "examenes"), { ...datos, estado: "programado", creadoPor: miCorreo, creadoEn: serverTimestamp() });
+        await registrarLog(usuario, rol, "Programó examen", `${tipo === "final" ? "Final" : "Simulacro"} ${modalidad} — ${titulo} — ${fecha} ${horaInicio} — ${estudiantes.length} citados`);
+        mensaje(`Examen programado con ${estudiantes.length} estudiante(s).`, true);
+      }
+      await cargarExamenes();
+      setTimeout(() => { limpiarFormulario(); $("tarjeta-form").style.display = "none"; }, 900);
+    } catch (e) {
+      console.error(e);
+      mensaje("No se pudo guardar: " + (e.code === "permission-denied" ? "no tienes permiso para esta sede." : e.message));
+    } finally {
+      $("boton-guardar").disabled = false;
+    }
+  });
+
+  // ---------- Lista de exámenes ----------
+  async function cargarExamenes() {
+    const base = collection(db, "examenes");
+    const snap = esGlobal ? await getDocs(base)
+      : await getDocs(query(base, where("ciudadIds", "array-contains-any", misSedes.slice(0, 10))));
+    examenes = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => `${a.fecha} ${a.horaInicio}`.localeCompare(`${b.fecha} ${b.horaInicio}`));
+    pintarExamenes();
+  }
+
+  function pintarExamenes() {
+    const t = $("filtro-tipo").value, m = $("filtro-modalidad").value, e = $("filtro-estado").value, desde = $("filtro-desde").value;
+    const lista = examenes.filter((x) =>
+      (!t || x.tipo === t) && (!m || x.modalidad === m) &&
+      (e === "" || (e === "activos" ? x.estado === "programado" : x.estado === e)) &&
+      (!desde || x.fecha >= desde));
+    const cuerpo = $("lista-examenes");
+    if (!lista.length) { cuerpo.innerHTML = `<tr><td colspan="7">No hay exámenes con estos filtros.</td></tr>`; return; }
+    cuerpo.innerHTML = lista.map((x) => {
+      const lugar = x.modalidad === "presencial"
+        ? `${esc(x.sedeLugarNombre)} · ${esc(x.salon)}${x.capacidad ? ` <span class="ayuda">(cupo ${x.capacidad})</span>` : ""}`
+        : `${esc(x.plataforma)} · <a href="${esc(x.urlVirtual)}" target="_blank" rel="noopener">abrir enlace</a>`;
+      const estado = x.estado === "programado" ? (x.fecha < hoyISO() ? "Pendiente de cerrar" : "Programado") : (x.estado === "realizado" ? "Realizado" : "Cancelado");
+      return `<tr>
+        <td><strong>${esc(x.fecha)}</strong><br><span class="ayuda">${esc(x.horaInicio)} – ${esc(x.horaFin)}</span></td>
+        <td><span class="chip chip-${x.tipo}">${x.tipo === "final" ? "Final" : "Simulacro"}</span><br>${esc(x.titulo)}${x.nivel ? ` <span class="ayuda">· ${esc(x.nivel)}</span>` : ""}</td>
+        <td><span class="chip chip-${x.modalidad}">${x.modalidad === "presencial" ? "Presencial" : "Virtual"}</span><br><span class="ayuda">${x.forma === "individual" ? "Individual" : "Por grupo"}</span></td>
+        <td>${lugar}</td>
+        <td>${x.totalCitados ?? (x.estudiantes || []).length}<br><span class="ayuda">${esc((x.ciudadNombres || []).join(", "))}</span></td>
+        <td>${x.estado === "programado" ? esc(estado) : `<span class="chip chip-${x.estado}">${estado}</span>`}</td>
+        <td style="white-space:nowrap;">
+          <button class="link" data-acc="editar" data-id="${x.id}">Editar</button>
+          <button class="link" data-acc="lista" data-id="${x.id}">Lista</button><br>
+          ${x.estado === "programado" ? `<button class="link" data-acc="realizado" data-id="${x.id}">Marcar realizado</button>
+          <button class="link peligro" data-acc="cancelar" data-id="${x.id}">Cancelar</button>` :
+          `<button class="link" data-acc="reactivar" data-id="${x.id}">Reactivar</button>`}
+          <button class="link peligro" data-acc="borrar" data-id="${x.id}">Borrar</button>
+        </td></tr>`;
+    }).join("");
+    cuerpo.querySelectorAll("button[data-acc]").forEach((b) => b.addEventListener("click", () => accion(b.dataset.acc, examenes.find((x) => x.id === b.dataset.id))));
+  }
+
+  async function cambiarEstado(x, estado, textoLog) {
+    await updateDoc(doc(db, "examenes", x.id), { estado, actualizadoPor: miCorreo, actualizadoEn: serverTimestamp() });
+    await registrarLog(usuario, rol, textoLog, `${x.titulo} — ${x.fecha}`);
+    await cargarExamenes();
+  }
+
+  async function accion(acc, x) {
+    if (!x) return;
+    try {
+      if (acc === "editar") return abrirFormulario(x);
+      if (acc === "lista") {
+        const presencial = x.modalidad === "presencial";
+        const encabezado = ["Cédula", "Apellidos", "Nombres", "Correo", "Clase", "Sede"].concat(presencial ? ["Firma / asistencia"] : []);
+        const filas = [...(x.estudiantes || [])].sort((a, b) => a.apellido.localeCompare(b.apellido, "es"))
+          .map((s) => [{ texto: s.cedula }, s.apellido, s.nombre, s.correo, s.claseTexto, s.ciudadNombre].concat(presencial ? [""] : []));
+        const info = [[`${x.tipo === "final" ? "EXAMEN FINAL" : "SIMULACRO"} — ${x.titulo}`],
+          [`${x.fecha} · ${x.horaInicio}-${x.horaFin} · ${presencial ? `${x.sedeLugarNombre} · ${x.salon}` : `${x.plataforma} · ${x.urlVirtual}`}`], []];
+        const nombre = `${x.tipo}_${x.fecha}_${x.titulo}`.replace(/[^\w\-]+/g, "_").slice(0, 80);
+        return descargarTabla([...info, encabezado, ...filas], nombre, "xlsx", "Citados");
+      }
+      if (acc === "realizado") return cambiarEstado(x, "realizado", "Marcó examen como realizado");
+      if (acc === "reactivar") return cambiarEstado(x, "programado", "Reactivó examen");
+      if (acc === "cancelar" && confirm(`¿Cancelar "${x.titulo}" del ${x.fecha}? Queda en el historial como cancelado.`))
+        return cambiarEstado(x, "cancelado", "Canceló examen");
+      if (acc === "borrar" && confirm(`¿BORRAR definitivamente "${x.titulo}"? Esto no se puede deshacer. (Si solo no se va a hacer, mejor usa "Cancelar").`)) {
+        await deleteDoc(doc(db, "examenes", x.id));
+        await registrarLog(usuario, rol, "Borró examen", `${x.titulo} — ${x.fecha}`);
+        await cargarExamenes();
+      }
+    } catch (e) {
+      console.error(e);
+      alert("No se pudo completar la acción: " + (e.code === "permission-denied" ? "no tienes permiso para este examen." : e.message));
+    }
+  }
+
+  ["filtro-tipo", "filtro-modalidad", "filtro-estado", "filtro-desde"].forEach((id) => $(id).addEventListener("change", pintarExamenes));
+  $("filtro-desde").value = hoyISO();
+
+  await cargarExamenes();
+</script>
+</body>
+</html>

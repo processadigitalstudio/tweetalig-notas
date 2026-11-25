@@ -67,6 +67,7 @@ const MENU_POR_ROL = {
     ["Alertas de inasistencia", "alertas-asistencia.html"],
     ["Control de horas docentes", "horas-docentes.html"],
     ["Fotos de estudiantes", "fotos.html"],
+    ["Exámenes (simulacros y finales)", "examenes.html"],
     ["Accesos y usuarios", "usuarios.html"],
     ["Log de cambios", "logs.html"]
   ],
@@ -85,6 +86,7 @@ const MENU_POR_ROL = {
     ["Habilitación", "habilitacion.html"],
     ["Alertas de inasistencia", "alertas-asistencia.html"],
     ["Control de horas docentes", "horas-docentes.html"],
+    ["Exámenes (simulacros y finales)", "examenes.html"],
     ["Accesos y usuarios", "usuarios.html"]
   ],
   coordinador: [
@@ -115,6 +117,11 @@ const MENU_POR_ROL = {
     ["Alertas de inasistencia", "alertas-asistencia.html"],
     ["Control de horas docentes", "horas-docentes.html"],
     ["Accesos y usuarios", "usuarios.html"]
+  ],
+  // Coordinador de exámenes: monta simulacros y programa exámenes finales
+  // (presenciales o virtuales) para los estudiantes de SU(S) sede(s).
+  coordinador_examenes: [
+    ["Exámenes (simulacros y finales)", "examenes.html"]
   ],
   profesor: [
     ["Notas", "notas.html"],

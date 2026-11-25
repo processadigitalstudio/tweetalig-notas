@@ -46,6 +46,7 @@
     admin: "Admin",
     coordinador: "Coordinador académico",
     secretaria: "Secretaria académica",
+    coordinador_examenes: "Coordinador de exámenes",
     profesor: "Profesor"
   };
 
@@ -129,6 +130,31 @@
       }));
 
       bloques.forEach((bloque) => contenedor.appendChild(bloque));
+    }
+  } else if (rol === "coordinador_examenes") {
+    // Próximos exámenes de sus sedes (los 10 más cercanos).
+    const contenedor = document.getElementById("contenedor-periodos");
+    const sedesEx = perfil?.ciudadIds || (perfil?.ciudadId ? [perfil.ciudadId] : []);
+    if (!sedesEx.length) {
+      contenedor.innerHTML = "<p style='color: var(--error); margin-top: 24px;'>Tu cuenta no tiene sede asignada. Pide a Master/Admin que te asigne una.</p>";
+    } else {
+      const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      const hoy = d.toISOString().slice(0, 10);
+      const snapEx = await getDocs(query(collection(db, "examenes"), where("ciudadIds", "array-contains-any", sedesEx.slice(0, 10))));
+      const proximos = snapEx.docs.map((x) => x.data())
+        .filter((x) => x.estado === "programado" && x.fecha >= hoy)
+        .sort((a, b) => `${a.fecha} ${a.horaInicio}`.localeCompare(`${b.fecha} ${b.horaInicio}`)).slice(0, 10);
+      const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      contenedor.innerHTML = `<div class="bloque-periodo"><h3>Próximos exámenes</h3>
+        <p class="rango">${proximos.length ? `${proximos.length} programado(s)` : "No hay exámenes programados."} · <a href="examenes.html">Ir a Exámenes</a></p></div>`;
+      if (proximos.length) {
+        const tabla = document.createElement("table");
+        tabla.className = "tabla-simple";
+        tabla.innerHTML = `<thead><tr><th>Fecha</th><th>Hora</th><th>Tipo</th><th>Examen</th><th>Modalidad</th><th>Citados</th></tr></thead><tbody>${
+          proximos.map((x) => `<tr><td>${esc(x.fecha)}</td><td>${esc(x.horaInicio)}–${esc(x.horaFin)}</td><td>${x.tipo === "final" ? "Final" : "Simulacro"}</td><td>${esc(x.titulo)}</td><td>${x.modalidad === "presencial" ? `Presencial · ${esc(x.salon)}` : `Virtual · ${esc(x.plataforma)}`}</td><td>${x.totalCitados ?? 0}</td></tr>`).join("")
+        }</tbody>`;
+        contenedor.appendChild(tabla);
+      }
     }
   } else if (rol === "profesor") {
     const contenedor = document.getElementById("contenedor-periodos");

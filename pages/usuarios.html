@@ -33,7 +33,7 @@
   </nav>
   <main class="app-contenido">
     <span class="etiqueta-rol">Accesos y usuarios</span>
-    <h2>Coordinadores y secretarias</h2>
+    <h2>Coordinadores, secretarias y coordinadores de exámenes</h2>
     <p style="color: var(--tinta-suave); max-width: 560px; margin-top: -8px;">
       Registra a cada coordinadora o secretaria con su correo institucional y su sede.
       En cuanto inicien sesión con Google por primera vez, el sistema ya las reconoce
@@ -58,6 +58,7 @@
       <select id="rol">
         <option value="coordinador">Coordinador académico</option>
         <option value="secretaria">Secretaria académica</option>
+        <option value="coordinador_examenes">Coordinador de exámenes</option>
         <option value="admin">Admin</option>
       </select>
 
@@ -103,17 +104,17 @@
   const { usuario, rol: miRol, perfil } = await requireAuth(["master", "admin", "coordinador", "secretaria"]);
   const esCoordinacion = (miRol === "coordinador" || miRol === "secretaria");
 
-  const NOMBRE_ROL = { coordinador: "Coordinador académico", secretaria: "Secretaria académica", admin: "Admin", master: "Master" };
-  const CLASE_ROL = { coordinador: "rol-coordinador", secretaria: "rol-secretaria", admin: "rol-secretaria", master: "rol-secretaria" };
+  const NOMBRE_ROL = { coordinador: "Coordinador académico", secretaria: "Secretaria académica", coordinador_examenes: "Coordinador de exámenes", admin: "Admin", master: "Master" };
+  const CLASE_ROL = { coordinador: "rol-coordinador", secretaria: "rol-secretaria", coordinador_examenes: "rol-coordinador", admin: "rol-secretaria", master: "rol-secretaria" };
 
   const selectRol = document.getElementById("rol");
   const campoCargo = document.getElementById("campo-cargo");
   const campoSede = document.getElementById("campo-sede");
 
   if (esCoordinacion) {
-    // Coordinación no puede crear cuentas Admin, y su sede queda fija (la suya).
-    const opcionAdmin = [...selectRol.options].find((o) => o.value === "admin");
-    if (opcionAdmin) opcionAdmin.remove();
+    // Coordinación no puede crear cuentas Admin ni Coordinador de exámenes
+    // (esas las registra Master/Admin), y su sede queda fija (la suya).
+    [...selectRol.options].filter((o) => o.value === "admin" || o.value === "coordinador_examenes").forEach((o) => o.remove());
   }
 
   function actualizarCamposSegunRol() {
@@ -187,7 +188,7 @@
         if (!vistos.has(d.id)) { vistos.add(d.id); documentos.push(d); }
       });
     } else {
-      const snap = await getDocs(query(collection(db, "usuarios"), where("rol", "in", ["coordinador", "secretaria", "admin", "master"])));
+      const snap = await getDocs(query(collection(db, "usuarios"), where("rol", "in", ["coordinador", "secretaria", "coordinador_examenes", "admin", "master"])));
       documentos = snap.docs;
     }
 
@@ -201,7 +202,7 @@
       let cargoOSede = (u.rol === "admin" || u.rol === "master")
         ? (u.cargo || (u.rol === "master" ? "Master" : "Admin"))
         : (u.ciudadNombres ? u.ciudadNombres.join(", ") : (u.ciudadNombre || "—"));
-      if ((u.rol === "coordinador" || u.rol === "secretaria") && sedesIdsUsuario.length === 0) {
+      if (["coordinador", "secretaria", "coordinador_examenes"].includes(u.rol) && sedesIdsUsuario.length === 0) {
         cargoOSede += ' <span style="color:var(--error); font-weight:600;">⚠ sin sede asignada: no verá clases ni estudiantes. Quítale el acceso y créalo de nuevo con su sede.</span>';
       }
       let botonAccion = u.rol === "master"
