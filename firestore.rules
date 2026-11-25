@@ -8,6 +8,9 @@ rules_version = '2';
 // - admin: control total igual que master (ej. Dirección Académica, Registro y
 //   Control), pero SÍ se puede quitar desde el panel de Accesos.
 // - coordinador / secretaria: gestionan profesores, clases y estudiantes de su sede.
+// - coordinador_examenes: LEE clases y estudiantes de su(s) sede(s) y gestiona
+//   la colección "examenes" (simulacros y finales) de su(s) sede(s). No edita
+//   clases, estudiantes, notas ni asistencia.
 // - profesor: solo sus propias clases.
 
 service cloud.firestore {
@@ -118,7 +121,8 @@ service cloud.firestore {
         esAdminOMaster() ||
         (miRol() == 'profesor' && resource.data.docenteCorreo == miCorreo()) ||
         (miRol() in ['coordinador', 'secretaria'] &&
-          (resource.data.ciudadId in misSedes() || resource.data.get('esDistancia', false) == true))
+          (resource.data.ciudadId in misSedes() || resource.data.get('esDistancia', false) == true)) ||
+        (miRol() == 'coordinador_examenes' && resource.data.ciudadId in misSedes())
       );
       allow create: if esGestor();
       // Editar/borrar una clase: bloqueado si su período ya está cerrado
@@ -175,7 +179,7 @@ service cloud.firestore {
 
       allow read: if estaLogueado() && (
         esAdminOMaster() ||
-        (miRol() in ['coordinador', 'secretaria'] && resource.data.ciudadId in misSedes()) ||
+        (miRol() in ['coordinador', 'secretaria', 'coordinador_examenes'] && resource.data.ciudadId in misSedes()) ||
         (miRol() == 'profesor' && claseDeMatricula(resource.data.claseId).docenteCorreo == miCorreo())
       );
 
@@ -255,6 +259,40 @@ service cloud.firestore {
          (resource.data.ciudadId in misSedes() || resource.data.ciudadOrigenId in misSedes()))
       );
       allow delete: if false;
+    }
+
+    // Colección "examenes": simulacros y exámenes finales, presenciales o virtuales.
+    // Cada examen guarda la lista de estudiantes citados y las sedes que abarca
+    // (campo "ciudadIds"). Lo gestionan Master/Admin y el Coordinador de exámenes
+    // de esas sedes; coordinación/secretaría de la sede solo lo consultan.
+    match /examenes/{id} {
+      function sedesValidas(datos) {
+        return datos.ciudadIds is list && datos.ciudadIds.size() > 0 &&
+               datos.ciudadIds.hasOnly(misSedes());
+      }
+      allow read: if estaLogueado() && (
+        esAdminOMaster() ||
+        (miRol() in ['coordinador_examenes', 'coordinador', 'secretaria'] &&
+         resource.data.ciudadIds.hasAny(misSedes()))
+      );
+      allow create: if estaLogueado() &&
+        request.resource.data.tipo in ['simulacro', 'final'] &&
+        request.resource.data.modalidad in ['presencial', 'virtual'] &&
+        request.resource.data.creadoPor == miCorreo() && (
+          esAdminOMaster() ||
+          (miRol() == 'coordinador_examenes' && sedesValidas(request.resource.data))
+        );
+      allow update: if estaLogueado() &&
+        request.resource.data.tipo in ['simulacro', 'final'] &&
+        request.resource.data.modalidad in ['presencial', 'virtual'] &&
+        request.resource.data.creadoPor == resource.data.creadoPor && (
+          esAdminOMaster() ||
+          (miRol() == 'coordinador_examenes' && sedesValidas(resource.data) && sedesValidas(request.resource.data))
+        );
+      allow delete: if estaLogueado() && (
+        esAdminOMaster() ||
+        (miRol() == 'coordinador_examenes' && sedesValidas(resource.data))
+      );
     }
 
     // Colección "logs": historial de auditoría, inmutable. Solo admin/master lo leen.
