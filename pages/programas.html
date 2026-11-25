@@ -161,6 +161,7 @@
   let sedes = [];
   let idEnEdicion = null;
   let contadorCorte = 0;
+  let programasExistentes = [];
 
   async function cargarSedes() {
     const snap = await getDocs(collection(db, "ciudades"));
@@ -325,18 +326,21 @@
     return null;
   }
 
-  async function cargarPrograma(id) {
+  async function cargarPrograma(id, duplicar = false) {
     const snap = await getDoc(doc(db, "programas", id));
     if (!snap.exists()) return;
     const datos = snap.data();
 
-    idEnEdicion = id;
-    document.getElementById("titulo-form").textContent = `Editando: ${datos.nombre}`;
+    idEnEdicion = duplicar ? null : id;
+    document.getElementById("titulo-form").textContent = duplicar
+      ? `Duplicando: ${datos.nombre} — cambia el período o el nombre y pulsa "Guardar programa"`
+      : `Editando: ${datos.nombre}`;
     document.getElementById("nombre-programa").value = datos.nombre;
     document.getElementById("anio-programa").value = datos.anio || new Date().getFullYear();
     document.getElementById("periodo-programa").value = datos.periodo || 1;
     document.getElementById("ciclo-programa").value = datos.ciclo || 1;
     document.getElementById("boton-cancelar-edicion").style.display = "inline-block";
+    document.getElementById("boton-cancelar-edicion").textContent = duplicar ? "Cancelar copia" : "Cancelar edición";
 
     document.querySelectorAll("#sedes-check input").forEach((i) => {
       i.checked = (datos.sedes || []).includes(i.value);
@@ -364,6 +368,7 @@
     document.getElementById("pct-alerta2").value = 8;
     document.getElementById("pct-perdida").value = 10;
     document.getElementById("boton-cancelar-edicion").style.display = "none";
+    document.getElementById("boton-cancelar-edicion").textContent = "Cancelar edición";
     crearBloqueCorte();
     actualizarSumaCortes();
   }
@@ -374,6 +379,7 @@
     const cuerpo = document.getElementById("lista-programas");
     cuerpo.innerHTML = "";
     const snap = await getDocs(collection(db, "programas"));
+    programasExistentes = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     snap.forEach((d) => {
       const p = d.data();
       const nombresSedes = (p.sedes || []).length
@@ -387,12 +393,14 @@
         <td>${nombresSedes}</td>
         <td>
           <button class="btn-editar" data-id="${d.id}">Editar</button>
+          <button class="btn-duplicar" data-id="${d.id}">Duplicar</button>
           <button class="btn-borrar" data-id="${d.id}">Borrar</button>
         </td>`;
       cuerpo.appendChild(fila);
     });
 
     cuerpo.querySelectorAll(".btn-editar").forEach((b) => b.addEventListener("click", () => cargarPrograma(b.dataset.id)));
+    cuerpo.querySelectorAll(".btn-duplicar").forEach((b) => b.addEventListener("click", () => cargarPrograma(b.dataset.id, true)));
     cuerpo.querySelectorAll(".btn-borrar").forEach((b) => b.addEventListener("click", async () => {
       if (confirm("¿Borrar este programa? Las clases que lo usen quedarán sin esquema de notas asignado.")) {
         await deleteDoc(doc(db, "programas", b.dataset.id));
@@ -417,6 +425,9 @@
       await setDoc(doc(db, "programas", idEnEdicion), datos);
       await registrarLog(usuario, rol, "Editó programa", datos.nombre);
     } else {
+      const igual = programasExistentes.find((p) => (p.nombre || "").trim().toLowerCase() === datos.nombre.toLowerCase() &&
+        p.anio === datos.anio && p.periodo === datos.periodo && p.ciclo === datos.ciclo);
+      if (igual && !confirm(`Ya existe "${datos.nombre}" en ${datos.anio}-${datos.periodo} / Ciclo ${datos.ciclo}. ¿Crear otro igual de todos modos?\n\n(Si querías la copia para otro período, cancela y cambia el año, periodo o ciclo.)`)) return;
       await addDoc(collection(db, "programas"), datos);
       await registrarLog(usuario, rol, "Creó programa", datos.nombre);
     }
