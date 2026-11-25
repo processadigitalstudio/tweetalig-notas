@@ -16,6 +16,7 @@
   h1 { font-size: 19px; margin: 0 0 4px; }
   .sub { color: var(--suave); font-size: 13px; margin: 0 0 18px; line-height: 1.45; }
   label { display: block; font-size: 13px; font-weight: 600; margin: 16px 0 6px; }
+  .campo-doc { width: 100%; font: inherit; font-size: 16px; padding: 11px; border: 1px solid var(--linea); border-radius: 8px; background: var(--fondo); color: var(--azul); letter-spacing: .04em; }
   select { width: 100%; font: inherit; font-size: 15px; padding: 11px; border: 1px solid var(--linea); border-radius: 8px; background: var(--fondo); color: var(--azul); }
   .boton-foto { display: block; width: 100%; text-align: center; font-weight: 600; font-size: 15px; color: var(--azul); border: 1.5px dashed var(--azul); border-radius: 10px; padding: 16px; cursor: pointer; background: #fff; }
   input[type=file] { display: none; }
@@ -118,11 +119,16 @@
       <input type="file" id="archivo" accept="image/jpeg,image/png,.jpg,.jpeg,.png">
       <div class="vista" id="vista"><img id="img-vista" alt="Vista previa"></div>
 
+      <label for="documento">3. Escribe tu número de documento</label>
+      <input type="text" id="documento" class="campo-doc" inputmode="numeric" autocomplete="off" placeholder="Ej: 1043567890">
+      <p class="nota">Es tu clave: solo se guarda la foto si el documento coincide con tu nombre. Sin puntos ni espacios.</p>
+
       <button class="boton" id="enviar" disabled>Enviar foto</button>
       <p class="nota">Si ya habías enviado una, la nueva reemplaza a la anterior.</p>
       <div class="aviso" id="aviso"></div>`;
 
     $("estudiante").addEventListener("change", revisar);
+    $("documento").addEventListener("input", revisar);
     $("archivo").addEventListener("change", leerFoto);
     $("enviar").addEventListener("click", enviar);
   }
@@ -134,7 +140,7 @@
   }
 
   function revisar() {
-    $("enviar").disabled = !($("estudiante").value && fotoBase64);
+    $("enviar").disabled = !($("estudiante").value && fotoBase64 && $("documento").value.replace(/[^0-9a-z]/gi, "").length >= 5);
   }
 
   // Reduce la foto en el celular (máx. 1280 px de lado, JPEG) para que suba rápido y no llene el Drive.
@@ -186,12 +192,14 @@
     $("enviar").disabled = true;
     decir("Enviando... no cierres esta página.");
     try {
-      const r = await llamar({ accion: "subirFoto", token, k, foto: fotoBase64 });
+      const documento = $("documento").value.trim();
+      const r = await llamar({ accion: "subirFoto", token, k, foto: fotoBase64, documento });
       if (!r.ok) throw new Error(r.error || "No se pudo enviar.");
       decir(`¡Listo! Tu foto quedó guardada, ${r.nombre}.`, "ok");
       const opt = $("estudiante").querySelector(`option[value="${k}"]`);
       if (opt && !opt.textContent.includes("✓")) opt.textContent += "  ✓ ya subió";
       fotoBase64 = null;
+      $("documento").value = "";
       $("archivo").value = "";
       $("vista").style.display = "none";
       $("texto-boton-foto").textContent = "📷 Tomar o elegir foto";

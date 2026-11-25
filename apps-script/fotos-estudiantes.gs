@@ -13,6 +13,7 @@
 //
 // Estructura en Drive:  FOTOS ESTUDIANTES / PROFESOR / CURSO / APELLIDOS NOMBRES - CEDULA.jpg
 // Una foto por estudiante: si vuelve a subir, la nueva reemplaza a la anterior (la vieja va a la papelera).
+// Clave del estudiante: su número de documento. Si no coincide con el nombre elegido, la foto NO se guarda.
 
 const CLAVE = "CAMBIA_ESTA_CLAVE_POR_UNA_LARGA";
 const NOMBRE_CARPETA_RAIZ = "FOTOS ESTUDIANTES";
@@ -42,8 +43,13 @@ function doGet() {
   return ContentService.createTextOutput("Script de fotos de Tweetalig activo. El formulario está en el portal.");
 }
 
+// Documento sin puntos, espacios ni guiones, en mayúsculas (sirve para cédula, TI, PPT, pasaporte).
+function normalizarDocumento(t) {
+  return String(t || "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+}
+
 // La llama el formulario del portal (acción "subirFoto"). base64 = foto JPEG ya reducida en el celular.
-function subirFoto(token, k, base64) {
+function subirFoto(token, k, base64, documento) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
@@ -52,6 +58,10 @@ function subirFoto(token, k, base64) {
     if (!curso.activo) throw new Error("Este link ya está cerrado. Pídele uno nuevo a tu profesor.");
     const est = curso.estudiantes.filter(function (s) { return s.k === k; })[0];
     if (!est) throw new Error("Selecciona tu nombre de la lista.");
+    if (!normalizarDocumento(documento)) throw new Error("Escribe tu número de documento.");
+    if (normalizarDocumento(documento) !== normalizarDocumento(est.cedula)) {
+      throw new Error("El número de documento no coincide con el nombre que elegiste. Revisa tu nombre y tu documento.");
+    }
 
     const bytes = Utilities.base64Decode(String(base64 || ""));
     if (bytes.length < 1000) throw new Error("La foto llegó vacía. Intenta de nuevo.");
@@ -91,7 +101,7 @@ function doPost(e) {
     }
     if (datos.accion === "subirFoto") {
       try {
-        const r = subirFoto(String(datos.token || "").trim(), String(datos.k || ""), String(datos.foto || ""));
+        const r = subirFoto(String(datos.token || "").trim(), String(datos.k || ""), String(datos.foto || ""), String(datos.documento || ""));
         return responder({ ok: true, nombre: r.nombre });
       } catch (err) {
         return responder({ ok: false, error: String(err && err.message ? err.message : err).slice(0, 200) });
