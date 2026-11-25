@@ -28,6 +28,11 @@
   .aviso.ok { background: var(--verde-suave); color: #2d6a58; padding: 12px; border-radius: 8px; }
   .aviso.error { background: var(--error-fondo); color: var(--error); padding: 12px; border-radius: 8px; }
   .nota { font-size: 12px; color: var(--suave); margin-top: 8px; }
+  .guia { display: flex; gap: 14px; align-items: center; background: var(--fondo); border: 1px solid var(--linea); border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+  .guia svg { flex: 0 0 96px; width: 96px; height: 120px; }
+  .guia ul { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.5; }
+  .guia ul li { margin-bottom: 2px; }
+  .guia .no { color: var(--error); }
 </style>
 </head>
 <body>
@@ -90,8 +95,27 @@
       <p class="nota">¿No apareces? Avísale a tu profesor.</p>
 
       <label>2. Toma o elige tu foto</label>
+      <div class="guia">
+        <svg viewBox="0 0 96 120" role="img" aria-label="Ejemplo de foto: persona centrada, del pecho hacia arriba">
+          <rect x="1" y="1" width="94" height="118" rx="8" fill="#ffffff" stroke="#5DB69C" stroke-width="2"/>
+          <line x1="48" y1="6" x2="48" y2="114" stroke="#5DB69C" stroke-width="0.8" stroke-dasharray="3 3"/>
+          <circle cx="48" cy="44" r="19" fill="#C9D3D8"/>
+          <path d="M14 119 C14 90 28 76 48 76 C68 76 82 90 82 119 Z" fill="#C9D3D8"/>
+          <circle cx="41" cy="42" r="2" fill="#2C3D4D"/><circle cx="55" cy="42" r="2" fill="#2C3D4D"/>
+          <path d="M41 52 Q48 57 55 52" stroke="#2C3D4D" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+          <circle cx="84" cy="14" r="8" fill="#5DB69C"/>
+          <path d="M80 14 l3 3 l5 -6" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <ul>
+          <li>Del <b>pecho hacia arriba</b>.</li>
+          <li>Tu cara en el <b>centro</b> de la foto.</li>
+          <li>En un lugar <b>bien iluminado</b>.</li>
+          <li class="no">Sin gorra ni gafas oscuras.</li>
+          <li>Solo <b>JPG o PNG</b> (no PDF).</li>
+        </ul>
+      </div>
       <label class="boton-foto" for="archivo" id="texto-boton-foto">📷 Tomar o elegir foto</label>
-      <input type="file" id="archivo" accept="image/*">
+      <input type="file" id="archivo" accept="image/jpeg,image/png,.jpg,.jpeg,.png">
       <div class="vista" id="vista"><img id="img-vista" alt="Vista previa"></div>
 
       <button class="boton" id="enviar" disabled>Enviar foto</button>
@@ -118,6 +142,15 @@
     const archivo = ev.target.files && ev.target.files[0];
     fotoBase64 = null; revisar();
     if (!archivo) return;
+    // Solo JPG o PNG (nada de PDF, HEIC, Word, etc.).
+    const tipoOk = archivo.type ? ["image/jpeg", "image/png"].includes(archivo.type) : /\.(jpe?g|png)$/i.test(archivo.name || "");
+    if (!tipoOk) {
+      ev.target.value = "";
+      $("vista").style.display = "none";
+      $("texto-boton-foto").textContent = "📷 Tomar o elegir foto";
+      decir("Ese archivo no sirve. Sube una foto en formato JPG o PNG (no se aceptan PDF ni otros archivos).", "error");
+      return;
+    }
     decir("Preparando la foto...");
     const url = URL.createObjectURL(archivo);
     const img = new Image();
