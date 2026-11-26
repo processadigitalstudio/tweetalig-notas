@@ -37,7 +37,7 @@
   import { requireAuth } from "../js/auth.js?v=3";
   import { leerClases } from "../js/clases-lectura.js?v=1";
   import { claveGrupo as claveDeGrupo } from "../js/grupos.js?v=2";
-  import { periodosCerrados, pintarTarjetas } from "../js/tarjetas-clases.js?v=1";
+  import { infoPeriodos, pintarTarjetas } from "../js/tarjetas-clases.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -146,12 +146,12 @@
       });
       const grupos = Object.entries(porClave).map(([key, clases]) => ({ key, clases: clases.sort((x, y) => (x.id < y.id ? -1 : 1)) }))
         .sort((g1, g2) => (g1.clases[0].nivel || "").localeCompare(g2.clases[0].nivel || "", "es", { numeric: true }) || (g1.clases[0].grupo || "").localeCompare(g2.clases[0].grupo || ""));
-      const cerrados = await periodosCerrados(db);
+      const infoPer = await infoPeriodos(db);
       const cont = document.createElement("div");
       cont.style.marginTop = "24px";
       contenedor.appendChild(cont);
       pintarTarjetas(cont, grupos, {
-        cerrados,
+        cerrados: infoPer.cerrados, fechas: infoPer.fechas,
         enlaces: [
           { texto: "Asistencia", href: (g) => `asistencia.html?grupo=${encodeURIComponent(g.key)}` },
           { texto: "Notas", href: (g) => `notas.html?grupo=${encodeURIComponent(g.key)}` }

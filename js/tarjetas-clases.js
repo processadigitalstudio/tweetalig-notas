@@ -18,6 +18,10 @@ const CSS = `
 .tc-acciones { display:flex; gap:8px; margin-top:10px; }
 .tc-acciones a { font-size:12.5px; color:var(--azul-profundo); text-decoration:underline; }
 .tc-tit { font-size:13px; font-weight:600; color:var(--tinta-suave); margin:0 0 8px; text-transform:uppercase; letter-spacing:.03em; }
+.tc-barra { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:0 0 14px; }
+.tc-barra .tc-card { flex:1 1 260px; max-width:420px; }
+.tc-ver { background:#fff; border:1px solid var(--azul-profundo); color:var(--azul-profundo); border-radius:8px; padding:8px 14px; font-size:13px; cursor:pointer; font-family:var(--fuente-cuerpo); }
+.tc-ver:hover { background:var(--azul-profundo); color:#fff; }
 details.tc-prev { margin:4px 0 16px; } details.tc-prev summary { cursor:pointer; font-size:13px; color:var(--tinta-suave); margin-bottom:10px; }
 `;
 
@@ -38,6 +42,21 @@ export async function periodosCerrados(db) {
   return cerrados;
 }
 
+// Cerrados + fechas de inicio y fin de cada período académico.
+export async function infoPeriodos(db) {
+  const cerrados = new Set(); const fechas = new Map();
+  try {
+    const snap = await getDocs(collection(db, "periodos"));
+    snap.forEach((d) => {
+      const p = d.data(); const k = `${p.anio}-${p.periodo}-${p.ciclo}`;
+      if (p.activo === false) cerrados.add(k);
+      fechas.set(k, { ini: p.fechaInicio || "", fin: p.fechaFin || "" });
+    });
+  } catch (e) { /* sin permiso: sin fechas */ }
+  return { cerrados, fechas };
+}
+const fechaCorta = (f) => { const m = String(f || "").match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${m[3]}/${m[2]}/${m[1]}` : ""; };
+
 const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 export function textoHorarios(clases) {
@@ -47,8 +66,12 @@ export function textoHorarios(clases) {
 }
 
 // grupos: [{key, clases:[...]}]. enlaces: si se da, cada tarjeta muestra esos atajos (para el panel de inicio).
-export function pintarTarjetas(contenedor, grupos, { cerrados = new Set(), seleccionada = "", alElegir = null, enlaces = null } = {}) {
+export function pintarTarjetas(contenedor, grupos, opciones = {}) {
+  const { cerrados = new Set(), fechas = new Map(), alElegir = null, enlaces = null } = opciones;
+  let seleccionada = opciones.seleccionada || "";
+  let expandido = !seleccionada || !!opciones.expandido;
   inyectarCss();
+  const repintar = () => pintarTarjetas(contenedor, grupos, { ...opciones, seleccionada, expandido });
   contenedor.innerHTML = "";
   const clave = (g) => { const c = g.clases[0]; return `${c.anio}-${c.periodo}-${c.ciclo}`; };
   const activos = grupos.filter((g) => !cerrados.has(clave(g)));
@@ -69,12 +92,34 @@ export function pintarTarjetas(contenedor, grupos, { cerrados = new Set(), selec
       <p class="tc-prog">${esc(c.programaNombre || "Sin programa")}</p>
       <p class="tc-fila">📍 ${esc(sedes || "—")}</p>
       <p class="tc-fila">🕒 ${esc(hor || "Sin horario")}</p>
+      ${(() => { const f = fechas.get(clave(g)); return f && (f.ini || f.fin) ? `<p class="tc-fila">📅 ${fechaCorta(f.ini) || "—"} → ${fechaCorta(f.fin) || "—"}</p>` : ""; })()}
       <span class="tc-chip${dist ? " dist" : ""}">${c.anio}-${c.periodo} · Ciclo ${c.ciclo}</span>${dist ? '<span class="tc-chip dist">Distancia</span>' : ""}
       ${enlaces ? `<div class="tc-acciones">${enlaces.map((e) => `<a href="${e.href(g)}">${esc(e.texto)}</a>`).join("")}</div>` : ""}`;
-    if (!enlaces && alElegir) el.addEventListener("click", () => alElegir(g.key));
+    if (!enlaces) el.addEventListener("click", () => { seleccionada = g.key; expandido = false; if (alElegir) alElegir(g.key); repintar(); });
     return el;
   }
 
+  if (!enlaces && seleccionada && !expandido) {
+    const g = grupos.find((x) => x.key === seleccionada);
+    if (g) {
+      const barra = document.createElement("div"); barra.className = "tc-barra";
+      barra.appendChild(tarjeta(g));
+      if (grupos.length > 1) {
+        const b = document.createElement("button"); b.type = "button"; b.className = "tc-ver";
+        b.textContent = `▼ Ver todas mis clases (${grupos.length})`;
+        b.addEventListener("click", () => { expandido = true; repintar(); });
+        barra.appendChild(b);
+      }
+      contenedor.appendChild(barra);
+      return;
+    }
+  }
+  if (!enlaces && seleccionada && expandido && grupos.length > 1) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "tc-ver"; b.style.marginBottom = "12px";
+    b.textContent = "▲ Ocultar y volver a la clase elegida";
+    b.addEventListener("click", () => { expandido = false; repintar(); });
+    contenedor.appendChild(b);
+  }
   if (activos.length) {
     const t = document.createElement("p"); t.className = "tc-tit"; t.textContent = `Mis clases activas (${activos.length})`;
     const grid = document.createElement("div"); grid.className = "tc-grid";

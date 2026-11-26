@@ -88,7 +88,7 @@
   import { montarSelectorProfesor } from "../js/selector-profesor.js?v=1";
   import { calcularUmbrales, estadoInasistencia, ETIQUETA_ESTADO } from "../js/umbrales.js?v=1";
   import { leerClases } from "../js/clases-lectura.js?v=1";
-  import { periodosCerrados, pintarTarjetas, marcarSeleccion } from "../js/tarjetas-clases.js?v=1";
+  import { infoPeriodos, pintarTarjetas } from "../js/tarjetas-clases.js?v=1";
   import { db } from "../js/firebase-config.js?v=3";
   import { collection, getDocs, getDoc, doc, setDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
   import { badgeReporte, separarMovidos, montarPanelProfesor, cargarEstudiantesDeClases } from "../js/matricula.js?v=1";
@@ -196,13 +196,12 @@
     const grupoDesdeUrl = params.get("grupo");
     const claveInicial = (grupoDesdeUrl && gruposClase.some((g) => g.key === grupoDesdeUrl)) ? grupoDesdeUrl : (gruposClase.length === 1 ? gruposClase[0].key : "");
     select.value = claveInicial;
-    const cerradosPer = await periodosCerrados(db);
+    const infoPer = await infoPeriodos(db);
     const contTarjetas = document.getElementById("tarjetas-clases");
     pintarTarjetas(contTarjetas, gruposClase, {
-      cerrados: cerradosPer, seleccionada: claveInicial,
+      cerrados: infoPer.cerrados, fechas: infoPer.fechas, seleccionada: claveInicial,
       alElegir: (k) => {
         select.value = k;
-        marcarSeleccion(contTarjetas, k);
         select.dispatchEvent(new Event("change"));
         document.getElementById("contenido-asistencia").scrollIntoView({ behavior: "smooth", block: "start" });
       }
