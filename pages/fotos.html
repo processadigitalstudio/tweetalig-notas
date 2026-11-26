@@ -79,6 +79,7 @@
       <button class="boton-primario" id="btn-activar-filtrados">Crear / actualizar links de los cursos filtrados</button>
       <button class="boton-secundario" id="btn-copiar-todos">Copiar todos los links (para WhatsApp)</button>
       <button class="boton-secundario" id="btn-refrescar">Actualizar avance</button>
+      <button class="boton-secundario" id="btn-sincronizar" title="Vuelve a cargar los estudiantes de cada curso con link abierto (por si moviste estudiantes)">Actualizar listas de estudiantes</button>
     </div>
     <p class="aviso" id="aviso"></p>
 
@@ -334,23 +335,33 @@
     };
   }
 
-  async function activar(ids) {
+  async function activar(ids, { confirmar = true, automatico = false } = {}) {
     const seleccion = ids.map((id) => clases.find((c) => c.id === id)).filter(Boolean);
     if (!seleccion.length) return;
-    if (seleccion.length > 1 && !confirm(`¿Crear o actualizar el link de ${seleccion.length} curso(s)?`)) return;
+    if (confirmar && seleccion.length > 1 && !confirm(`¿Crear o actualizar el link de ${seleccion.length} curso(s)?`)) return;
     let listos = 0, errores = [];
     try {
       for (let i = 0; i < seleccion.length; i += 20) {
         const lote = seleccion.slice(i, i + 20);
-        decir("aviso", `Preparando cursos ${i + 1}–${i + lote.length} de ${seleccion.length}...`);
+        decir("aviso", `${automatico ? "Actualizando listas de estudiantes" : "Preparando cursos"} ${i + 1}–${i + lote.length} de ${seleccion.length}...`);
         const cursos = await Promise.all(lote.map(datosCurso));
         const r = await llamar({ accion: "activar", cursos });
         r.cursos.forEach((x) => { if (x.ok) listos++; else errores.push(`${x.claseId}: ${x.error}`); });
       }
-      await registrarLog(usuario, rol, "Creó/actualizó links de fotos", `${listos} curso(s)`);
-      decir("aviso", `Listo: ${listos} curso(s) con link.${errores.length ? " Errores: " + errores.join("; ") : ""}`, errores.length > 0);
+      if (!automatico) await registrarLog(usuario, rol, "Creó/actualizó links de fotos", `${listos} curso(s)`);
+      decir("aviso", (automatico ? `Listas de estudiantes al día en ${listos} curso(s) abierto(s).` : `Listo: ${listos} curso(s) con link.`) +
+        (errores.length ? " Errores: " + errores.join("; ") : ""), errores.length > 0);
     } catch (e) { decir("aviso", e.message, true); }
     await refrescarEstado();
+  }
+
+  // Vuelve a mandar la lista de estudiantes (y el profesor) de TODOS los cursos con link ABIERTO,
+  // para que los movimientos de estudiantes entre cursos se vean en los links. Los cerrados no se tocan.
+  async function sincronizarAbiertos() {
+    if (!config) return;
+    const ids = clases.filter((c) => estadoScript[c.id]?.activo).map((c) => c.id);
+    if (!ids.length) return;
+    await activar(ids, { confirmar: false, automatico: true });
   }
 
   async function cambiarEstado(id, activo) {
@@ -382,11 +393,14 @@
 
   $("btn-activar-filtrados").addEventListener("click", () => activar(filtradas().map((c) => c.id)));
   $("btn-refrescar").addEventListener("click", refrescarEstado);
+  $("btn-sincronizar").addEventListener("click", sincronizarAbiertos);
   $("f-texto").addEventListener("input", pintar);
 
   await cargarConfig();
   await cargarClases();
   await refrescarEstado();
+  // Al entrar, las listas de los cursos abiertos se ponen al día solas (estudiantes movidos, profesor nuevo)
+  await sincronizarAbiertos();
 </script>
 </body>
 </html>
