@@ -49,7 +49,9 @@ export async function infoPeriodos(db) {
     const snap = await getDocs(collection(db, "periodos"));
     snap.forEach((d) => {
       const p = d.data(); const k = `${p.anio}-${p.periodo}-${p.ciclo}`;
-      if (p.activo === false) cerrados.add(k);
+      // Cerrado: lo marcaron inactivo en Períodos, o ya pasó su fecha de fin.
+      const hoy = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+      if (p.activo === false || (p.fechaFin && p.fechaFin < hoy)) cerrados.add(k);
       fechas.set(k, { ini: p.fechaInicio || "", fin: p.fechaFin || "" });
     });
   } catch (e) { /* sin permiso: sin fechas */ }
