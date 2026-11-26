@@ -129,9 +129,9 @@ export function pintarTarjetas(contenedor, grupos, opciones = {}) {
   if (previos.length) {
     const det = document.createElement("details"); det.className = "tc-prev";
     if (!activos.length || previos.some((g) => g.key === seleccionada)) det.open = true;
-    det.innerHTML = `<summary>Períodos cerrados (${previos.length})</summary>`;
+    det.innerHTML = `<summary>📁 Histórico — clases de períodos cerrados (${previos.length})</summary>`;
     const grid = document.createElement("div"); grid.className = "tc-grid";
-    previos.forEach((g) => grid.appendChild(tarjeta(g)));
+    previos.sort((x, y) => (clave(y) > clave(x) ? 1 : -1)).forEach((g) => grid.appendChild(tarjeta(g)));
     det.appendChild(grid);
     contenedor.appendChild(det);
   }
